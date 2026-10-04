@@ -111,3 +111,100 @@ def test_a_foreign_file_on_the_final_path_is_refused(tmp_path):
     target.write_text("no soy tuya\n", encoding="utf-8")
     with pytest.raises(ProtectedNote):
         write_note(cfg, note, "es", path=target)
+
+
+def test_a_path_outside_the_vault_is_refused(tmp_path):
+    cfg = make_config(tmp_path)
+    outside = tmp_path / "elsewhere.md"
+    with pytest.raises(ProtectedNote, match="outside the managed folder"):
+        write_note(cfg, make_note(), "es", path=outside)
+    assert not outside.exists()
+
+
+def test_a_path_climbing_out_with_dotdot_is_refused(tmp_path):
+    cfg = make_config(tmp_path)
+    sneaky = cfg.links_dir / ".." / ".." / "escape.md"
+    with pytest.raises(ProtectedNote):
+        write_note(cfg, make_note(), "es", path=sneaky)
+    assert not (cfg.vault / "escape.md").exists()
+
+
+def test_a_symlink_pointing_outside_is_refused(tmp_path):
+    cfg = make_config(tmp_path)
+    outside = tmp_path / "outside.md"
+    link = cfg.links_dir / "link.md"
+    link.symlink_to(outside)
+    with pytest.raises(ProtectedNote):
+        write_note(cfg, make_note(), "es", path=link)
+    assert not outside.exists()
+
+
+def test_a_symlinked_directory_pointing_outside_is_refused(tmp_path):
+    cfg = make_config(tmp_path)
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    (cfg.links_dir / "sub").symlink_to(elsewhere, target_is_directory=True)
+    with pytest.raises(ProtectedNote):
+        write_note(cfg, make_note(), "es", path=cfg.links_dir / "sub" / "n.md")
+    assert list(elsewhere.iterdir()) == []
+
+
+def test_a_write_leaves_no_temp_files(tmp_path):
+    cfg = make_config(tmp_path)
+    path = write_note(cfg, make_note(), "es")
+    write_note(cfg, make_note(summary="Otro."), "es")
+    assert list(cfg.links_dir.iterdir()) == [path]
+
+
+def test_a_failed_write_cleans_up_and_keeps_the_old_note(tmp_path, monkeypatch):
+    cfg = make_config(tmp_path)
+    path = write_note(cfg, make_note(), "es")
+    before = path.read_bytes()
+
+    def boom(src, dst):
+        raise OSError("disk full")
+
+    monkeypatch.setattr("oknowledge.vault.os.replace", boom)
+    with pytest.raises(OSError):
+        write_note(cfg, make_note(summary="Nuevo."), "es")
+    monkeypatch.undo()
+    assert path.read_bytes() == before
+    assert list(cfg.links_dir.iterdir()) == [path]
+
+
+def test_a_marked_file_missing_a_key_reads_as_none(tmp_path):
+    cfg = make_config(tmp_path)
+    f = cfg.links_dir / "edited.md"
+    f.write_text("---\ntitle: x\noknowledge: 1\n---\n\nhola\n", encoding="utf-8")
+    before = f.read_bytes()
+    assert read_note(f) is None
+    assert f.read_bytes() == before
+
+
+def test_a_marked_file_with_a_wrong_type_reads_as_none(tmp_path):
+    cfg = make_config(tmp_path)
+    good = write_note(cfg, make_note(), "es")
+    f = cfg.links_dir / "bad.md"
+    f.write_text(good.read_text(encoding="utf-8").replace("tags:", "tags: oops\nold:"), encoding="utf-8")
+    before = f.read_bytes()
+    assert read_note(f) is None
+    assert f.read_bytes() == before
+
+
+def test_a_marked_file_with_broken_yaml_reads_as_none(tmp_path):
+    cfg = make_config(tmp_path)
+    f = cfg.links_dir / "broken.md"
+    f.write_text("---\noknowledge: 1\nurl: [unclosed\n---\n\nhola\n", encoding="utf-8")
+    before = f.read_bytes()
+    assert read_note(f) is None
+    assert f.read_bytes() == before
+
+
+def test_note_path_steps_around_an_unparseable_marked_file(tmp_path):
+    cfg = make_config(tmp_path)
+    f = cfg.links_dir / "2026-10-03-wireguard-vs-openvpn.md"
+    f.write_text("---\noknowledge: 1\n---\n\nhola\n", encoding="utf-8")
+    before = f.read_bytes()
+    path = write_note(cfg, make_note(), "es")
+    assert path.name == "2026-10-03-wireguard-vs-openvpn-2.md"
+    assert f.read_bytes() == before

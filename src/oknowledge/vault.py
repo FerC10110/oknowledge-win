@@ -10,7 +10,9 @@ Two rules, and both live here for a reason: the vault belongs to the user.
 
 from __future__ import annotations
 
+import os
 import re
+import tempfile
 import unicodedata
 from pathlib import Path
 
@@ -34,7 +36,7 @@ FRONTMATTER_ORDER = (
 
 
 class ProtectedNote(Exception):
-    """The target file exists and does not carry our marker."""
+    """Refusing to write: the target is outside our folder or is not ours."""
 
 
 def slug(text: str, fallback: str) -> str:
@@ -113,29 +115,48 @@ def _split_body(text: str) -> tuple[str, list[str], str | None]:
     return summary, points, original or None
 
 
+_REQUIRED_TEXT = ("id", "url", "title", "category", "type", "source")
+
+
 def read_note(path: Path) -> Note | None:
+    """The note, if the file is ours and parseable. Never modifies the file.
+
+    A marked file that is missing a required key, or has a value of the wrong
+    type (the user hand-edits these), reads as None, same as an unmarked one.
+    """
     front = read_front(path)
     if front is None or front.get("kind") == "index":
         return None
-    summary, points, body = _split_body(path.read_text(encoding="utf-8"))
-    return Note(
-        id=front["id"],
-        url=front["url"],
-        title=front["title"],
-        category=front["category"],
-        tags=list(front.get("tags") or []),
-        type=front["type"],
-        source=front["source"],
-        saved=str(front["saved"]),
-        summary=summary,
-        points=points,
-        status=front.get("status", "ok"),
-        content=front.get("content", "full"),
-        author=front.get("author"),
-        published=str(front["published"]) if front.get("published") else None,
-        cover=front.get("cover"),
-        body=body,
-    )
+    try:
+        if not all(isinstance(front[k], str) for k in _REQUIRED_TEXT):
+            return None
+        tags = front.get("tags") or []
+        if not isinstance(tags, list):
+            return None
+        for key in ("author", "cover"):
+            if front.get(key) is not None and not isinstance(front[key], str):
+                return None
+        summary, points, body = _split_body(path.read_text(encoding="utf-8"))
+        return Note(
+            id=front["id"],
+            url=front["url"],
+            title=front["title"],
+            category=front["category"],
+            tags=[str(t) for t in tags],
+            type=front["type"],
+            source=front["source"],
+            saved=str(front["saved"]),
+            summary=summary,
+            points=points,
+            status=str(front.get("status", "ok")),
+            content=str(front.get("content", "full")),
+            author=front.get("author"),
+            published=str(front["published"]) if front.get("published") else None,
+            cover=front.get("cover"),
+            body=body,
+        )
+    except (KeyError, IndexError, TypeError, ValueError, OSError):
+        return None
 
 
 def note_path(cfg: Config, note: Note) -> Path:
@@ -151,10 +172,36 @@ def note_path(cfg: Config, note: Note) -> Path:
     return candidate
 
 
+def _ensure_inside_root(cfg: Config, target: Path) -> Path:
+    """Resolve target (following symlinks) and require it inside cfg.root."""
+    resolved = target.resolve()
+    if not resolved.is_relative_to(cfg.root.resolve()):
+        raise ProtectedNote(f"refusing to write outside the managed folder: {target}")
+    return resolved
+
+
+def _atomic_write(target: Path, text: str) -> None:
+    """Write via a temp file in the same directory, then os.replace over target."""
+    mode = target.stat().st_mode & 0o777 if target.exists() else 0o644
+    fd, tmp_name = tempfile.mkstemp(dir=target.parent, prefix=".oknowledge-", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(text)
+        os.chmod(tmp_name, mode)
+        os.replace(tmp_name, target)
+    except BaseException:
+        try:
+            os.unlink(tmp_name)
+        except FileNotFoundError:
+            pass
+        raise
+
+
 def write_note(cfg: Config, note: Note, language: str, path: Path | None = None) -> Path:
-    cfg.links_dir.mkdir(parents=True, exist_ok=True)
     target = path or note_path(cfg, note)
-    if target.exists() and read_front(target) is None:
+    resolved = _ensure_inside_root(cfg, target)       # location first, before any write
+    if resolved.exists() and read_front(resolved) is None:
         raise ProtectedNote(f"refusing to overwrite a file without the marker: {target}")
-    target.write_text(render(note, language), encoding="utf-8")
+    resolved.parent.mkdir(parents=True, exist_ok=True)
+    _atomic_write(resolved, render(note, language))
     return target
