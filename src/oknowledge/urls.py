@@ -17,7 +17,8 @@ TRACKING_EXACT = frozenset({
     "ref_src", "ref_url", "si", "spm", "_hsenc", "_hsmi",
 })
 SCHEME_PATTERN = re.compile(r"^[a-z][a-z0-9+.-]*://", re.IGNORECASE)
-SCHEME_COLON_PATTERN = re.compile(r"^[a-z][a-z0-9+.-]*:", re.IGNORECASE)
+SCHEME_COLON_PATTERN = re.compile(r"^[a-z][a-z0-9+-]*:", re.IGNORECASE)
+PORT_PATTERN = re.compile(r"^\d+($|[/?#])")
 
 
 def _is_tracking(key: str) -> bool:
@@ -28,23 +29,37 @@ def _is_tracking(key: str) -> bool:
 def normalize(url: str) -> str:
     raw = url.strip()
 
-    # Detect if there's a scheme using regex or scheme-relative URL
-    has_scheme_match = SCHEME_PATTERN.match(raw)
-    has_scheme_colon = SCHEME_COLON_PATTERN.match(raw)
-    has_scheme_relative = raw.startswith("//")
+    # Rule 1: Empty input returns empty string
+    if not raw:
+        return ""
 
+    original_raw = raw  # Save original for fallback
+
+    # Rule 2: Check for :// scheme
+    has_scheme_match = SCHEME_PATTERN.match(raw)
     if has_scheme_match:
         scheme = has_scheme_match.group(0)[:-3]  # Remove ://
         # Only normalize http and https; return other schemes as-is
         if scheme.lower() not in ("http", "https"):
             return raw
-    elif has_scheme_colon:
-        scheme = has_scheme_colon.group(0)[:-1]  # Remove :
-        # Only normalize http and https; return other schemes as-is
-        if scheme.lower() not in ("http", "https"):
+    # Rule 3: Check for scheme-relative URL
+    elif raw.startswith("//"):
+        raw = "https:" + raw
+    # Rule 4: Check for single-colon non-http scheme
+    elif ":" in raw:
+        colon_idx = raw.index(":")
+        prefix = raw[:colon_idx]
+        suffix = raw[colon_idx + 1:]
+
+        # Check if prefix has no dot and suffix is not a port
+        if "." not in prefix and not PORT_PATTERN.match(suffix):
+            # This is a non-http scheme, return unchanged
             return raw
-    elif not has_scheme_relative:
-        # No scheme, prepend https://
+
+        # Rule 5: Prepend https:// and normalize
+        raw = "https://" + raw
+    else:
+        # Rule 5: No colon, prepend https://
         raw = "https://" + raw
 
     try:
@@ -77,8 +92,8 @@ def normalize(url: str) -> str:
 
         return urlunsplit((parts.scheme.lower() or "https", netloc, path, urlencode(query), ""))
     except Exception:
-        # Never raise: return the stripped input on any error
-        return raw
+        # Never raise: return the stripped original input on any error
+        return original_raw
 
 
 def link_id(url: str) -> str:
