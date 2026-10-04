@@ -7,9 +7,11 @@ can watch a folder with a FolderListModel, but it cannot open a database.
 from __future__ import annotations
 
 import datetime as dt
+import errno
+import fcntl
 import json
 import os
-import time
+import re
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -19,13 +21,17 @@ from .model import QueueEntry
 STATUSES = frozenset({"pending", "ok", "partial", "failed"})
 UNFINISHED = ("partial", "failed")
 
+_ID = re.compile(r"[A-Za-z0-9_-]+")
+
 
 class Locked(Exception):
     """Another process is already working on this link."""
 
 
 def state_dir() -> Path:
-    base = os.environ.get("XDG_STATE_HOME") or (Path.home() / ".local" / "state")
+    base = os.environ.get("XDG_STATE_HOME", "")
+    if not base or not os.path.isabs(base):        # the XDG spec: relative means unset
+        base = str(Path.home() / ".local" / "state")
     return Path(base) / "oknowledge"
 
 
@@ -34,26 +40,34 @@ def _now() -> str:
     return dt.datetime.now(dt.timezone.utc).isoformat(timespec="milliseconds")
 
 
-def _optional_text(value: object) -> str | None:
-    return None if value is None else str(value)
+def _check_id(link_id: str) -> str:
+    if not _ID.fullmatch(link_id):
+        raise ValueError(f"invalid link id: {link_id!r}")
+    return link_id
 
 
-def _entry_from(data: object) -> QueueEntry | None:
-    """Build an entry from decoded JSON, or None if it does not fit."""
+def _entry_from(link_id: str, data: object) -> QueueEntry | None:
+    """Build an entry from decoded JSON, or None if it does not fit.
+
+    The filename is the index, so the id comes from it and not from the file.
+    """
     if not isinstance(data, dict):
         return None
-    required = [data.get(key) for key in ("id", "url", "status")]
-    if not all(isinstance(value, str) for value in required):
+    url, status = data.get("url"), data.get("status")
+    if not isinstance(url, str) or not isinstance(status, str):
         return None
-    link_id, url, status = required
+    fields = {key: data.get(key) for key in ("content", "updated", "title", "error")}
+    if any(v is not None and not isinstance(v, str) for v in fields.values()):
+        return None
     return QueueEntry(
         id=link_id,
         url=url,
-        content=_optional_text(data.get("content")) or "",
-        status=status,
-        updated=_optional_text(data.get("updated")) or "",
-        title=_optional_text(data.get("title")),
-        error=_optional_text(data.get("error")),
+        # A status we do not know (a hand edit) must stay retryable, not stranded.
+        status=status if status in STATUSES else "failed",
+        content=fields["content"] or "",
+        updated=fields["updated"] or "",
+        title=fields["title"],
+        error=fields["error"],
     )
 
 
@@ -66,7 +80,7 @@ class Queue:
         return self.root / "queue"
 
     def _path(self, link_id: str) -> Path:
-        return self.dir / f"{link_id}.json"
+        return self.dir / f"{_check_id(link_id)}.json"
 
     def _write(self, entry: QueueEntry) -> QueueEntry:
         self.dir.mkdir(parents=True, exist_ok=True)
@@ -75,7 +89,8 @@ class Queue:
             "status": entry.status, "updated": entry.updated,
             "title": entry.title, "error": entry.error,
         }
-        atomic_write(self._path(entry.id), json.dumps(payload, ensure_ascii=False, indent=2))
+        atomic_write(self._path(entry.id),
+                     json.dumps(payload, ensure_ascii=False, indent=2), fsync_dir=True)
         return entry
 
     def enqueue(self, link_id: str, url: str, content: str) -> QueueEntry:
@@ -84,11 +99,12 @@ class Queue:
         ))
 
     def get(self, link_id: str) -> QueueEntry | None:
+        path = self._path(link_id)
         try:
-            data = json.loads(self._path(link_id).read_text(encoding="utf-8"))
-        except (OSError, ValueError):
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError, RecursionError):
             return None
-        return _entry_from(data)
+        return _entry_from(link_id, data)
 
     def set_status(self, link_id: str, status: str, error: str | None = None,
                    title: str | None = None) -> QueueEntry | None:
@@ -108,50 +124,63 @@ class Queue:
     def entries(self) -> list[QueueEntry]:
         if not self.dir.is_dir():
             return []
-        found = [self.get(p.stem) for p in self.dir.glob("*.json")]
+        found = [self.get(p.stem) for p in self.dir.glob("*.json") if _ID.fullmatch(p.stem)]
         alive = [e for e in found if e is not None]
         return sorted(alive, key=lambda e: (e.updated, e.id), reverse=True)
 
     def unfinished(self) -> list[QueueEntry]:
         return [e for e in self.entries() if e.status in UNFINISHED]
 
-    @contextmanager
-    def lock(self, link_id: str, stale_after: int = 900):
-        path = self.root / "locks" / f"{link_id}.lock"
-        path.parent.mkdir(parents=True, exist_ok=True)
-        self._acquire(path, link_id, stale_after)
-        try:
-            yield
-        finally:
-            # Only release a lock that is still ours: if the work outran
-            # stale_after, another process may have legitimately taken over.
-            try:
-                if path.read_text(encoding="utf-8").strip() == str(os.getpid()):
-                    path.unlink(missing_ok=True)
-            except OSError:
-                pass
+    def orphaned(self) -> list[QueueEntry]:
+        """Pending entries that no live process holds a lock on.
 
-    @staticmethod
-    def _acquire(path: Path, link_id: str, stale_after: int) -> None:
-        flags = os.O_CREAT | os.O_EXCL | os.O_WRONLY
+        A process that died between enqueue and its final set_status leaves the
+        entry pending forever; unfinished() would never retry it. A link that
+        was enqueued a moment ago and not yet locked also shows up here.
+        """
+        return [e for e in self.entries()
+                if e.status == "pending" and not self._held(e.id)]
+
+    def _lock_path(self, link_id: str) -> Path:
+        return self.root / "locks" / f"{_check_id(link_id)}.lock"
+
+    def _held(self, link_id: str) -> bool:
         try:
-            handle = os.open(path, flags)
-        except FileExistsError:
-            try:
-                age = time.time() - path.stat().st_mtime
-            except FileNotFoundError:
-                age = stale_after              # released in between: it is free
-            if age < stale_after:
-                raise Locked(f"{link_id} is already being processed") from None
-            path.unlink(missing_ok=True)       # left behind by a process that is gone
-            try:
-                handle = os.open(path, flags)
-            except FileExistsError:
-                raise Locked(f"{link_id} is already being processed") from None
+            fd = os.open(self._lock_path(link_id), os.O_RDONLY)
+        except FileNotFoundError:
+            return False
         try:
-            os.write(handle, f"{os.getpid()}\n".encode())
-        except BaseException:
-            path.unlink(missing_ok=True)
+            fcntl.flock(fd, fcntl.LOCK_SH | fcntl.LOCK_NB)
+        except OSError as err:
+            if err.errno in (errno.EWOULDBLOCK, errno.EAGAIN):
+                return True
             raise
         finally:
-            os.close(handle)
+            os.close(fd)                    # closing releases anything we took
+        return False
+
+    @contextmanager
+    def lock(self, link_id: str):
+        """Hold an exclusive advisory lock on a link for the with block.
+
+        flock belongs to the open file, and the kernel drops it when the process
+        dies, so there is no staleness to detect. The lock file is never
+        deleted: unlinking it while another process opens it would let two
+        processes hold "the" lock on different inodes.
+        """
+        path = self._lock_path(link_id)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        fd = os.open(path, os.O_CREAT | os.O_RDWR, 0o666)
+        try:
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except OSError as err:
+                if err.errno in (errno.EWOULDBLOCK, errno.EAGAIN):
+                    raise Locked(f"{link_id} is already being processed") from None
+                raise
+            # Diagnostics only: nothing reads the pid to decide anything.
+            os.ftruncate(fd, 0)
+            os.write(fd, f"{os.getpid()}\n".encode())
+            yield
+        finally:
+            os.close(fd)
