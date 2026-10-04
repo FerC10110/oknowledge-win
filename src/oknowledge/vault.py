@@ -296,6 +296,12 @@ def _scan(cfg: Config) -> tuple[list[tuple[Path, Note]], list[Path]]:
     return found, skipped
 
 
+def scan_notes(cfg: Config) -> tuple[list[Note], list[Path]]:
+    """Every readable note, plus the files of ours that could not be read."""
+    found, skipped = _scan(cfg)
+    return [note for _, note in found], skipped
+
+
 def all_notes(cfg: Config) -> list[Note]:
     return [note for _, note in _scan(cfg)[0]]
 

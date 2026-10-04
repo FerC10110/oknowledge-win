@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block main %}
+  <section class="empty">
+    <h1>{{ t('The vault could not be read') }}</h1>
+    <p><code>{{ links_dir }}</code></p>
+    <p>{{ error }}</p>
+    <p>{{ t('Check that the folder exists, is mounted and is readable.') }}</p>
+  </section>
+{% endblock %}

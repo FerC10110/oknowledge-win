@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block main %}
+  {% if notes is not none %}
+    <div class="chips">
+      <a href="/" class="chip {% if not category and not tag %}on{% endif %}">{{ t('All') }}</a>
+      {% for name, count in categories.items() %}
+        <a href="/?category={{ name|urlencode }}"
+           class="chip {% if category == name %}on{% endif %}">{{ name }} <b>{{ count }}</b></a>
+      {% endfor %}
+    </div>
+    <div class="chips tags">
+      {% for name, count in tags.items() %}
+        <a href="/?tag={{ name|urlencode }}"
+           class="chip small {% if tag == name %}on{% endif %}">#{{ name }}</a>
+      {% endfor %}
+    </div>
+    {% if not notes %}<p class="empty">{{ t('Nothing saved yet') }}</p>{% endif %}
+    <ul class="grid">
+      {% for note in notes %}
+        <li class="card{% if note.status != 'ok' %} partial{% endif %}">
+          <a href="/item/{{ note.id }}">
+            {% if note.cover %}<img src="/cover/{{ note.id }}" alt="" loading="lazy">{% endif %}
+            <h2>{{ note.title }}</h2>
+            <p class="meta"><span class="cat">{{ note.category }}</span> · {{ note.saved }}</p>
+            <p class="sum">{{ note.summary.split('\n')[0] }}</p>
+            <p class="tags">{% for tag in note.tags %}<span>#{{ tag }}</span>{% endfor %}</p>
+          </a>
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    {% if not hits %}<p class="empty">{{ t('No results') }}</p>{% endif %}
+    <ul class="hits">
+      {% for hit in hits %}
+        <li>
+          <a href="/item/{{ hit.note.id }}">
+            <h2>{{ hit.note.title }}</h2>
+            <p class="meta"><span class="cat">{{ hit.note.category }}</span> · {{ hit.note.saved }}</p>
+            <p class="snippet">{{ hit.snippet }}</p>
+          </a>
+        </li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+{% endblock %}

@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block main %}
+  <article class="item">
+    <p class="meta"><span class="cat">{{ note.category }}</span> · {{ note.source }} · {{ note.saved }}
+      {% if note.status != 'ok' %}<span class="warn">{{ t('Incomplete') }}</span>{% endif %}</p>
+    <h1>{{ note.title }}</h1>
+    <p class="tags">{% for tag in note.tags %}<a href="/?tag={{ tag|urlencode }}">#{{ tag }}</a>{% endfor %}</p>
+    <div class="summary">{{ note.summary }}</div>
+    {% if note.points %}
+      <h2>{{ t('Key points') }}</h2>
+      <ul>{% for point in note.points %}<li>{{ point }}</li>{% endfor %}</ul>
+    {% endif %}
+    {% if note.url.lower().startswith(('http://', 'https://')) %}
+      <p><a class="button" href="{{ note.url }}" rel="noreferrer">{{ t('Open original') }}</a></p>
+    {% else %}
+      <p class="meta">{{ note.url }}</p>
+    {% endif %}
+    {% if note.body %}
+      <details>
+        <summary>{{ t('Original content') }}</summary>
+        <pre>{{ note.body }}</pre>
+      </details>
+    {% endif %}
+  </article>
+{% endblock %}

@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="{{ lang }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>oknowledge</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header>
+    <a class="brand" href="/">oknowledge</a>
+    <form action="/search" method="get" role="search">
+      <input type="search" name="q" value="{{ query }}"
+             placeholder="{{ t('Search your library') }}" autofocus>
+    </form>
+    <nav>
+      <a href="/categories">{{ t('Categories') }}</a>
+      <a href="/settings">{{ t('Settings') }}</a>
+    </nav>
+  </header>
+  {% if unreadable %}
+    <p class="quiet">{% if unreadable == 1 %}{{ t('1 note could not be read and is not shown (%1)', links_dir) }}{% else %}{{ t('%1 notes could not be read and are not shown (%2)', unreadable, links_dir) }}{% endif %}</p>
+  {% endif %}
+  <main>{% block main %}{% endblock %}</main>
+</body>
+</html>
