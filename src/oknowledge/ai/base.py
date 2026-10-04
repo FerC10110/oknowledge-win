@@ -86,25 +86,37 @@ def render_prompt(text: str, meta: dict, known, language: str, limit: int = DEFA
 
 
 def extract_json(raw: str) -> dict:
-    """The first JSON object in the text, however it comes wrapped.
+    """The JSON object that is the answer, however it comes wrapped.
 
     Small models add a preamble, a ```json fence, or chatter afterwards, and
     that chatter can itself contain braces. So instead of slicing between the
     first "{" and the last "}", try to decode an object starting at each "{"
     in turn; the decoder knows where the object really ends, braces inside
     strings included.
+
+    The reply can hold several objects, most often because the model echoed
+    the schema example from the prompt before answering. An echo always comes
+    before the real answer, so the last object carrying every required key
+    wins. If none does, the first decodable object is returned and validation
+    reports what is missing.
     """
     decoder = json.JSONDecoder()
+    found: list[dict] = []
     position = raw.find("{")
     while position != -1:
         try:
-            value, _ = decoder.raw_decode(raw, position)
+            value, end = decoder.raw_decode(raw, position)
         except json.JSONDecodeError:
-            value = None
+            position = raw.find("{", position + 1)
+            continue
         if isinstance(value, dict):
-            return value
-        position = raw.find("{", position + 1)
-    raise AnalysisError("the answer had no JSON object in it")
+            found.append(value)
+        # Skip past the object so its nested objects are not candidates.
+        position = raw.find("{", end)
+    if not found:
+        raise AnalysisError("the answer had no JSON object in it")
+    complete = [d for d in found if all(k in d for k in REQUIRED)]
+    return complete[-1] if complete else found[0]
 
 
 def _text(data: dict, key: str) -> str:

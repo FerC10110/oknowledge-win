@@ -196,3 +196,34 @@ def test_the_fake_engine_replays_replies_records_prompts_and_raises_exceptions()
     with pytest.raises(EngineError):
         engine.complete("p3")
     assert engine.prompts == ["p1", "p2", "p3"]
+
+
+def _example_from_prompt() -> str:
+    prompt = render_prompt("t", META, [], "es")
+    return prompt[prompt.index("{"):prompt.index("}\n") + 1]
+
+
+def test_an_echoed_schema_example_before_the_real_answer_loses_to_the_answer():
+    example = _example_from_prompt()
+    assert set(json.loads(example)) == set(GOOD)  # the echo really is complete
+    raw = f"Claro, la forma es:\n{example}\nY acá está la ficha:\n```json\n{json.dumps(GOOD)}\n```"
+    assert extract_json(raw) == GOOD
+    result = analyze(FakeEngine([raw]), "texto", META, [], "es")
+    assert result.title == "WireGuard vs OpenVPN" and result.category == "redes"
+
+
+def test_trailing_json_without_the_required_keys_does_not_beat_the_answer():
+    raw = json.dumps(GOOD) + '\n\nSi querés, config: {"lang": "es", "n": 3}'
+    assert extract_json(raw) == GOOD
+
+
+def test_two_complete_answers_in_a_row_the_last_one_wins():
+    # Deliberate: a model that corrects or retries itself ends with its final word.
+    first, second = dict(GOOD, title="Primero"), dict(GOOD, title="Segundo")
+    raw = f"{json.dumps(first)}\nMejor así:\n{json.dumps(second)}"
+    assert extract_json(raw)["title"] == "Segundo"
+
+
+def test_objects_nested_inside_the_answer_are_not_candidates():
+    data = dict(GOOD, extra={"title": "x", "summary": "x", "points": [], "category": "x", "tags": []})
+    assert extract_json(json.dumps(data)) == data
