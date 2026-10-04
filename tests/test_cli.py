@@ -160,6 +160,36 @@ def test_reindex_runs_for_real(cfg, monkeypatch, capsys):
     assert len(list(cfg.root.glob("*.md"))) == 1
 
 
+def test_reindex_leaves_no_index_behind_when_a_category_empties(cfg, monkeypatch, capsys):
+    """The shape to worry about: the last note of a category moves away by hand,
+    so the category no longer exists and its index must not survive the sweep.
+    rebuild_indexes is tested for this directly; this is the command."""
+    monkeypatch.setattr("oknowledge.pipeline.extract", lambda url: PAGE)
+    main(["add", "https://arstechnica.com/vpn"])
+    assert [p.name for p in cfg.root.glob("*.md")] == ["Redes.md"]
+    note = next(cfg.links_dir.glob("*.md"))
+    note.write_text(note.read_text(encoding="utf-8").replace("category: Redes",
+                                                             "category: Seguridad"),
+                    encoding="utf-8")
+    capsys.readouterr()
+
+    assert main(["reindex"]) == 0
+
+    assert [p.name for p in cfg.root.glob("*.md")] == ["Seguridad.md"]
+
+
+def test_reindex_leaves_no_index_behind_when_the_last_note_is_deleted(cfg, monkeypatch,
+                                                                     capsys):
+    monkeypatch.setattr("oknowledge.pipeline.extract", lambda url: PAGE)
+    main(["add", "https://arstechnica.com/vpn"])
+    next(cfg.links_dir.glob("*.md")).unlink()
+    capsys.readouterr()
+
+    assert main(["reindex"]) == 0
+
+    assert list(cfg.root.glob("*.md")) == []
+
+
 def test_retry_shows_why_a_link_failed(cfg, monkeypatch, capsys):
     monkeypatch.setattr("oknowledge.cli.retry", lambda config: [
         Result(id="a1", url="https://e.com/a", path=None, status="ok"),

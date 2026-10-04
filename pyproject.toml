@@ -3,6 +3,8 @@ name = "oknowledge"
 version = "0.1.0"
 description = "Save a link, get a summarized note in your Obsidian vault"
 requires-python = ">=3.13"
+license = "MIT"
+license-files = ["LICENSE"]
 dependencies = [
   "trafilatura>=2.0",
   "pypdf[crypto]>=5.1",
@@ -22,7 +24,7 @@ dev = ["pytest>=8.3", "reportlab>=4.2", "httpx2>=2.13"]
 oknowledge = "oknowledge.cli:main"
 
 [build-system]
-requires = ["setuptools>=75"]
+requires = ["setuptools>=77"]      # PEP 639: license = "MIT" as an expression
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]

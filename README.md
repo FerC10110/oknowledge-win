@@ -102,7 +102,8 @@ and a button that opens the library.
 
 A link that fails permanently (a page that will never yield text) keeps the
 count red, because the link really is unfinished. The way out is to delete it
-from the web UI.
+from the web UI. A link whose note *did* land, and whose entry only looks
+unfinished, is cleared by `retry` without rewriting the note.
 
 **The terminal.** Global option `--config PATH` goes before the subcommand.
 
@@ -117,8 +118,39 @@ from the web UI.
 Saving the same link twice gives one note (`already saved`). Pasting a link
 whose note is `partial` finishes it instead.
 
-> **`retry`: this section is pending.** Its behaviour is being changed so that
-> it never replaces a note you have edited. The final wording goes here.
+**`retry` finishes what is unfinished, and nothing else.** It looks at the
+queue, not at your vault, and takes every entry that is `partial` or `failed`
+plus every `pending` entry no live process is working on. Then, for each one,
+it asks the vault first:
+
+- **The note is there and its status is not `partial`** — the note is finished,
+  so `retry` writes nothing. It marks the entry `ok` and moves on, saying *the
+  note is already saved and finished, so the queue entry was brought into line
+  with it instead of re-analysing the link*. No page is fetched, no engine is
+  asked.
+- **The note is `partial`, or there is no note** — this is the case `retry` is
+  for: the link is processed the rest of the way, and the note is written or
+  finished.
+- **Another process holds the link** — it is left alone and reported as
+  `pending`, for whoever holds it.
+
+This matters because a queue entry can outlive the work it describes. If the
+process is killed between writing the note and recording that it finished —
+restarting the Omarchy shell mid-save does it — the entry stays `pending`
+forever while the note on disk is complete. Weeks of your own writing can be
+sitting in that note. `retry` treats the note as the real artifact and the
+queue as bookkeeping: when they disagree and the note is finished, it is the
+bookkeeping that gets corrected.
+
+One consequence, on purpose: a link saved as a summary whose entry asked for
+full content stays a summary. `retry` will not upgrade it, because it cannot
+tell an untouched note from one you spent an evening on. Ask for the upgrade
+when you want it, with `add --reprocess` or the web's Reprocess button — the
+one thing that does replace a note's content.
+
+`retry` never touches a note that has no queue entry, and never touches a file
+without the `oknowledge: 1` marker. Exit 1 means some links are still
+unfinished; `--json` prints one object per link with what happened to it.
 
 ### Exit codes
 

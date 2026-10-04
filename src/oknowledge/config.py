@@ -37,6 +37,10 @@ class Config:
     engines: dict[str, dict] = field(default_factory=dict)
     port: int = 8787
     idle_timeout: int = 900
+    source: Path | None = None
+    """The file this was read from, when it was read from one. `--config
+    somewhere/else.toml` has to reach the settings page: saving to the default
+    path would write a file the rest of the process does not read."""
 
     @property
     def root(self) -> Path:
@@ -133,10 +137,11 @@ def load(path: Path = CONFIG_PATH) -> Config:
         engines=engines,
         port=_integer(web, "port", 8787, "web.port"),
         idle_timeout=_integer(web, "idle_timeout", 900, "web.idle_timeout"),
+        source=path,
     )
 
 
-def save(cfg: Config, path: Path = CONFIG_PATH) -> Path:
+def save(cfg: Config, path: Path | None = None) -> Path:
     """Rewrite the config file from a Config, and say where it went.
 
     This is the file we tell the user to hand-write, so rewriting it loses
@@ -146,10 +151,13 @@ def save(cfg: Config, path: Path = CONFIG_PATH) -> Path:
 
     Only values `load()` accepts are written, so a file saved here always
     loads again.
+
+    Without a path, the file the Config was read from, and the default location
+    only for a Config nobody read from a file.
     """
     import tomli_w            # only this one function needs it: keep startup light
 
-    path = Path(path)
+    path = Path(path if path is not None else cfg.source or CONFIG_PATH)
     data = {
         "vault": str(cfg.vault),
         "folder": cfg.folder,

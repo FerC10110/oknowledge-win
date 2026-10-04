@@ -13,7 +13,7 @@ import tomllib
 import pytest
 from fastapi.testclient import TestClient
 
-from oknowledge.config import Config
+from oknowledge.config import Config, load
 from oknowledge.model import Note
 from oknowledge.vault import (
     find_note, index_path, rebuild_indexes, trash_dir, write_note,
@@ -953,3 +953,65 @@ def test_the_origin_check_covers_a_method_we_do_not_use_yet(setup):
     assert client.delete("/item/a1/purge",
                          headers={"Sec-Fetch-Site": "cross-site"}).status_code == 403
     assert client.delete("/item/a1/purge").status_code == 200
+
+
+# --- the config file the process was actually given -------------------------
+# Started with `--config somewhere/else.toml`, the CLI reads that file and
+# nothing else. A settings page that writes ~/.config/oknowledge/config.toml
+# anyway would report "saved" and change nothing the tool reads, which is
+# worse than refusing to save at all.
+
+def write_config_file(path, vault):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(f'vault = "{vault}"\n[ai]\nlanguage = "es"\n', encoding="utf-8")
+    return path
+
+
+def elsewhere(tmp_path, monkeypatch):
+    """A vault, a config file that is not the default one, and a decoy at the
+    default location that no test may touch."""
+    decoy = tmp_path / "default" / "config.toml"
+    monkeypatch.setattr("oknowledge.web.app.CONFIG_PATH", decoy)
+    vault = tmp_path / "vault"
+    (vault / "oknowledge" / "links").mkdir(parents=True)
+    chosen = write_config_file(tmp_path / "elsewhere" / "oknowledge.toml", vault)
+    return decoy, load(chosen), chosen
+
+
+def test_settings_are_saved_to_the_config_the_process_was_given(tmp_path, monkeypatch):
+    decoy, cfg, chosen = elsewhere(tmp_path, monkeypatch)
+    client = TestClient(create_app(cfg))
+
+    response = client.post("/settings", data={"chain": ["ollama"],
+                                              "default_content": "summary"})
+
+    assert response.status_code == 200
+    assert not decoy.exists(), "the default config file was written instead"
+    saved = tomllib.loads(chosen.read_text(encoding="utf-8"))
+    assert saved["default_content"] == "summary"
+    assert saved["ai"]["chain"] == ["ollama"]
+
+
+def test_the_settings_page_names_the_config_the_process_was_given(tmp_path, monkeypatch):
+    decoy, cfg, chosen = elsewhere(tmp_path, monkeypatch)
+    client = TestClient(create_app(cfg))
+
+    body = client.get("/settings").text
+
+    assert str(chosen) in body
+    assert str(decoy) not in body
+
+
+def test_what_the_web_saves_is_what_the_cli_then_reads(tmp_path, monkeypatch):
+    """The whole point of the two tests above, asserted end to end."""
+    _, cfg, chosen = elsewhere(tmp_path, monkeypatch)
+    client = TestClient(create_app(cfg))
+
+    client.post("/settings", data={"chain": ["ollama", "opencode"],
+                                   "language": "en", "default_content": "summary"})
+
+    reloaded = load(chosen)
+    assert reloaded.chain == ("ollama", "opencode")
+    assert reloaded.language == "en"
+    assert reloaded.default_content == "summary"
+    assert reloaded.source == chosen

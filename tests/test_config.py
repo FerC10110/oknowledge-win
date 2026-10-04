@@ -150,3 +150,25 @@ def test_a_saved_config_is_only_readable_by_you(tmp_path):
     save(load(path), path)
     assert path.stat().st_mode & 0o777 == 0o600
     assert (tmp_path / "config.toml.bak").stat().st_mode & 0o777 == 0o600
+
+
+def test_a_loaded_config_remembers_which_file_it_came_from(tmp_path):
+    """So that whoever saves it can write the file this process reads."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    path = write_config(tmp_path, f'vault = "{vault}"\n')
+
+    assert load(path).source == path
+
+
+def test_a_config_nobody_loaded_remembers_no_file(tmp_path):
+    assert Config(vault=tmp_path).source is None
+
+
+def test_save_without_a_path_writes_the_file_it_was_loaded_from(tmp_path):
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    path = write_config(tmp_path, f'vault = "{vault}"\n')
+
+    assert save(dataclasses.replace(load(path), language="en")) == path
+    assert load(path).language == "en"

@@ -13,6 +13,7 @@ import dataclasses
 import logging
 import re
 from importlib.resources import files
+from pathlib import Path
 from typing import NamedTuple
 from urllib.parse import quote, urlencode
 
@@ -472,13 +473,20 @@ def create_app(cfg: Config) -> FastAPI:
         return see_other("/categories", notice=code,
                          n=result.moved, m=len(result.failed))
 
+    def config_file() -> Path:
+        """The file this process reads its config from. `--config` arrives
+        through the Config itself; CONFIG_PATH is the answer only for a Config
+        that was never read from a file. Saving anywhere else would write a
+        file the rest of the process does not read, and still say "saved"."""
+        return current["cfg"].source or CONFIG_PATH
+
     @app.get("/settings", response_class=HTMLResponse)
     def settings_page(request: Request):
         saved = current["cfg"]
         order = [name for name in saved.chain if name in WEB_ENGINES]
         order += [name for name in WEB_ENGINES if name not in order]
         return page(request, "settings.html", cfg=saved, ui=ui_language(),
-                    engines=order, config_path=CONFIG_PATH)
+                    engines=order, config_path=config_file())
 
     @app.post("/settings")
     def save_settings(chain: list[str] = Form([]), language: str = Form(""),
@@ -509,7 +517,7 @@ def create_app(cfg: Config) -> FastAPI:
             engines=engines,
         )
         try:
-            save_config(updated, CONFIG_PATH)
+            save_config(updated, config_file())
         except OSError as error:
             # The old file is still there, untouched: save() writes atomically
             # and backs up before it writes.
