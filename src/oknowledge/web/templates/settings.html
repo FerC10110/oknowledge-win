@@ -2,7 +2,7 @@
 {% block title %}{{ t('Settings') }} - oknowledge{% endblock %}
 {% block main %}
   <h1>{{ t('Settings') }}</h1>
-  <p class="warn-block">{{ t('Saving rewrites %1 and drops every comment in it. The file it replaces is kept next to it as config.toml.bak.', config_path) }}</p>
+  <p class="warn-block">{{ t('Saving rewrites %1 from scratch: your comments, your formatting and any key oknowledge does not read are not kept. The file it replaces is copied to config.toml.bak first.', config_path) }}</p>
   <form action="/settings" method="post">
     <h2>{{ t('Engines') }}</h2>
     <p class="meta">{{ t('Priority runs top to bottom. An engine that is not checked is not used. To change the order, edit the file by hand.') }}</p>

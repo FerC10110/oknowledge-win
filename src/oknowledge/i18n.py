@@ -68,11 +68,30 @@ STRINGS = {
             "La podés recuperar desde Obsidian.",
         "Re-running the analysis. The note stays pending until it finishes.":
             "Reprocesando. La nota queda pendiente hasta que termine.",
-        "That name cannot be used as a category: no slashes, no dots "
-        "at the start, no control characters.":
-            "Ese nombre no sirve como categoría: sin barras, sin puntos "
-            "al principio, sin caracteres de control.",
+        'That name cannot be used as a category: no slashes, no dots '
+        'at the start, no control characters, and none of \\ / : * ? " < > |':
+            'Ese nombre no sirve como categoría: sin barras, sin puntos al '
+            'principio, sin caracteres de control y ninguno de \\ / : * ? " < > |',
+        "1 note moved.": "Se movió 1 nota.",
         "%1 notes moved.": "Se movieron %1 notas.",
+        "1 note merged into a category that was already there.":
+            "1 nota se fusionó con una categoría que ya existía.",
+        "%1 notes merged into a category that was already there.":
+            "%1 notas se fusionaron con una categoría que ya existía.",
+        "An analysis is running on this link. Try again when it finishes.":
+            "Hay un análisis corriendo sobre este link. Probá de nuevo cuando termine.",
+        "The vault could not be written. Check that the folder exists and "
+        "that you can write to it.":
+            "No se pudo escribir en el vault. Revisá que la carpeta exista y "
+            "que puedas escribir en ella.",
+        "The settings could not be saved. Check that the config folder exists "
+        "and that you can write to it.":
+            "No se pudieron guardar los ajustes. Revisá que la carpeta de "
+            "configuración exista y que puedas escribir en ella.",
+        "Re-run the analysis? The title, summary, points, category and tags "
+        "are replaced by the new answer.":
+            "¿Reprocesar? El título, el resumen, los puntos, la categoría y "
+            "las etiquetas se reemplazan por la respuesta nueva.",
         "%1 notes moved, %2 could not be written. "
         "Check the folder and try again.":
             "Se movieron %1 notas; %2 no se pudieron escribir. "
@@ -81,10 +100,12 @@ STRINGS = {
             "Si el nombre nuevo ya existe, las dos categorías se fusionan.",
         "Move this note to the trash folder?":
             "¿Mover esta nota a la carpeta trash?",
-        "Saving rewrites %1 and drops every comment in it. "
-        "The file it replaces is kept next to it as config.toml.bak.":
-            "Guardar reescribe %1 y pierde todos los comentarios que tenga. "
-            "El archivo anterior queda al lado como config.toml.bak.",
+        "Saving rewrites %1 from scratch: your comments, your formatting and "
+        "any key oknowledge does not read are not kept. The file it replaces "
+        "is copied to config.toml.bak first.":
+            "Guardar reescribe %1 de cero: tus comentarios, tu formato y "
+            "cualquier clave que oknowledge no lea no se conservan. El archivo "
+            "que reemplaza se copia antes a config.toml.bak.",
         "Priority runs top to bottom. An engine that is not checked is not used. "
         "To change the order, edit the file by hand.":
             "La prioridad va de arriba hacia abajo. El motor que no esté tildado "

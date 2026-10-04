@@ -8,6 +8,7 @@ trash/, which is what makes a mis-click in a browser recoverable.
 
 from __future__ import annotations
 
+import contextlib
 import dataclasses
 import logging
 import re
@@ -28,7 +29,11 @@ from ..config import CONFIG_PATH, CONTENT_MODES, ENGINE_NAMES, Config
 from ..config import save as save_config
 from ..i18n import LANGUAGES, set_ui_language, translator, ui_language
 from ..pipeline import add as add_link
-from ..vault import BadCategory, delete_note, rename_category, update_note
+from ..queue import Locked, Queue
+from ..vault import (
+    BadCategory, ProtectedNote, clean_category, delete_note, rename_category,
+    update_note,
+)
 from .index import PER_PAGE, Library, read_full, terms
 
 WEB = files("oknowledge").joinpath("web")
@@ -45,11 +50,22 @@ NOTICES = {
     "trashed": "The note was moved to the trash folder inside your vault. "
                "You can restore it from Obsidian.",
     "queued": "Re-running the analysis. The note stays pending until it finishes.",
-    "bad-category": "That name cannot be used as a category: no slashes, no dots "
-                    "at the start, no control characters.",
+    # The characters are named because the field arrives pre-filled with the
+    # value already saved: a user who clicks Save on a category the AI wrote
+    # has to be able to see which character is the problem.
+    "bad-category": 'That name cannot be used as a category: no slashes, no dots '
+                    'at the start, no control characters, and none of \\ / : * ? " < > |',
+    "renamed-one": "1 note moved.",
     "renamed": "%1 notes moved.",
+    "merged-one": "1 note merged into a category that was already there.",
+    "merged": "%1 notes merged into a category that was already there.",
     "renamed-partial": "%1 notes moved, %2 could not be written. "
                        "Check the folder and try again.",
+    "busy": "An analysis is running on this link. Try again when it finishes.",
+    "write-failed": "The vault could not be written. Check that the folder exists "
+                    "and that you can write to it.",
+    "settings-failed": "The settings could not be saved. Check that the config "
+                       "folder exists and that you can write to it.",
 }
 
 # Writing is refused unless the browser says the request came from this app.
@@ -59,6 +75,10 @@ NOTICES = {
 # that do not send it. A write with neither is a shell, not a page.
 SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 SAFE_SITES = frozenset({"same-origin", "none"})
+
+# Not a notice: what edit() answers when the link is not a note of ours, which
+# the route turns into a 404.
+MISSING = "missing"
 
 # Cover images are served only as one of these: a hand-edited cover pointing at
 # an .svg or .html inside attachments/ would otherwise be a same-origin document.
@@ -143,6 +163,30 @@ class SameOriginOnly:
                 await answer(scope, receive, send)
                 return
         await self.app(scope, receive, send)
+
+
+@contextlib.contextmanager
+def link_lock(link_id: str):
+    """Hold the link's queue lock while one of its notes is edited.
+
+    pipeline.add() writes its note under this same lock, so holding it is what
+    stops a background re-analysis from landing on top of an edit -- or, worse,
+    from writing the note back into links/ after the user has just moved it to
+    trash/, which would silently undo a delete. Taking the lock closes that
+    race; probing it would only narrow it.
+
+    A state tree that cannot be locked at all (an unwritable ~/.local/state)
+    lets the edit through unlocked, which is the same call pipeline.add()
+    makes: the queue is bookkeeping, the note is the artifact. So does an id
+    the queue refuses to name (a hand-edited `id:` with a space in it): the
+    queue cannot hold an entry for it, so nothing can be analysing it.
+    """
+    with contextlib.ExitStack() as stack:
+        try:
+            stack.enter_context(Queue().lock(link_id))
+        except (OSError, ValueError):
+            pass
+        yield
 
 
 def reanalyze(cfg: Config, url: str, engine: str | None) -> None:
@@ -261,33 +305,70 @@ def create_app(cfg: Config) -> FastAPI:
     # result back from the vault, and never a write of their own -- the three
     # vault functions are the only things that touch a file.
 
+    def edit(link_id: str, change, done: str) -> str:
+        """Apply one change to one note, and say which notice to show.
+
+        `change(cfg, language)` is one of the vault's three editing functions,
+        already bound to its own arguments. Two things are the same for all of
+        them, which is why they share this:
+
+        * `language` is the CONTENT language (`[ai] language`), never the
+          interface language. It picks the note's headings and the index
+          boilerplate, so passing the UI language here would re-render a
+          Spanish note with English headings on every edit.
+        * the change happens under the link's queue lock, so a background
+          re-analysis cannot land on top of it.
+        """
+        live = current["cfg"]
+        try:
+            with link_lock(link_id):
+                if change(live, live.language) is None:
+                    return MISSING
+        except Locked:
+            return "busy"
+        except BadCategory:
+            return "bad-category"
+        except (OSError, ProtectedNote) as error:
+            # A read-only vault, a trash/ that is a file, a full disk. Nothing
+            # was written -- every vault write is atomic -- so say so and stop.
+            log.warning("the vault could not be written: %s", error)
+            return "write-failed"
+        library.refresh()
+        return done
+
     @app.post("/item/{link_id}/category")
     def move(link_id: str, category: str = Form("")):
-        try:
-            written = update_note(cfg, link_id, ui_language(), category=category)
-        except BadCategory:
+        if clean_category(category) is None:
+            # Before the lock, so a refused name creates nothing anywhere --
+            # not even the lock file. update_note() checks it again anyway.
             return see_other(item_url(link_id), notice="bad-category")
-        if written is None:
+        notice = edit(link_id, lambda cfg, language: update_note(
+            cfg, link_id, language, category=category), "saved")
+        if notice == MISSING:
             raise HTTPException(status_code=404, detail="no such link")
-        library.refresh()
-        return see_other(item_url(link_id), notice="saved")
+        return see_other(item_url(link_id), notice=notice)
 
     @app.post("/item/{link_id}/tags")
     def retag(link_id: str, tags: str = Form("")):
         wanted = [word for word in tags.replace(",", " ").split() if word]
-        if update_note(cfg, link_id, ui_language(), tags=wanted) is None:
+        notice = edit(link_id, lambda cfg, language: update_note(
+            cfg, link_id, language, tags=wanted), "saved")
+        if notice == MISSING:
             raise HTTPException(status_code=404, detail="no such link")
-        library.refresh()
-        return see_other(item_url(link_id), notice="saved")
+        return see_other(item_url(link_id), notice=notice)
 
     @app.post("/item/{link_id}/delete")
     def remove(link_id: str):
         # Moves the file to <vault>/<folder>/trash/. The notice says so,
         # because "deleted" would be a lie and a worrying one.
-        if delete_note(cfg, link_id, ui_language()) is None:
+        notice = edit(link_id, lambda cfg, language: delete_note(
+            cfg, link_id, language), "trashed")
+        if notice == MISSING:
             raise HTTPException(status_code=404, detail="no such link")
-        library.refresh()
-        return see_other("/", notice="trashed")
+        # Only a note that really went to trash/ sends the user back to the
+        # library; a refused delete leaves them on the note they still have.
+        where = "/" if notice == "trashed" else item_url(link_id)
+        return see_other(where, notice=notice)
 
     @app.post("/item/{link_id}/reprocess")
     def reprocess(background: BackgroundTasks, link_id: str, engine: str = Form("")):
@@ -308,13 +389,27 @@ def create_app(cfg: Config) -> FastAPI:
 
     @app.post("/categories/rename")
     def rename(old: str = Form(...), new: str = Form(...)):
+        live = current["cfg"]
+        library.refresh()
+        target = clean_category(new)
+        # Asked before the rename, because afterwards the two are one and
+        # there is no way to tell that a merge is what happened.
+        merging = target is not None and target != old and target in library.categories()
         try:
-            result = rename_category(cfg, old, new, ui_language())
+            result = rename_category(live, old, new, live.language)
         except BadCategory:
             return see_other("/categories", notice="bad-category")
+        except (OSError, ProtectedNote) as error:
+            log.warning("the vault could not be written: %s", error)
+            return see_other("/categories", notice="write-failed")
         library.refresh()
-        return see_other("/categories",
-                         notice="renamed-partial" if result.failed else "renamed",
+        if result.failed:
+            code = "renamed-partial"
+        elif merging and result.moved:
+            code = "merged-one" if result.moved == 1 else "merged"
+        else:
+            code = "renamed-one" if result.moved == 1 else "renamed"
+        return see_other("/categories", notice=code,
                          n=result.moved, m=len(result.failed))
 
     @app.get("/settings", response_class=HTMLResponse)
@@ -353,10 +448,20 @@ def create_app(cfg: Config) -> FastAPI:
                              else saved.default_content),
             engines=engines,
         )
-        save_config(updated, CONFIG_PATH)
-        if interface in LANGUAGES:
-            set_ui_language(interface)
+        try:
+            save_config(updated, CONFIG_PATH)
+        except OSError as error:
+            # The old file is still there, untouched: save() writes atomically
+            # and backs up before it writes.
+            log.warning("the config could not be saved: %s", error)
+            return see_other("/settings", notice="settings-failed")
         current["cfg"] = updated
+        try:
+            if interface in LANGUAGES:
+                set_ui_language(interface)
+        except OSError as error:
+            log.warning("the shared language file could not be written: %s", error)
+            return see_other("/settings", notice="settings-failed")
         return see_other("/settings", notice="saved")
 
     app.state.library = library

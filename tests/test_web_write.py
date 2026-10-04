@@ -248,9 +248,12 @@ def test_settings_shows_the_chain_and_both_languages(setup):
 
 
 def test_settings_warns_that_saving_rewrites_the_file(setup):
+    """Comments are not the only thing lost: any key load() does not read goes
+    too, and the file is the one we tell the user to hand-write."""
     _, client = setup
     body = client.get("/settings").text
     assert "comment" in body.lower()
+    assert "does not read" in body
     assert "config.toml.bak" in body
 
 
@@ -383,3 +386,260 @@ def test_a_cross_site_get_is_still_served(setup):
     """Reading is not writing: an embedded page may be odd, but it is harmless."""
     _, client = setup
     assert client.get("/", headers={"Sec-Fetch-Site": "cross-site"}).status_code == 200
+
+
+# --- the two language axes (I1) ---------------------------------------------
+
+def spanish_note(cfg):
+    note = Note(id="c3", url="https://e.com/c3", title="Túneles", category="Redes",
+                tags=["vpn"], type="article", source="e.com", saved="2026-10-03",
+                summary="Resumen.", points=["Corre en el kernel"],
+                body="El texto entero.")
+    return write_note(cfg, note, "es")
+
+
+def test_an_edit_keeps_the_note_in_the_language_the_ai_writes(tmp_path, config_path):
+    """The UI language and `[ai] language` are two settings. The vault's
+    `language` argument is the second one: it picks the note's headings."""
+    vault = tmp_path / "vault"
+    (vault / "oknowledge" / "links").mkdir(parents=True)
+    cfg = Config(vault=vault, language="es")       # the UI stays English (autouse)
+    path = spanish_note(cfg)
+    rebuild_indexes(cfg, "es")
+    client = TestClient(create_app(cfg))
+
+    client.post("/item/c3/category", data={"category": "Seguridad"})
+
+    text = path.read_text(encoding="utf-8")
+    assert "## Puntos clave" in text and "## Contenido original" in text
+    assert "## Key points" not in text and "## Original content" not in text
+    assert "Generado por oknowledge" in index_path(cfg, "Seguridad").read_text(
+        encoding="utf-8")
+
+
+def test_a_rename_keeps_the_note_in_the_language_the_ai_writes(tmp_path, config_path):
+    vault = tmp_path / "vault"
+    (vault / "oknowledge" / "links").mkdir(parents=True)
+    cfg = Config(vault=vault, language="es")
+    path = spanish_note(cfg)
+    client = TestClient(create_app(cfg))
+
+    client.post("/categories/rename", data={"old": "Redes", "new": "Seguridad"})
+
+    assert "## Puntos clave" in path.read_text(encoding="utf-8")
+
+
+def test_a_delete_keeps_the_indexes_in_the_language_the_ai_writes(tmp_path, config_path):
+    vault = tmp_path / "vault"
+    (vault / "oknowledge" / "links").mkdir(parents=True)
+    cfg = Config(vault=vault, language="es")
+    spanish_note(cfg)
+    write_note(cfg, note("d4", "SSH", "Redes"), "es")
+    rebuild_indexes(cfg, "es")
+    client = TestClient(create_app(cfg))
+
+    client.post("/item/c3/delete")
+
+    assert "Generado por oknowledge" in index_path(cfg, "Redes").read_text(
+        encoding="utf-8")
+
+
+# --- reprocess replaces hand-typed content, so it asks first (I2) -----------
+
+def test_reprocess_asks_before_it_replaces_the_note(setup):
+    _, client = setup
+    body = client.get("/item/a1").text
+    form = body[body.index('/item/a1/reprocess'):]
+    assert "data-ask=" in form[:400]
+    assert "replaced" in form[:400]
+    assert form.count("confirm(this.form.dataset.ask)") >= 1
+
+
+# --- an edit and a running analysis cannot cross (m7) -----------------------
+
+@pytest.mark.parametrize("path,data", [
+    ("/item/a1/category", {"category": "Redes"}),
+    ("/item/a1/tags", {"tags": "vpn"}),
+    ("/item/a1/delete", {}),
+])
+def test_an_edit_waits_for_a_running_analysis(setup, path, data):
+    """Otherwise a background reprocess writes its answer over the edit, or
+    worse, recreates a note the user has just sent to the trash."""
+    from oknowledge.queue import Queue
+
+    cfg, client = setup
+    before = find_note(cfg, "a1")[1]
+    with Queue().lock("a1"):
+        body = client.post(path, data=data).text
+
+    assert "analysis is running" in body
+    found = find_note(cfg, "a1")
+    assert found is not None
+    assert (found[1].category, found[1].tags) == (before.category, before.tags)
+
+
+def test_an_edit_goes_through_once_the_analysis_is_over(setup):
+    from oknowledge.queue import Queue
+
+    cfg, client = setup
+    with Queue().lock("a1"):
+        pass
+    client.post("/item/a1/category", data={"category": "Redes"})
+    assert find_note(cfg, "a1")[1].category == "Redes"
+
+
+def test_an_unlockable_state_tree_does_not_block_an_edit(setup, monkeypatch):
+    """The queue is bookkeeping; the note is the artifact. Same call
+    pipeline.add() makes when it cannot lock."""
+    from oknowledge import queue as queue_module
+
+    cfg, client = setup
+
+    def refuse(*args, **kwargs):
+        raise PermissionError(13, "state tree is read-only")
+
+    monkeypatch.setattr(queue_module.Queue, "lock", refuse)
+    client.post("/item/a1/category", data={"category": "Redes"})
+    assert find_note(cfg, "a1")[1].category == "Redes"
+
+
+# --- the refusal names the characters it refuses (m1) -----------------------
+
+def test_the_refusal_names_every_character_it_refuses():
+    from oknowledge.web.app import NOTICES
+
+    message = NOTICES["bad-category"]
+    for char in '/\\:*?"<>|':
+        assert char in message, f"the refusal does not name {char!r}"
+
+
+# --- a write that cannot happen says so (m3) --------------------------------
+
+def test_a_vault_that_cannot_be_written_says_so(setup):
+    cfg, client = setup
+    cfg.links_dir.chmod(0o500)
+    try:
+        body = client.post("/item/a1/category", data={"category": "Redes"}).text
+    finally:
+        cfg.links_dir.chmod(0o700)
+    assert "could not be written" in body
+    assert find_note(cfg, "a1")[1].category == "Networking"
+
+
+def test_a_trash_folder_that_cannot_be_made_says_so(setup):
+    cfg, client = setup
+    (cfg.root / "trash").write_text("not a folder\n", encoding="utf-8")
+    body = client.post("/item/a1/delete").text
+    assert "could not be written" in body
+    assert find_note(cfg, "a1") is not None
+
+
+def test_settings_that_cannot_be_saved_say_so(setup, config_path):
+    _, client = setup
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.parent.chmod(0o500)
+    try:
+        body = client.post("/settings", data={"chain": ["ollama"]}).text
+    finally:
+        config_path.parent.chmod(0o700)
+    assert "could not be saved" in body
+    assert not config_path.exists()
+
+
+# --- the settings branches that had no test (m4) ----------------------------
+
+def test_clearing_a_model_removes_only_that_key(setup, config_path):
+    import dataclasses
+
+    cfg, _ = setup
+    with_model = dataclasses.replace(
+        cfg, engines={"ollama": {"model": "qwen3:8b", "url": "http://x"}})
+    client = TestClient(create_app(with_model))
+
+    client.post("/settings", data={"chain": ["ollama"], "ollama_model": ""})
+
+    saved = tomllib.loads(config_path.read_text(encoding="utf-8"))
+    assert saved["ai"]["ollama"] == {"url": "http://x"}
+
+
+def test_a_model_name_that_is_not_one_keeps_what_was_saved(setup, config_path):
+    import dataclasses
+
+    cfg, _ = setup
+    with_model = dataclasses.replace(cfg, engines={"ollama": {"model": "qwen3:8b"}})
+    client = TestClient(create_app(with_model))
+
+    client.post("/settings", data={"chain": ["ollama"], "ollama_model": "qwen\x073:8b"})
+
+    saved = tomllib.loads(config_path.read_text(encoding="utf-8"))
+    assert saved["ai"]["ollama"]["model"] == "qwen3:8b"
+
+
+def test_an_interface_language_we_do_not_have_leaves_the_shared_file_alone(
+        setup, isolated_ui_language):
+    _, client = setup
+    client.post("/settings", data={"chain": ["ollama"], "ui_language": "fr"})
+    assert not isolated_ui_language.exists()
+
+
+# --- counting and merging in words (m6, m10) --------------------------------
+
+def test_moving_one_note_does_not_say_one_notes(setup):
+    _, client = setup
+    body = client.post("/categories/rename",
+                       data={"old": "Networking", "new": "Redes"}).text
+    assert "1 note moved" in body
+    assert "1 notes" not in body
+
+
+def test_a_merge_says_that_it_merged(setup):
+    cfg, client = setup
+    body = client.post("/categories/rename",
+                       data={"old": "Networking", "new": "Cocina"}).text
+    assert "merged" in body
+    assert index_path(cfg, "Cocina").read_text(encoding="utf-8").count("[[") == 2
+
+
+def test_a_plain_rename_does_not_claim_a_merge(setup):
+    _, client = setup
+    body = client.post("/categories/rename",
+                       data={"old": "Networking", "new": "Redes"}).text
+    assert "merged" not in body
+
+
+# --- the cross-site test cannot quietly stop covering a route (m8) ----------
+
+def test_the_cross_site_test_covers_every_write_route(setup):
+    import re
+
+    _, client = setup
+    declared = {route.path for route in client.app.routes
+                if "POST" in getattr(route, "methods", ())}
+    assert declared, "no POST routes found: this test is not looking at the app"
+    tested = [path for path, _ in WRITE_ROUTES]
+    for route in sorted(declared):
+        pattern = re.compile("^" + re.sub(r"\{[^}]+\}", "[^/]+", route) + "$")
+        assert any(pattern.match(path) for path in tested), \
+            f"no cross-site test for {route}"
+    for path in tested:
+        assert any(re.fullmatch(re.sub(r"\{[^}]+\}", "[^/]+", route), path)
+                   for route in declared), f"{path} is not a route any more"
+
+
+def test_a_note_whose_id_the_queue_cannot_name_is_still_editable(setup):
+    """A hand-edited `id:` need not look like one of ours. The queue refuses to
+    name a lock for it -- and no analysis can be running on it either, since
+    the queue could not hold an entry for it, so the edit goes ahead."""
+    cfg, client = setup
+    odd = cfg.links_dir / "odd.md"
+    odd.write_text(
+        "---\nurl: https://e.com/odd\ntitle: Odd\ncategory: Networking\n"
+        "tags: []\ntype: article\nsource: e.com\nsaved: '2026-10-03'\n"
+        "id: has spaces\noknowledge: 1\n---\n\n# Odd\n\nResumen.\n",
+        encoding="utf-8")
+
+    response = client.post("/item/has spaces/category", data={"category": "Redes"},
+                           follow_redirects=False)
+
+    assert response.status_code == 303
+    assert find_note(cfg, "has spaces")[1].category == "Redes"

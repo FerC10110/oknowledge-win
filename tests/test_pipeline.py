@@ -10,7 +10,7 @@ from oknowledge.config import Config
 from oknowledge.extract import Unreadable
 from oknowledge.model import Extracted
 from oknowledge.pipeline import add, retry
-from oknowledge.queue import Locked, Queue
+from oknowledge.queue import Locked, Queue, state_dir
 from oknowledge.urls import link_id
 from oknowledge.vault import all_notes, index_path, read_note
 
@@ -33,6 +33,15 @@ PAGE = Extracted(
     published="2026-09-28",
     cover_url="https://cdn.example.com/wg.jpg",
 )
+
+
+@pytest.fixture(autouse=True)
+def state_under_tmp_path(tmp_path, monkeypatch):
+    """Every add() here passes queue=q, so nothing reaches the default state
+    tree -- but that is a convention, not a guarantee. Pin it, the way
+    test_cli.py and test_web_write.py do, so one forgotten `queue=` writes
+    into tmp_path instead of the user's ~/.local/state."""
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
 
 
 @pytest.fixture
@@ -959,3 +968,7 @@ def test_the_rename_can_never_write_outside_the_links_folder(cfg, q, monkeypatch
         assert not escapee.exists()                     # nothing was written there
         assert any("escape.md" in warning for warning in result.warnings)
     assert len(all_notes(cfg)) == 1
+
+
+def test_the_state_directory_is_under_tmp_path(tmp_path):
+    assert state_dir().is_relative_to(tmp_path)

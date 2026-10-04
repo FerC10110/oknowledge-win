@@ -33,14 +33,19 @@
                aria-label="{{ t('Edit tags') }}">
         <button type="submit">{{ t('Save') }}</button>
       </form>
-      <form action="/item/{{ note.id|slug }}/reprocess" method="post" class="row">
+      <form action="/item/{{ note.id|slug }}/reprocess" method="post" class="row"
+            data-ask="{{ t('Re-run the analysis? The title, summary, points, category and tags are replaced by the new answer.') }}">
+        {# It asks because it is the one action here with no undo: a finished
+           analysis writes a whole new note over this one. Delete is asked
+           too, and that one at least leaves a copy in trash/. #}
         <select name="engine" aria-label="{{ t('Reprocess') }}">
           <option value="">—</option>
           <option value="opencode">opencode</option>
           <option value="ollama">ollama</option>
           <option value="api">api</option>
         </select>
-        <button type="submit">{{ t('Reprocess') }}</button>
+        <button type="submit"
+                onclick="return confirm(this.form.dataset.ask)">{{ t('Reprocess') }}</button>
       </form>
       <form action="/item/{{ note.id|slug }}/delete" method="post" class="row"
             data-ask="{{ t('Move this note to the trash folder?') }}">
