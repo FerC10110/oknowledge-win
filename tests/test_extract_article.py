@@ -1,8 +1,6 @@
-import warnings
 from pathlib import Path
 
 import httpx
-from tld import get_tld
 import pytest
 
 from oknowledge import net
@@ -11,16 +9,6 @@ from oknowledge.extract.article import from_html, from_url
 
 FIXTURES = Path(__file__).parent / "fixtures"
 FIXTURE = FIXTURES / "article.html"
-
-
-@pytest.fixture(scope="module", autouse=True)
-def warm_up_tld():
-    """tld (a trafilatura dependency) warns about codecs.open() when it first loads
-    its suffix list; under -W error that breaks it for the rest of the run. Load it
-    once with the third-party warning silenced."""
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", DeprecationWarning)
-        get_tld("https://e.com/x", fail_silently=False)
 
 
 @pytest.fixture
