@@ -1,6 +1,6 @@
 import pytest
 
-from oknowledge.config import Config, ConfigError, load
+from oknowledge.config import ConfigError, load
 
 
 def write_config(tmp_path, body):

@@ -1,2 +1,0 @@
-[console_scripts]
-oknowledge = oknowledge.cli:main
