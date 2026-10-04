@@ -272,6 +272,23 @@ def _claims_marker(path: Path) -> bool:
     return end != -1 and _CLAIMS_MARKER.search(text[4:end]) is not None
 
 
+def scan_file(path: Path) -> tuple[Note | None, bool]:
+    """(note, False) if the file is a readable note of ours; (None, True) if it
+    is a file of ours that could not be read; (None, False) if it is not a note
+    (an index, or not ours at all)."""
+    note = read_note(path)
+    if note is not None:
+        return note, False
+    front = read_front(path)
+    if front is not None and front.get("kind") == "index":
+        return None, False
+    try:
+        return None, _claims_marker(path)
+    except OSError:
+        # Cannot tell whether it is ours, but we failed to index it: say so.
+        return None, True
+
+
 def _scan(cfg: Config) -> tuple[list[tuple[Path, Note]], list[Path]]:
     """Every readable note under links_dir, plus the files of ours it could not read."""
     if not cfg.links_dir.is_dir():
@@ -279,27 +296,12 @@ def _scan(cfg: Config) -> tuple[list[tuple[Path, Note]], list[Path]]:
     found: list[tuple[Path, Note]] = []
     skipped: list[Path] = []
     for path in sorted(cfg.links_dir.glob("*.md")):
-        note = read_note(path)
+        note, unreadable = scan_file(path)
         if note is not None:
             found.append((path, note))
-            continue
-        front = read_front(path)
-        is_index = front is not None and front.get("kind") == "index"
-        if is_index:
-            continue
-        try:
-            if _claims_marker(path):
-                skipped.append(path)
-        except OSError:
-            # Cannot tell whether it is ours, but we failed to index it: say so.
+        elif unreadable:
             skipped.append(path)
     return found, skipped
-
-
-def scan_notes(cfg: Config) -> tuple[list[Note], list[Path]]:
-    """Every readable note, plus the files of ours that could not be read."""
-    found, skipped = _scan(cfg)
-    return [note for _, note in found], skipped
 
 
 def all_notes(cfg: Config) -> list[Note]:

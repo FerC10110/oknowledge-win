@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}{{ t('Not found') }} - oknowledge{% endblock %}
+{% block main %}
+  <section class="empty">
+    <h1>{{ t('Not found') }}</h1>
+    <p>{{ t('That link is not in your library.') }}</p>
+    <p><a href="/">{{ t('Library') }}</a></p>
+  </section>
+{% endblock %}

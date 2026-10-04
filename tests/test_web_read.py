@@ -109,13 +109,13 @@ def scans(monkeypatch):
     from oknowledge.web import index
 
     calls = []
-    real = index.scan_notes
+    real = index.scan_file
 
-    def counting(cfg):
-        calls.append(1)
-        return real(cfg)
+    def counting(path):
+        calls.append(path.name)
+        return real(path)
 
-    monkeypatch.setattr(index, "scan_notes", counting)
+    monkeypatch.setattr(index, "scan_file", counting)
     return calls
 
 
@@ -213,7 +213,7 @@ def test_an_unreadable_vault_renders_a_page_with_the_path(tmp_path, monkeypatch)
     def boom(cfg):
         raise PermissionError("denied")
 
-    monkeypatch.setattr(index, "scan_notes", boom)
+    monkeypatch.setattr(index, "fingerprint", boom)
     # force a change so the scan is attempted
     write_note(cfg, note("a1", "Uno", "Redes", [], "Resumen."), "es")
     for url in ("/", "/search?q=x", "/item/a1", "/cover/a1"):
@@ -248,7 +248,7 @@ def test_the_app_starts_even_if_the_vault_cannot_be_read_at_startup(tmp_path, mo
     def boom(cfg):
         raise OSError("gone")
 
-    monkeypatch.setattr(index, "scan_notes", boom)
+    monkeypatch.setattr(index, "fingerprint", boom)
     client = TestClient(create_app(make_cfg(tmp_path)))
     assert client.get("/").status_code == 503
 

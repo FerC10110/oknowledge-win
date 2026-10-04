@@ -47,6 +47,13 @@ STRINGS = {
             "1 nota no se pudo leer y no se muestra (%1)",
         "%1 notes could not be read and are not shown (%2)":
             "%1 notas no se pudieron leer y no se muestran (%2)",
+        "Nothing in this category": "No hay nada en esta categoría",
+        "Nothing matches that filter": "No hay nada con ese filtro",
+        "Not found": "No encontrado",
+        "That link is not in your library.": "Ese link no está en tu biblioteca.",
+        "Previous": "Anterior",
+        "Next": "Siguiente",
+        "Page %1 of %2": "Página %1 de %2",
         "The vault could not be read": "No se pudo leer el vault",
         "Check that the folder exists, is mounted and is readable.":
             "Revisá que la carpeta exista, esté montada y se pueda leer.",
@@ -58,9 +65,12 @@ def ui_language(path: Path | None = None) -> str:
     target = Path(path) if path else SHARED_FILE
     try:
         value = json.loads(target.read_text(encoding="utf-8")).get("language")
-    except (OSError, ValueError, AttributeError):
+    except (OSError, ValueError, AttributeError, RecursionError):
         return "en"
-    return value if value in LANGUAGES else "en"
+    if not isinstance(value, str):
+        return "en"
+    primary = value.strip().lower().replace("_", "-").split("-")[0]   # "es-AR" -> "es"
+    return primary if primary in LANGUAGES else "en"
 
 
 def translator(language: str):

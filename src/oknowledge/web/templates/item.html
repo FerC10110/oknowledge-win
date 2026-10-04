@@ -1,11 +1,12 @@
 {% extends "base.html" %}
+{% block title %}{{ note.title }} - oknowledge{% endblock %}
 {% block main %}
   <article class="item">
     <p class="meta"><span class="cat">{{ note.category }}</span> · {{ note.source }} · {{ note.saved }}
       {% if note.status != 'ok' %}<span class="warn">{{ t('Incomplete') }}</span>{% endif %}</p>
-    <h1>{{ note.title }}</h1>
+    <h1 dir="auto">{{ note.title }}</h1>
     <p class="tags">{% for tag in note.tags %}<a href="/?tag={{ tag|urlencode }}">#{{ tag }}</a>{% endfor %}</p>
-    <div class="summary">{{ note.summary }}</div>
+    <div class="summary" dir="auto">{{ note.summary }}</div>
     {% if note.points %}
       <h2>{{ t('Key points') }}</h2>
       <ul>{% for point in note.points %}<li>{{ point }}</li>{% endfor %}</ul>

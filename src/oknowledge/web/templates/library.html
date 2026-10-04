@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% block title %}{% if query %}{{ query }} - oknowledge{% else %}oknowledge{% endif %}{% endblock %}
 {% block main %}
   {% if notes is not none %}
     <div class="chips">
@@ -14,15 +15,15 @@
            class="chip small {% if tag == name %}on{% endif %}">#{{ name }}</a>
       {% endfor %}
     </div>
-    {% if not notes %}<p class="empty">{{ t('Nothing saved yet') }}</p>{% endif %}
+    {% if not notes %}<p class="empty">{% if filtered %}{{ t('Nothing in this category') if category else t('Nothing matches that filter') }}{% else %}{{ t('Nothing saved yet') }}{% endif %}</p>{% endif %}
     <ul class="grid">
       {% for note in notes %}
         <li class="card{% if note.status != 'ok' %} partial{% endif %}">
-          <a href="/item/{{ note.id }}">
-            {% if note.cover %}<img src="/cover/{{ note.id }}" alt="" loading="lazy">{% endif %}
-            <h2>{{ note.title }}</h2>
+          <a href="/item/{{ note.id|slug }}">
+            {% if note.cover %}<img src="/cover/{{ note.id|slug }}" alt="" loading="lazy">{% endif %}
+            <h2 dir="auto">{{ note.title }}</h2>
             <p class="meta"><span class="cat">{{ note.category }}</span> · {{ note.saved }}</p>
-            <p class="sum">{{ note.summary.split('\n')[0] }}</p>
+            <p class="sum" dir="auto">{{ note.summary|plain }}</p>
             <p class="tags">{% for tag in note.tags %}<span>#{{ tag }}</span>{% endfor %}</p>
           </a>
         </li>
@@ -33,13 +34,20 @@
     <ul class="hits">
       {% for hit in hits %}
         <li>
-          <a href="/item/{{ hit.note.id }}">
-            <h2>{{ hit.note.title }}</h2>
+          <a href="/item/{{ hit.note.id|slug }}">
+            <h2 dir="auto">{{ hit.note.title }}</h2>
             <p class="meta"><span class="cat">{{ hit.note.category }}</span> · {{ hit.note.saved }}</p>
-            <p class="snippet">{{ hit.snippet }}</p>
+            <p class="snippet" dir="auto">{{ hit.snippet }}</p>
           </a>
         </li>
       {% endfor %}
     </ul>
+  {% endif %}
+  {% if prev_url or next_url %}
+    <nav class="pager">
+      {% if prev_url %}<a rel="prev" href="{{ prev_url }}">{{ t('Previous') }}</a>{% endif %}
+      <span>{{ t('Page %1 of %2', page, pages) }}</span>
+      {% if next_url %}<a rel="next" href="{{ next_url }}">{{ t('Next') }}</a>{% endif %}
+    </nav>
   {% endif %}
 {% endblock %}
