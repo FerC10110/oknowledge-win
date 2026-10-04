@@ -312,9 +312,15 @@ def test_sigterm_ends_serve_quietly_and_the_old_handler_comes_back(vault_cfg, st
         signal.raise_signal(signal.SIGTERM)
 
     stub_uvicorn.behaviour = staticmethod(terminate)
-    before = signal.getsignal(signal.SIGTERM)
-    runner.serve(vault_cfg)
-    assert signal.getsignal(signal.SIGTERM) is before
+    def mine(signum, frame):
+        pass
+
+    original = signal.signal(signal.SIGTERM, mine)
+    try:
+        runner.serve(vault_cfg)
+        assert signal.getsignal(signal.SIGTERM) is mine
+    finally:
+        signal.signal(signal.SIGTERM, original)
 
 
 def test_a_port_that_is_taken_is_reported_not_swallowed(vault_cfg, stub_uvicorn):
