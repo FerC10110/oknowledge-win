@@ -72,7 +72,11 @@ def config_path(tmp_path, monkeypatch):
 
 
 @pytest.fixture
-def setup(tmp_path, config_path):
+def setup(tmp_path, config_path, monkeypatch):
+    # The reprocess route reaches the queue. If the origin check ever breaks,
+    # a cross-site test here would run the real pipeline: keep its state tree
+    # inside tmp_path so a regression cannot touch ~/.local/state either.
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
     vault = tmp_path / "vault"
     (vault / "oknowledge" / "links").mkdir(parents=True)
     cfg = Config(vault=vault)
@@ -80,6 +84,12 @@ def setup(tmp_path, config_path):
     write_note(cfg, note("b2", "Masa madre", "Cocina"), "es")
     rebuild_indexes(cfg, "es")
     return cfg, TestClient(create_app(cfg))
+
+
+def test_the_state_directory_is_under_tmp_path(setup, tmp_path):
+    from oknowledge.queue import state_dir
+
+    assert state_dir().is_relative_to(tmp_path)
 
 
 # --- editing one note -------------------------------------------------------
