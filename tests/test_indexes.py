@@ -154,12 +154,30 @@ def test_a_file_of_yours_named_like_a_category_is_never_overwritten(tmp_path):
     cfg = make_config(tmp_path)
     mine = cfg.root / "Redes.md"
     mine.write_text("# Redes\n\nMis apuntes.\n", encoding="utf-8")
+    before = mine.read_bytes()
     write_note(cfg, note("a1", "WireGuard", "Redes"), "es")
+    write_note(cfg, note("b2", "Masa madre", "Cocina"), "es")
 
+    result = rebuild_indexes(cfg)            # must not raise
+
+    assert mine.read_bytes() == before
+    assert result.blocked == [mine]
+    assert result.written == [index_path(cfg, "Cocina")]
+    assert "Masa madre" in index_path(cfg, "Cocina").read_text(encoding="utf-8")
+
+
+def test_write_index_itself_still_refuses_an_unmarked_file(tmp_path):
+    cfg = make_config(tmp_path)
+    (cfg.root / "Redes.md").write_text("# mine\n", encoding="utf-8")
     with pytest.raises(ProtectedNote):
-        rebuild_indexes(cfg)
+        write_index(cfg, "Redes", [note("a1", "WireGuard", "Redes")])
 
-    assert mine.read_text(encoding="utf-8") == "# Redes\n\nMis apuntes.\n"
+
+def test_a_clean_rebuild_blocks_nothing(tmp_path):
+    cfg = make_config(tmp_path)
+    write_note(cfg, note("a1", "WireGuard", "Redes"), "es")
+    result = rebuild_indexes(cfg)
+    assert result.blocked == [] and result.skipped == []
 
 
 def test_an_index_symlinked_outside_the_folder_is_not_written(tmp_path):

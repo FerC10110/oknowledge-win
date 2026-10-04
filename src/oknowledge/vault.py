@@ -255,10 +255,17 @@ _CLAIMS_MARKER = re.compile(rf"^{MARKER}:", re.MULTILINE)
 
 @dataclass(frozen=True)
 class RebuildResult:
-    """What a reindex did: the indexes it wrote and the files it could not read."""
+    """What a reindex did.
+
+    written: indexes we wrote.
+    skipped: marked notes of ours that could not be parsed (left untouched).
+    blocked: category indexes we refused to write because a file of the
+        user's, without the marker, is in the way (left untouched).
+    """
 
     written: list[Path] = field(default_factory=list)
     skipped: list[Path] = field(default_factory=list)
+    blocked: list[Path] = field(default_factory=list)
 
 
 def _claims_marker(path: Path) -> bool:
@@ -346,14 +353,23 @@ def rebuild_indexes(cfg: Config) -> RebuildResult:
     """Rewrite one index per category and delete the ones left without notes.
 
     Only reads notes; never rewrites them. Files of ours it could not read
-    (hand-broken) are left alone and listed in `skipped`.
+    (hand-broken) are left alone and listed in `skipped`; a category whose
+    index path is held by a user file is listed in `blocked`. Never raises
+    for either.
     """
     found, skipped = _scan(cfg)
     grouped: dict[str, list[Note]] = {}
     for _, note in found:
         grouped.setdefault(note.category, []).append(note)
 
-    written = [write_index(cfg, category, notes) for category, notes in sorted(grouped.items())]
+    written: list[Path] = []
+    blocked: list[Path] = []
+    for category, notes in sorted(grouped.items()):
+        try:
+            written.append(write_index(cfg, category, notes))
+        except ProtectedNote:
+            # One category in the way must not stop the others from updating.
+            blocked.append(index_path(cfg, category))
 
     keep = {p.name for p in written}
     if cfg.root.is_dir():
@@ -361,4 +377,4 @@ def rebuild_indexes(cfg: Config) -> RebuildResult:
             front = read_front(path)
             if front is not None and front.get("kind") == "index" and path.name not in keep:
                 path.unlink()
-    return RebuildResult(written=written, skipped=skipped)
+    return RebuildResult(written=written, skipped=skipped, blocked=blocked)
