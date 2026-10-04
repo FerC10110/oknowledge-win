@@ -25,3 +25,16 @@ class Note:
     published: str | None = None     # YYYY-MM-DD
     cover: str | None = None         # path relative to the note
     body: str | None = None          # the extracted text, if content == "full"
+
+
+@dataclass
+class Extracted:
+    """What was pulled out of a URL before the AI reads it."""
+
+    title: str
+    text: str
+    type: str
+    source: str
+    author: str | None = None
+    published: str | None = None     # YYYY-MM-DD
+    cover_url: str | None = None
