@@ -68,10 +68,11 @@ STRINGS = {
             "La podés recuperar desde Obsidian.",
         "Re-running the analysis. The note stays pending until it finishes.":
             "Reprocesando. La nota queda pendiente hasta que termine.",
-        'That name cannot be used as a category: no slashes, no dots '
-        'at the start, no control characters, and none of \\ / : * ? " < > |':
-            'Ese nombre no sirve como categoría: sin barras, sin puntos al '
-            'principio, sin caracteres de control y ninguno de \\ / : * ? " < > |',
+        'That name cannot be used as a category: at most 80 characters, no '
+        'dots at either end, no control characters, and none of \\ / : * ? " < > |':
+            'Ese nombre no sirve como categoría: 80 caracteres como máximo, sin '
+            'puntos al principio ni al final, sin caracteres de control y '
+            'ninguno de \\ / : * ? " < > |',
         "1 note moved.": "Se movió 1 nota.",
         "%1 notes moved.": "Se movieron %1 notas.",
         "1 note merged into a category that was already there.":
@@ -96,6 +97,32 @@ STRINGS = {
         "Check the folder and try again.":
             "Se movieron %1 notas; %2 no se pudieron escribir. "
             "Revisá la carpeta y probá de nuevo.",
+        "1 note moved, %2 could not be written. "
+        "Check the folder and try again.":
+            "Se movió 1 nota; %2 no se pudieron escribir. "
+            "Revisá la carpeta y probá de nuevo.",
+        "%1 notes moved, 1 could not be written. "
+        "Check the folder and try again.":
+            "Se movieron %1 notas; 1 no se pudo escribir. "
+            "Revisá la carpeta y probá de nuevo.",
+        "1 note moved, 1 could not be written. "
+        "Check the folder and try again.":
+            "Se movió 1 nota; 1 no se pudo escribir. "
+            "Revisá la carpeta y probá de nuevo.",
+        "Saved, but the indexes could not be rebuilt. Run "
+        "`oknowledge reindex` once the folder is writable again.":
+            "Guardado, pero no se pudieron rehacer los índices. Corré "
+            "`oknowledge reindex` cuando la carpeta vuelva a ser escribible.",
+        "The note was moved to the trash folder inside your vault, but the "
+        "indexes could not be rebuilt. Run `oknowledge reindex` once the "
+        "folder is writable again.":
+            "La nota se movió a la carpeta trash de tu vault, pero no se "
+            "pudieron rehacer los índices. Corré `oknowledge reindex` cuando "
+            "la carpeta vuelva a ser escribible.",
+        "The settings were saved, but the interface language is shared with "
+        "my other plugins and that file could not be written.":
+            "Los ajustes se guardaron, pero el idioma de la interfaz es "
+            "compartido con mis otros plugins y ese archivo no se pudo escribir.",
         "Renaming into a category that already exists merges the two.":
             "Si el nombre nuevo ya existe, las dos categorías se fusionan.",
         "Move this note to the trash folder?":

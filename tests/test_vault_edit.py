@@ -4,12 +4,16 @@ The rule the whole project is built on is that a link is never lost, so these
 tests spend most of their effort on what happens when a write goes wrong.
 """
 
+import contextlib
+
 import pytest
 
 from oknowledge.config import Config
 from oknowledge.model import Note
+from oknowledge.queue import Locked
 from oknowledge.vault import (
     BadCategory,
+    IndexesStale,
     all_notes,
     categories,
     clean_category,
@@ -274,3 +278,146 @@ def test_renaming_a_category_nobody_uses_moves_nothing(tmp_path):
     result = rename_category(cfg, "Nada", "Otra", "es")
     assert result.moved == 0 and result.failed == []
     assert not index_path(cfg, "Otra").exists()
+
+
+# --- a change that landed, with indexes that did not (F4) -------------------
+
+def break_reindex(monkeypatch):
+    def boom(cfg, language):
+        raise OSError(28, "No space left on device")
+    monkeypatch.setattr("oknowledge.vault.rebuild_indexes", boom)
+
+
+def test_an_edit_whose_indexes_fail_says_the_edit_landed(tmp_path, monkeypatch):
+    """The rebuild runs after the note is already written. Reporting that as a
+    failed write would tell the user nothing happened when something did."""
+    cfg = make(tmp_path)
+    path = write_note(cfg, note("a1", "WireGuard", "Redes"), "es")
+    break_reindex(monkeypatch)
+
+    with pytest.raises(IndexesStale) as raised:
+        update_note(cfg, "a1", "es", category="Seguridad")
+
+    assert raised.value.done == path
+    assert read_note(path).category == "Seguridad"
+
+
+def test_a_delete_whose_indexes_fail_says_the_note_moved(tmp_path, monkeypatch):
+    cfg = make(tmp_path)
+    path = write_note(cfg, note("a1", "WireGuard", "Redes"), "es")
+    break_reindex(monkeypatch)
+
+    with pytest.raises(IndexesStale) as raised:
+        delete_note(cfg, "a1", "es")
+
+    assert raised.value.done == trash_dir(cfg) / path.name
+    assert not path.exists() and raised.value.done.exists()
+
+
+def test_a_rename_whose_indexes_fail_still_reports_what_moved(tmp_path, monkeypatch):
+    cfg = make(tmp_path)
+    write_note(cfg, note("a1", "WireGuard", "Networking"), "es")
+    write_note(cfg, note("b2", "SSH", "Networking"), "es")
+    break_reindex(monkeypatch)
+
+    with pytest.raises(IndexesStale) as raised:
+        rename_category(cfg, "Networking", "Redes", "es")
+
+    assert raised.value.done.moved == 2
+    assert {n.category for n in all_notes(cfg)} == {"Redes"}
+
+
+def test_a_failed_write_is_not_reported_as_stale_indexes(tmp_path, monkeypatch):
+    """The two have to stay distinguishable: this one really wrote nothing."""
+    cfg = make(tmp_path)
+    write_note(cfg, note("a1", "WireGuard", "Redes"), "es")
+    monkeypatch.setattr("oknowledge.vault.atomic_write",
+                        lambda *a, **k: (_ for _ in ()).throw(OSError(13, "denied")))
+    with pytest.raises(OSError) as raised:
+        update_note(cfg, "a1", "es", category="Seguridad")
+    assert not isinstance(raised.value, IndexesStale)
+
+
+# --- renaming under each note's lock (F5) -----------------------------------
+
+def test_a_rename_re_reads_each_note_under_its_lock(tmp_path):
+    """The scan happens before the locks, so what it read can already be old.
+    Writing the scanned copy back would undo a re-analysis that finished in
+    between -- the whole point of taking the lock."""
+    cfg = make(tmp_path)
+    path = write_note(cfg, note("a1", "WireGuard", "Networking"), "es")
+
+    @contextlib.contextmanager
+    def lock(link_id):
+        # Stand in for a re-analysis that finished while the scan was in flight.
+        fresh = read_note(path)
+        fresh.summary = "Resumen nuevo."
+        write_note(cfg, fresh, "es", path=path)
+        yield
+
+    result = rename_category(cfg, "Networking", "Redes", "es", lock=lock)
+
+    after = read_note(path)
+    assert result.moved == 1
+    assert after.category == "Redes"
+    assert after.summary == "Resumen nuevo."
+
+
+def test_a_rename_leaves_a_note_that_left_the_category_under_it(tmp_path):
+    cfg = make(tmp_path)
+    path = write_note(cfg, note("a1", "WireGuard", "Networking"), "es")
+
+    @contextlib.contextmanager
+    def lock(link_id):
+        fresh = read_note(path)
+        fresh.category = "Otra"
+        write_note(cfg, fresh, "es", path=path)
+        yield
+
+    result = rename_category(cfg, "Networking", "Redes", "es", lock=lock)
+
+    assert result.moved == 0 and result.failed == []
+    assert read_note(path).category == "Otra"
+
+
+def test_a_rename_reports_a_note_it_could_not_lock_and_renames_the_rest(tmp_path):
+    cfg = make(tmp_path)
+    write_note(cfg, note("a1", "WireGuard", "Networking"), "es")
+    write_note(cfg, note("b2", "SSH", "Networking"), "es")
+
+    @contextlib.contextmanager
+    def lock(link_id):
+        if link_id == "a1":
+            raise Locked("a1 is already being processed")
+        yield
+
+    result = rename_category(cfg, "Networking", "Redes", "es", lock=lock)
+
+    assert result.moved == 1
+    assert len(result.failed) == 1 and "analysis" in result.failed[0][1]
+    assert {n.category for n in all_notes(cfg)} == {"Networking", "Redes"}
+
+
+def test_a_rename_locks_each_note_by_its_own_id(tmp_path):
+    cfg = make(tmp_path)
+    write_note(cfg, note("a1", "WireGuard", "Networking"), "es")
+    write_note(cfg, note("b2", "SSH", "Networking"), "es")
+    write_note(cfg, note("c3", "Pan", "Cocina"), "es")
+    asked = []
+
+    @contextlib.contextmanager
+    def lock(link_id):
+        asked.append(link_id)
+        yield
+
+    rename_category(cfg, "Networking", "Redes", "es", lock=lock)
+
+    assert sorted(asked) == ["a1", "b2"]      # only the notes it means to touch
+
+
+def test_renaming_without_a_lock_is_still_allowed(tmp_path):
+    """The vault does not reach for the queue on its own: the caller that
+    knows about re-analysis passes the lock in."""
+    cfg = make(tmp_path)
+    write_note(cfg, note("a1", "WireGuard", "Networking"), "es")
+    assert rename_category(cfg, "Networking", "Redes", "es").moved == 1

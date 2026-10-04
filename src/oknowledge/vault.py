@@ -13,6 +13,7 @@ Three rules, and they all live here for a reason: the vault belongs to the user.
 
 from __future__ import annotations
 
+import contextlib
 import os
 import re
 import secrets
@@ -26,6 +27,7 @@ from .ai.base import MAX_CATEGORY_LENGTH, normalize_tags
 from .atomic import atomic_write
 from .config import Config
 from .model import Note
+from .queue import Locked
 
 MARKER = "oknowledge"
 MARKER_VERSION = 1
@@ -48,6 +50,25 @@ class ProtectedNote(Exception):
 
 class BadCategory(ValueError):
     """A category name we refuse to store, because it would not stay a name."""
+
+
+class IndexesStale(Exception):
+    """The change is on disk; rebuilding the indexes after it failed.
+
+    Its own exception because the two need opposite words to the user. A
+    failed write means nothing happened and the note is untouched. This means
+    the note is already saved, or already in trash/, and only the indexes are
+    behind -- which `oknowledge reindex` fixes. Telling the user nothing
+    happened when their note has moved is worse than the error itself.
+
+    `done` is whatever the function would have returned had the rebuild
+    worked, so a caller can report what really did happen.
+    """
+
+    def __init__(self, done, error: BaseException):
+        super().__init__(f"the change was saved, but the indexes are stale: {error}")
+        self.done = done
+        self.error = error
 
 
 def _safe(text: str) -> str:
@@ -462,6 +483,15 @@ def _checked_category(name) -> str:
     return clean
 
 
+def _finish(cfg: Config, language: str, done):
+    """Rebuild the indexes after a change that has already landed on disk."""
+    try:
+        rebuild_indexes(cfg, language)
+    except OSError as error:
+        raise IndexesStale(done, error) from error
+    return done
+
+
 def update_note(cfg: Config, link_id: str, language: str,
                 category: str | None = None, tags=None) -> Path | None:
     """Change one of our notes' classification and rebuild the indexes.
@@ -480,8 +510,7 @@ def update_note(cfg: Config, link_id: str, language: str,
     # In place: the name is a function of saved + title, which this never
     # changes, and an unlink here would be a note destroyed by a failed write.
     written = write_note(cfg, note, language, path=path)
-    rebuild_indexes(cfg, language)
-    return written
+    return _finish(cfg, language, written)
 
 
 def trash_dir(cfg: Config) -> Path:
@@ -527,8 +556,7 @@ def delete_note(cfg: Config, link_id: str, language: str) -> Path | None:
     except OSError:
         target.unlink(missing_ok=True)           # no empty placeholder left behind
         raise
-    rebuild_indexes(cfg, language)
-    return target
+    return _finish(cfg, language, target)
 
 
 @dataclass(frozen=True)
@@ -546,23 +574,55 @@ class RenameResult:
     failed: list[tuple[Path, str]] = field(default_factory=list)
 
 
-def rename_category(cfg: Config, old: str, new: str, language: str) -> RenameResult:
+BUSY = "an analysis is running on this link"
+
+
+@contextlib.contextmanager
+def _unlocked(link_id: str):
+    yield
+
+
+def rename_category(cfg: Config, old: str, new: str, language: str,
+                    lock=None) -> RenameResult:
     """Rename a category; if `new` already exists, the two merge.
 
     Only touches notes of ours: _scan() already discards everything else.
+
+    `lock(link_id)` is a context manager held while one note is rewritten, and
+    the reason the note is read again inside it. This is the most destructive
+    operation in the project -- it writes many notes at once -- and the scan it
+    walks is already old by the time the first write happens, so a re-analysis
+    that finished in between would be silently overwritten by the scanned
+    copy. Under the lock the note is re-read, which is what makes the rewrite
+    a change to the current note and not to a remembered one. A note that
+    cannot be locked costs its own rename and is reported; it never stops the
+    others.
+
+    The vault does not reach for the queue itself: the caller that knows about
+    re-analysis (the web) passes the lock in, and without it this behaves as
+    it always did.
     """
     target = _checked_category(new)
+    hold = lock or _unlocked
     moved = 0
     failed: list[tuple[Path, str]] = []
-    for path, note in _scan(cfg)[0]:
-        if note.category != old:
+    for path, scanned in _scan(cfg)[0]:
+        if scanned.category != old:
             continue
-        note.category = target
         try:
-            write_note(cfg, note, language, path=path)
+            with hold(scanned.id):
+                note = read_note(path)
+                if note is None or note.category != old:
+                    # It changed under us (a re-analysis, a hand edit). Not
+                    # ours to move any more, and not a failure either.
+                    continue
+                note.category = target
+                write_note(cfg, note, language, path=path)
+        except Locked:
+            failed.append((path, BUSY))
+            continue
         except (ProtectedNote, OSError) as error:
             failed.append((path, str(error)))
             continue
         moved += 1
-    rebuild_indexes(cfg, language)
-    return RenameResult(moved=moved, failed=failed)
+    return _finish(cfg, language, RenameResult(moved=moved, failed=failed))

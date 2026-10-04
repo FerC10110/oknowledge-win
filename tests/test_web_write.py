@@ -690,3 +690,226 @@ def test_the_lock_is_still_held_while_the_note_is_written(setup, monkeypatch, pa
 
     assert held, "the vault never got as far as rebuilding the indexes"
     assert all(held), "the link's queue lock was released before the work was done"
+
+
+# --- the refusal states the rule it enforces (M1) ---------------------------
+
+def test_every_notice_has_a_spanish_translation():
+    from oknowledge.i18n import STRINGS
+    from oknowledge.web.app import NOTICES
+
+    missing = [key for key, text in NOTICES.items() if text not in STRINGS["es"]]
+    assert missing == []
+
+
+@pytest.mark.parametrize("language", ["en", "es"])
+def test_the_refusal_states_the_rule_it_enforces(language):
+    """The field arrives pre-filled with the value already saved, so a user
+    whose AI-written category is "Misc." will click Save and be told why. The
+    reason has to be the real one."""
+    from oknowledge.ai.base import MAX_CATEGORY_LENGTH
+    from oknowledge.i18n import translator
+    from oknowledge.web.app import NOTICES
+
+    message = translator(language)(NOTICES["bad-category"])
+    if language == "es":
+        assert message != NOTICES["bad-category"], "the Spanish is missing"
+    for char in '/\\:*?"<>|':
+        assert char in message, f"the refusal does not name {char!r}"
+    assert str(MAX_CATEGORY_LENGTH) in message, "the length limit is not stated"
+    assert "end" in message or "final" in message, "trailing dots are not stated"
+
+
+def test_a_category_with_a_trailing_dot_is_refused_by_the_web(setup):
+    cfg, client = setup
+    body = client.post("/item/a1/category", data={"category": "Misc."}).text
+    assert "cannot be used" in body
+    assert find_note(cfg, "a1")[1].category == "Networking"
+
+
+# --- a partial rename counts in words that agree (M2) -----------------------
+
+def flaky_writes(monkeypatch, failing):
+    """Make write_note fail for the notes whose id is in `failing`."""
+    from oknowledge import vault
+
+    real = vault.write_note
+
+    def write(cfg, note, language, path=None):
+        if note.id in failing:
+            raise OSError(13, "Permission denied")
+        return real(cfg, note, language, path=path)
+
+    monkeypatch.setattr(vault, "write_note", write)
+
+
+@pytest.mark.parametrize("moved,failed,fragment", [
+    (1, 1, "1 note moved, 1 could not be written"),
+    (1, 2, "1 note moved, 2 could not be written"),
+    (2, 1, "2 notes moved, 1 could not be written"),
+    (2, 2, "2 notes moved, 2 could not be written"),
+])
+def test_a_partial_rename_counts_in_words_that_agree(setup, monkeypatch, moved,
+                                                     failed, fragment):
+    cfg, client = setup
+    ids = [f"n{i}" for i in range(moved + failed)]
+    for name in ids:
+        write_note(cfg, note(name, name.upper(), "Mixta"), "es")
+    flaky_writes(monkeypatch, set(ids[moved:]))
+
+    body = client.post("/categories/rename",
+                       data={"old": "Mixta", "new": "Redes"}).text
+
+    assert fragment in body
+    assert "1 notes" not in body
+
+
+def test_a_partial_rename_agrees_in_spanish(setup, isolated_ui_language,
+                                            monkeypatch):
+    cfg, client = setup
+    isolated_ui_language.write_text(json.dumps({"language": "es"}), encoding="utf-8")
+    write_note(cfg, note("n0", "Uno", "Mixta"), "es")
+    write_note(cfg, note("n1", "Dos", "Mixta"), "es")
+    flaky_writes(monkeypatch, {"n1"})
+
+    body = client.post("/categories/rename",
+                       data={"old": "Mixta", "new": "Redes"}).text
+
+    assert "Se movió 1 nota" in body
+    assert "1 no se pudo escribir" in body
+
+
+# --- the reprocess confirmation is the reprocess button's (F2) --------------
+
+def reprocess_form(body):
+    start = body.index('action="/item/a1/reprocess"')
+    return body[start:body.index("</form>", start)]
+
+
+def test_reprocess_asks_on_its_own_button(setup):
+    """Sliced to its own form: the delete form below it also confirms, and a
+    slice that ran on into it would pass with this button unguarded."""
+    _, client = setup
+    form = reprocess_form(client.get("/item/a1").text)
+    assert "data-ask=" in form
+    assert "replaced" in form
+    assert "confirm(this.form.dataset.ask)" in form
+
+
+# --- a half-saved settings write says which half (F3) -----------------------
+
+def test_a_config_saved_without_the_shared_language_says_so(setup, config_path,
+                                                            monkeypatch):
+    _, client = setup
+
+    def boom(language, path=None):
+        raise PermissionError(13, "~/.config/omarchy is read-only")
+
+    monkeypatch.setattr("oknowledge.web.app.set_ui_language", boom)
+    body = client.post("/settings", data={"chain": ["ollama"], "ui_language": "es"}).text
+
+    saved = tomllib.loads(config_path.read_text(encoding="utf-8"))
+    assert saved["ai"]["chain"] == ["ollama"]          # this half did land
+    assert "interface language" in body
+    assert "could not be saved" not in body           # ... so do not say that
+
+
+# --- a change that landed with indexes that did not (F4) --------------------
+
+def break_reindex(monkeypatch):
+    from oknowledge import vault
+
+    def boom(cfg, language):
+        raise OSError(28, "No space left on device")
+
+    monkeypatch.setattr(vault, "rebuild_indexes", boom)
+
+
+def test_an_edit_whose_indexes_fail_does_not_claim_nothing_was_written(
+        setup, monkeypatch):
+    cfg, client = setup
+    break_reindex(monkeypatch)
+
+    body = client.post("/item/a1/category", data={"category": "Redes"}).text
+
+    assert find_note(cfg, "a1")[1].category == "Redes"      # it did land
+    assert "indexes" in body
+    assert "could not be written" not in body
+
+
+def test_a_delete_whose_indexes_fail_lands_somewhere_that_exists(setup, monkeypatch):
+    cfg, client = setup
+    break_reindex(monkeypatch)
+
+    response = client.post("/item/a1/delete", follow_redirects=False)
+
+    assert response.status_code == 303
+    assert response.headers["location"].startswith("/?")
+    landed = client.get(response.headers["location"])
+    assert landed.status_code == 200
+    assert "trash" in landed.text.lower() and "indexes" in landed.text
+    assert find_note(cfg, "a1") is None
+    assert list(trash_dir(cfg).glob("*.md"))
+
+
+def test_a_rename_whose_indexes_fail_does_not_claim_nothing_was_written(
+        setup, monkeypatch):
+    cfg, client = setup
+    break_reindex(monkeypatch)
+
+    body = client.post("/categories/rename",
+                       data={"old": "Networking", "new": "Redes"}).text
+
+    assert find_note(cfg, "a1")[1].category == "Redes"
+    assert "indexes" in body
+    assert "could not be written" not in body
+
+
+# --- the rename route holds each note's lock (F5) ---------------------------
+
+def test_a_rename_from_the_web_skips_a_note_being_analysed(setup):
+    from oknowledge.queue import Queue
+
+    cfg, client = setup
+    write_note(cfg, note("c3", "SSH", "Networking"), "es")
+    with Queue().lock("a1"):
+        body = client.post("/categories/rename",
+                           data={"old": "Networking", "new": "Redes"}).text
+
+    assert find_note(cfg, "a1")[1].category == "Networking"   # left alone
+    assert find_note(cfg, "c3")[1].category == "Redes"
+    assert "1 note moved, 1 could not be written" in body
+
+
+# --- an unknown link leaves nothing behind (F6) -----------------------------
+
+@pytest.mark.parametrize("path,data", [
+    ("/item/zzz/category", {"category": "Redes"}),
+    ("/item/zzz/tags", {"tags": "vpn"}),
+    ("/item/zzz/delete", {}),
+])
+def test_an_unknown_link_leaves_no_lock_behind(setup, tmp_path, path, data):
+    """A lock file is never deleted, so creating one for a link that does not
+    exist leaves litter in the state tree for every typo and stale page."""
+    _, client = setup
+    assert client.post(path, data=data).status_code == 404
+    locks = tmp_path / "state" / "oknowledge" / "locks"
+    assert sorted(p.name for p in locks.glob("*")) == [] if locks.is_dir() else True
+
+
+# --- the coverage test watches every unsafe method (L3) ---------------------
+
+def test_the_cross_site_test_covers_every_unsafe_method(setup):
+    import re
+
+    from oknowledge.web.app import SAFE_METHODS
+
+    _, client = setup
+    unsafe = {(route.path, method) for route in client.app.routes
+              for method in getattr(route, "methods", set()) - SAFE_METHODS}
+    assert unsafe, "no unsafe routes found: this test is not looking at the app"
+    tested = [path for path, _ in WRITE_ROUTES]
+    for route, method in sorted(unsafe):
+        pattern = re.compile("^" + re.sub(r"\{[^}]+\}", "[^/]+", route) + "$")
+        assert any(pattern.match(path) for path in tested), \
+            f"no cross-site test for {method} {route}"

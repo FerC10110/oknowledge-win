@@ -13,6 +13,7 @@ import dataclasses
 import logging
 import re
 from importlib.resources import files
+from typing import NamedTuple
 from urllib.parse import quote, urlencode
 
 from fastapi import BackgroundTasks, FastAPI, Form, HTTPException, Request
@@ -31,8 +32,8 @@ from ..i18n import LANGUAGES, set_ui_language, translator, ui_language
 from ..pipeline import add as add_link
 from ..queue import Locked, Queue
 from ..vault import (
-    BadCategory, ProtectedNote, clean_category, delete_note, rename_category,
-    update_note,
+    BadCategory, IndexesStale, ProtectedNote, clean_category, delete_note,
+    rename_category, update_note,
 )
 from .index import PER_PAGE, Library, read_full, terms
 
@@ -50,22 +51,49 @@ NOTICES = {
     "trashed": "The note was moved to the trash folder inside your vault. "
                "You can restore it from Obsidian.",
     "queued": "Re-running the analysis. The note stays pending until it finishes.",
-    # The characters are named because the field arrives pre-filled with the
-    # value already saved: a user who clicks Save on a category the AI wrote
-    # has to be able to see which character is the problem.
-    "bad-category": 'That name cannot be used as a category: no slashes, no dots '
-                    'at the start, no control characters, and none of \\ / : * ? " < > |',
+    # The rule is spelled out, characters and all, because the field arrives
+    # pre-filled with the value already saved: a user whose AI-written category
+    # is "Misc." will click Save on it and has to be told the real reason.
+    # It has to say what vault.clean_category() enforces, no less.
+    "bad-category": 'That name cannot be used as a category: at most 80 '
+                    'characters, no dots at either end, no control characters, '
+                    'and none of \\ / : * ? " < > |',
     "renamed-one": "1 note moved.",
     "renamed": "%1 notes moved.",
     "merged-one": "1 note merged into a category that was already there.",
     "merged": "%1 notes merged into a category that was already there.",
+    # Two counts, so two numbers to agree with, independently of each other.
     "renamed-partial": "%1 notes moved, %2 could not be written. "
                        "Check the folder and try again.",
+    "renamed-partial-one-moved": "1 note moved, %2 could not be written. "
+                                 "Check the folder and try again.",
+    "renamed-partial-one-failed": "%1 notes moved, 1 could not be written. "
+                                  "Check the folder and try again.",
+    "renamed-partial-one-each": "1 note moved, 1 could not be written. "
+                                "Check the folder and try again.",
     "busy": "An analysis is running on this link. Try again when it finishes.",
     "write-failed": "The vault could not be written. Check that the folder exists "
                     "and that you can write to it.",
+    # Not the same thing as a failed write, and the difference is the whole
+    # point: the change is on disk, only the indexes are behind.
+    "indexes-stale": "Saved, but the indexes could not be rebuilt. Run "
+                     "`oknowledge reindex` once the folder is writable again.",
+    "trashed-indexes-stale": "The note was moved to the trash folder inside your "
+                             "vault, but the indexes could not be rebuilt. Run "
+                             "`oknowledge reindex` once the folder is writable again.",
     "settings-failed": "The settings could not be saved. Check that the config "
                        "folder exists and that you can write to it.",
+    "language-not-saved": "The settings were saved, but the interface language is "
+                          "shared with my other plugins and that file could not be "
+                          "written.",
+}
+
+# Which `renamed-partial` to use: (one note moved, one note failed).
+PARTIAL = {
+    (False, False): "renamed-partial",
+    (True, False): "renamed-partial-one-moved",
+    (False, True): "renamed-partial-one-failed",
+    (True, True): "renamed-partial-one-each",
 }
 
 # Writing is refused unless the browser says the request came from this app.
@@ -79,6 +107,15 @@ SAFE_SITES = frozenset({"same-origin", "none"})
 # Not a notice: what edit() answers when the link is not a note of ours, which
 # the route turns into a 404.
 MISSING = "missing"
+
+
+class Edited(NamedTuple):
+    """What edit() answers: the notice to show, and whether the change really
+    landed on disk -- which is what decides where a delete sends the user, and
+    must never be guessed from the notice."""
+
+    notice: str
+    landed: bool
 
 # Cover images are served only as one of these: a hand-edited cover pointing at
 # an .svg or .html inside attachments/ would otherwise be a same-origin document.
@@ -305,36 +342,48 @@ def create_app(cfg: Config) -> FastAPI:
     # result back from the vault, and never a write of their own -- the three
     # vault functions are the only things that touch a file.
 
-    def edit(link_id: str, change, done: str) -> str:
-        """Apply one change to one note, and say which notice to show.
+    def edit(link_id: str, change, done: str, stale: str) -> Edited:
+        """Apply one change to one note, and say what to tell the user.
 
         `change(cfg, language)` is one of the vault's three editing functions,
-        already bound to its own arguments. Two things are the same for all of
-        them, which is why they share this:
+        already bound to its own arguments. Three things are the same for all
+        of them, which is why they share this:
 
         * `language` is the CONTENT language (`[ai] language`), never the
           interface language. It picks the note's headings and the index
           boilerplate, so passing the UI language here would re-render a
           Spanish note with English headings on every edit.
         * the change happens under the link's queue lock, so a background
-          re-analysis cannot land on top of it.
+          re-analysis cannot land on top of it -- and the lock is only taken
+          for a link that exists, because a lock file is never deleted.
+        * a failed write and a failed index rebuild are different answers.
+          The first means nothing happened. The second means the change is on
+          disk and only the indexes are behind.
         """
         live = current["cfg"]
+        library.refresh()
+        if library.by_id(link_id) is None:
+            return Edited(MISSING, False)
         try:
             with link_lock(link_id):
                 if change(live, live.language) is None:
-                    return MISSING
+                    return Edited(MISSING, False)
         except Locked:
-            return "busy"
+            return Edited("busy", False)
         except BadCategory:
-            return "bad-category"
+            return Edited("bad-category", False)
+        except IndexesStale as error:
+            log.warning("the indexes could not be rebuilt: %s", error)
+            library.refresh()
+            return Edited(stale, True)
         except (OSError, ProtectedNote) as error:
-            # A read-only vault, a trash/ that is a file, a full disk. Nothing
-            # was written -- every vault write is atomic -- so say so and stop.
+            # A read-only vault, a trash/ that is a file, a full disk. Every
+            # vault write is atomic and the rebuild has its own answer above,
+            # so reaching here really does mean nothing was written.
             log.warning("the vault could not be written: %s", error)
-            return "write-failed"
+            return Edited("write-failed", False)
         library.refresh()
-        return done
+        return Edited(done, True)
 
     @app.post("/item/{link_id}/category")
     def move(link_id: str, category: str = Form("")):
@@ -342,33 +391,34 @@ def create_app(cfg: Config) -> FastAPI:
             # Before the lock, so a refused name creates nothing anywhere --
             # not even the lock file. update_note() checks it again anyway.
             return see_other(item_url(link_id), notice="bad-category")
-        notice = edit(link_id, lambda cfg, language: update_note(
-            cfg, link_id, language, category=category), "saved")
-        if notice == MISSING:
+        result = edit(link_id, lambda cfg, language: update_note(
+            cfg, link_id, language, category=category), "saved", "indexes-stale")
+        if result.notice == MISSING:
             raise HTTPException(status_code=404, detail="no such link")
-        return see_other(item_url(link_id), notice=notice)
+        return see_other(item_url(link_id), notice=result.notice)
 
     @app.post("/item/{link_id}/tags")
     def retag(link_id: str, tags: str = Form("")):
         wanted = [word for word in tags.replace(",", " ").split() if word]
-        notice = edit(link_id, lambda cfg, language: update_note(
-            cfg, link_id, language, tags=wanted), "saved")
-        if notice == MISSING:
+        result = edit(link_id, lambda cfg, language: update_note(
+            cfg, link_id, language, tags=wanted), "saved", "indexes-stale")
+        if result.notice == MISSING:
             raise HTTPException(status_code=404, detail="no such link")
-        return see_other(item_url(link_id), notice=notice)
+        return see_other(item_url(link_id), notice=result.notice)
 
     @app.post("/item/{link_id}/delete")
     def remove(link_id: str):
         # Moves the file to <vault>/<folder>/trash/. The notice says so,
         # because "deleted" would be a lie and a worrying one.
-        notice = edit(link_id, lambda cfg, language: delete_note(
-            cfg, link_id, language), "trashed")
-        if notice == MISSING:
+        result = edit(link_id, lambda cfg, language: delete_note(
+            cfg, link_id, language), "trashed", "trashed-indexes-stale")
+        if result.notice == MISSING:
             raise HTTPException(status_code=404, detail="no such link")
-        # Only a note that really went to trash/ sends the user back to the
-        # library; a refused delete leaves them on the note they still have.
-        where = "/" if notice == "trashed" else item_url(link_id)
-        return see_other(where, notice=notice)
+        # A note that really went to trash/ sends the user back to the library,
+        # whatever the indexes did: the item page would 404 on them now. A
+        # refused delete leaves them on the note they still have.
+        where = "/" if result.landed else item_url(link_id)
+        return see_other(where, notice=result.notice)
 
     @app.post("/item/{link_id}/reprocess")
     def reprocess(background: BackgroundTasks, link_id: str, engine: str = Form("")):
@@ -395,16 +445,26 @@ def create_app(cfg: Config) -> FastAPI:
         # Asked before the rename, because afterwards the two are one and
         # there is no way to tell that a merge is what happened.
         merging = target is not None and target != old and target in library.categories()
+        stale = False
         try:
-            result = rename_category(live, old, new, live.language)
+            # Each note is rewritten under its own lock, so a re-analysis that
+            # finishes mid-rename is skipped and reported, not overwritten.
+            result = rename_category(live, old, new, live.language, lock=link_lock)
         except BadCategory:
             return see_other("/categories", notice="bad-category")
+        except IndexesStale as error:
+            log.warning("the indexes could not be rebuilt: %s", error)
+            result, stale = error.done, True
         except (OSError, ProtectedNote) as error:
             log.warning("the vault could not be written: %s", error)
             return see_other("/categories", notice="write-failed")
         library.refresh()
-        if result.failed:
-            code = "renamed-partial"
+        if stale:
+            # The counts lose their notice here. What the user has to know is
+            # that the notes moved and the indexes did not follow.
+            code = "indexes-stale"
+        elif result.failed:
+            code = PARTIAL[(result.moved == 1, len(result.failed) == 1)]
         elif merging and result.moved:
             code = "merged-one" if result.moved == 1 else "merged"
         else:
@@ -460,8 +520,10 @@ def create_app(cfg: Config) -> FastAPI:
             if interface in LANGUAGES:
                 set_ui_language(interface)
         except OSError as error:
+            # The config itself did land. Saying it did not would be a lie
+            # about the half that worked.
             log.warning("the shared language file could not be written: %s", error)
-            return see_other("/settings", notice="settings-failed")
+            return see_other("/settings", notice="language-not-saved")
         return see_other("/settings", notice="saved")
 
     app.state.library = library
