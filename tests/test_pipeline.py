@@ -721,8 +721,11 @@ def test_the_duplicate_scan_happens_inside_the_lock(cfg, q, monkeypatch):
 
 
 def test_the_rename_never_leaves_the_vault(cfg, q, tmp_path, monkeypatch):
-    # os.replace follows a symlink at the destination, and a dangling one is
-    # invisible to exists(): the note would be moved out of the vault.
+    # The ideal path is resolved before anything moves onto it, so a dangling
+    # symlink at that name resolves to its target and the note is written
+    # there, outside the vault. (rename(2) does not follow a destination
+    # symlink: it would replace the link itself, destroying a file of the
+    # user's instead. Resolving is what avoids that and what causes this.)
     extraction(monkeypatch, Unreadable("503"))
     first = add(cfg, "https://arstechnica.com/vpn", queue=q)
 
@@ -881,3 +884,78 @@ def test_a_symlink_at_the_ideal_name_is_treated_as_taken(cfg, q, monkeypatch):
     assert not ghost.exists()                           # nothing landed there
     assert trap.is_symlink()                            # the user's link intact
     assert any(trap.name in warning for warning in result.warnings)
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="chmod 0o500 does not bite as root")
+def test_a_status_that_cannot_be_recorded_still_names_and_indexes_the_note(
+        cfg, tmp_path, monkeypatch):
+    # With an entry already on disk, set_status() reaches atomic_write and a
+    # read-only queue tree raises from there -- after the note is written, and
+    # before the rename and the reindex. This is the interactive path: retry()
+    # absorbs it through _failed, a direct add() does not.
+    extraction(monkeypatch, Unreadable("503"))
+    q = Queue(tmp_path / "state")
+    first = add(cfg, "https://arstechnica.com/vpn", queue=q)
+    assert q.get(first.id).status == "partial"
+
+    extraction(monkeypatch, PAGE)
+    no_cover(monkeypatch)
+    cfg.engines["fake"]["replies"] = [ANSWER]
+    q.dir.chmod(0o500)
+    try:
+        result = add(cfg, "https://arstechnica.com/vpn", reprocess=True, queue=q)
+    finally:
+        q.dir.chmod(0o700)
+
+    assert result.status == "ok"
+    assert any("status" in warning for warning in result.warnings)
+    # The note is correctly named and listed, which is the point of carrying on.
+    assert result.path.name == f"{TODAY}-wireguard-vs-openvpn.md"
+    assert read_note(result.path).title == "WireGuard vs OpenVPN"
+    assert f"[[{result.path.stem}|" in index_path(cfg, "Redes").read_text(encoding="utf-8")
+    assert q.get(first.id).status == "partial"          # the write really failed
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="chmod 0o500 does not bite as root")
+def test_a_protected_note_survives_a_queue_it_cannot_write(cfg, tmp_path, monkeypatch):
+    extraction(monkeypatch, PAGE)
+    no_cover(monkeypatch)
+    q = Queue(tmp_path / "state")
+    first = add(cfg, "https://arstechnica.com/vpn", queue=q)
+    good = read_note(first.path)
+
+    cfg.engines["fake"]["replies"] = []
+    q.dir.chmod(0o500)
+    try:
+        result = add(cfg, "https://arstechnica.com/vpn", reprocess=True, queue=q)
+    finally:
+        q.dir.chmod(0o700)
+
+    assert result.status == "failed"                    # a Result, not a traceback
+    assert read_note(first.path) == good
+    assert any("status" in warning for warning in result.warnings)
+    assert any("left as it is" in warning for warning in result.warnings)
+
+
+def test_the_rename_can_never_write_outside_the_links_folder(cfg, q, monkeypatch):
+    # note_stem() sanitizes to [A-Za-z0-9-], which is what makes the containment
+    # check unreachable today. The check is there so that a future change to
+    # that character class cannot silently become a write outside the vault, so
+    # the invariant is pinned rather than assumed.
+    import oknowledge.pipeline as pipeline
+
+    extraction(monkeypatch, PAGE)
+    no_cover(monkeypatch)
+    first = add(cfg, "https://arstechnica.com/vpn", queue=q)
+
+    for stem in ("../escape", "../../../../escape"):
+        escapee = (cfg.links_dir / f"{stem}.md").resolve()
+        monkeypatch.setattr(pipeline, "note_stem", lambda note, s=stem: s)
+
+        result = add(cfg, "https://arstechnica.com/vpn", reprocess=True, queue=q)
+
+        assert result.status == "ok"
+        assert result.path == first.path                # the name is kept
+        assert not escapee.exists()                     # nothing was written there
+        assert any("escape.md" in warning for warning in result.warnings)
+    assert len(all_notes(cfg)) == 1

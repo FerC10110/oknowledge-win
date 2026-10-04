@@ -67,6 +67,8 @@ NO_LOCK = ("the queue could not be locked, so the link was saved without one "
            "({reason})")
 NO_ENTRY = ("the queue entry could not be written ({reason}), so `oknowledge "
             "retry` will not see this link")
+NO_STATUS = ("the note was saved, but its queue status could not be recorded "
+             "({reason})")
 KEPT_NOTE = ("the note already saved was left as it is: a failed re-analysis "
              "never replaces a finished note")
 COVER_TIMEOUT = 15.0
@@ -330,9 +332,9 @@ def _give_up(cfg: Config, q: Queue, link: str, url: str, mode: str,
         # the user a row they can never clear. It has to be set explicitly:
         # add() enqueued inside the lock, which reset the entry to pending, and
         # pending would feed it to orphaned() -- worse churn still.
-        q.set_status(link, "ok", error=reason, title=kept.title)
+        trouble = _record(q, link, "ok", reason, kept.title)
         return Result(id=link, url=url, path=target, status="failed", error=reason,
-                      warnings=[KEPT_NOTE])
+                      warnings=[KEPT_NOTE, *trouble])
     note = _partial_note(cfg, link, url, mode, page)
     return _save(cfg, q, link, url, note, "partial", reason, None, target)
 
@@ -345,10 +347,11 @@ def _save(cfg: Config, q: Queue, link: str, url: str, note: Note, status: str,
     derived data, so reindexing before the status would let a full disk leave a
     finished note on disk with its entry still saying pending. The rename comes
     before the reindex so the wikilinks name the file that actually exists.
+
+    Only write_note() may raise: see _record() for why the status may not.
     """
     path = write_note(cfg, note, cfg.language, path=target)
-    q.set_status(link, status, error=error, title=note.title)
-    warnings: list[str] = []
+    warnings = _record(q, link, status, error, note.title)
     if target is not None:
         path, trouble = _rename_to_title(cfg, note, path)
         if trouble:
@@ -421,11 +424,33 @@ def _usable_name(cfg: Config, ideal: Path) -> Path | None:
     """
     if ideal.is_symlink():
         return None
+    # Defense in depth: note_stem() emits [A-Za-z0-9-] only, so no name it
+    # builds can reach out of the folder and nothing below can fire today. It
+    # is here so that a change to that character class cannot quietly become a
+    # write outside the vault, and the test pins the invariant that way round.
     try:
         resolved = ensure_inside_root(cfg, ideal)
     except (ProtectedNote, OSError):
         return None
     return resolved if resolved.parent == cfg.links_dir.resolve() else None
+
+
+def _record(q: Queue, link: str, status: str, reason: str,
+            title: str | None) -> list[str]:
+    """Record the entry's final status, or report that it could not be.
+
+    The same reasoning as the lock and the entry in add(): the queue is
+    bookkeeping and the note is the durable artifact. With an entry already on
+    disk this call reaches atomic_write, so a read-only or full state tree
+    raises here -- after the note is written, and before the rename and the
+    reindex. Raising would leave the user a correct note under its old name,
+    missing from every index, and no Result at all.
+    """
+    try:
+        q.set_status(link, status, error=reason, title=title)
+    except OSError as error:
+        return [NO_STATUS.format(reason=_typed(error))]
+    return []
 
 
 def _reindex(cfg: Config) -> list[str]:
