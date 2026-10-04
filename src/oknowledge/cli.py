@@ -16,6 +16,9 @@ Exit codes, which the Omarchy plugin relies on:
        write, a bug). Nothing is guaranteed to have been saved; the message
        says whether the link reached the queue.
 
+`serve` exits 0 when the server stopped (idle timeout, Ctrl-C or SIGTERM) and 2
+when it could not listen on web.port.
+
 `status` and `reindex` exit 0 when they ran, even if they report that an index
 was blocked or queue files were unreadable: the report is the result.
 """
@@ -29,7 +32,7 @@ import re
 import sys
 from pathlib import Path
 
-from .config import CONFIG_PATH, ENGINE_NAMES, ConfigError
+from .config import CONFIG_PATH, ENGINE_NAMES, ConfigError, PortUnavailable
 from .config import load as load_config
 from .pipeline import Result, add, retry
 from .queue import Queue
@@ -90,7 +93,18 @@ def _parser() -> argparse.ArgumentParser:
 
     retry_cmd = subs.add_parser("retry", help="finish the links left half done")
     retry_cmd.add_argument("--json", action="store_true")
+
+    serve_cmd = subs.add_parser("serve", help="open the library in the browser")
+    serve_cmd.add_argument("--open", action="store_true", help="also open the browser")
     return parser
+
+
+def serve(cfg, open_browser: bool) -> None:
+    # Imported here: the web stack costs a few hundred milliseconds, and every
+    # `add` the Omarchy plugin runs would pay it for a command that never serves.
+    from .web.runner import serve as run
+
+    run(cfg, open_browser)
 
 
 def _count(n: int, singular: str, plural: str) -> str:
@@ -214,6 +228,13 @@ def main(argv: list[str] | None = None) -> int:
             return _reindex(cfg)
         if args.command == "retry":
             return _retry(cfg, args)
+        if args.command == "serve":
+            serve(cfg, args.open)
+            return 0
+    except PortUnavailable as error:
+        print(f"oknowledge: {error}; change web.port in the config if it is taken",
+              file=sys.stderr)
+        return 2
     except ProtectedNote as error:
         print(f"oknowledge: refused to write: {error}{_queued(args)}", file=sys.stderr)
         return 3

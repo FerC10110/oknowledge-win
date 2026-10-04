@@ -22,6 +22,11 @@ class ConfigError(Exception):
     """La configuración falta, o está y no se puede usar."""
 
 
+class PortUnavailable(Exception):
+    """The web server could not listen on the configured port. Lives here, not in
+    web.runner, so the CLI can catch it without importing the web stack."""
+
+
 @dataclass(frozen=True)
 class Config:
     vault: Path
