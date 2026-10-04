@@ -28,6 +28,18 @@ test("an absurdly long clipboard is not a link", () => {
   assert.equal(M.looksLikeUrl("https://a.test/" + "x".repeat(5000)), false)
 })
 
+test("a stale pending entry is stale after ten minutes, not before and not hours later", () => {
+  assert.equal(M.STALE_MS, 10 * 60 * 1000)
+  const at = (ms) => M.classifyEntry(entry({ status: "pending", updated: ago(ms) }), NOW)
+  assert.equal(at(9 * 60 * 1000), "working")
+  assert.equal(at(11 * 60 * 1000), "incomplete")
+})
+
+test("a missing clipboard value is empty, not the text 'null'", () => {
+  assert.equal(M.clipboardOutcome(null).kind, "empty")
+  assert.equal(M.clipboardOutcome(undefined).kind, "empty")
+})
+
 test("the clipboard says empty, not a link, or the link", () => {
   assert.deepEqual(M.clipboardOutcome(""), { kind: "empty", url: "", text: "Nothing in the clipboard" })
   assert.deepEqual(M.clipboardOutcome(" \n"), { kind: "empty", url: "", text: "Nothing in the clipboard" })
@@ -46,6 +58,11 @@ test("with no mode, no flag is passed: the user's config decides full or summary
 test("an explicit mode is passed as its flag", () => {
   assert.deepEqual(M.addArgs("https://a.test/", "full"), ["add", "https://a.test/", "--full", "--json"])
   assert.deepEqual(M.addArgs("https://a.test/", "summary"), ["add", "https://a.test/", "--summary", "--json"])
+})
+
+test("a mode that is not full or summary adds no flag, whatever it says", () => {
+  for (const bad of ["--reprocess", "--engine=fake", "FULL", "", "x"])
+    assert.deepEqual(M.addArgs("https://a.test/", bad), ["add", "https://a.test/", "--json"], bad)
 })
 
 test("the URL is trimmed, and a non-link produces no command at all", () => {
@@ -68,6 +85,29 @@ test("exit 0 on a link already in the vault says so, and is still a success", ()
   const o = M.addOutcome(0, addResult({ skipped: true }), "")
   assert.equal(o.kind, "saved")
   assert.equal(o.text, "Already saved")
+})
+
+test("a retry that found the note already saved re-analysed nothing, and says so", () => {
+  const o = M.addOutcome(0, addResult({ skipped: true }), "", true)
+  assert.equal(o.kind, "unchanged")
+  assert.equal(o.text, "Nothing to redo: the note is already saved")
+})
+
+test("a retry that did the work is saved", () => {
+  assert.equal(M.addOutcome(0, addResult({}), "", true).kind, "saved")
+  assert.equal(M.addOutcome(1, addResult({ status: "partial" }), "", true).kind, "incomplete")
+})
+
+test("only a retry gets the 'nothing to redo' wording", () => {
+  assert.equal(M.addOutcome(0, addResult({ skipped: true }), "", false).text, "Already saved")
+  assert.equal(M.addOutcome(0, addResult({ skipped: true }), "").text, "Already saved")
+})
+
+test("the toast glyph: a check only for a real save", () => {
+  assert.equal(M.glyphFor("saved"), "\u{F012C}")
+  assert.equal(M.glyphFor("unchanged"), "\u{F02FC}")
+  for (const k of ["incomplete", "busy", "error", "empty", "notUrl"])
+    assert.equal(M.glyphFor(k), "\u{F0026}", k)
 })
 
 test("exit 0 with unreadable stdout is still saved", () => {
@@ -231,6 +271,27 @@ test("the requested content mode is read from requested_content", () => {
   assert.equal(r.mode, "summary")
 })
 
+// ---- text handed to omarchy-notification-send
+
+test("a toast body never starts with a dash, so it cannot be read as an option", () => {
+  for (const bad of ["--exec rm", "-u critical", "--glyph=x", "-"])
+    assert.doesNotMatch(M.notifyBody(bad), /^-/, bad)
+  assert.equal(M.notifyBody("--exec rm").trim(), "--exec rm")
+})
+
+test("an ordinary body is left as it is", () => {
+  assert.equal(M.notifyBody("oknowledge: no config"), "oknowledge: no config")
+  assert.equal(M.notifyBody("https://a.test/"), "https://a.test/")
+  assert.equal(M.notifyBody(""), "")
+  assert.equal(M.notifyBody(null), "")
+})
+
+test("a clipboard that could not be read at all is not 'empty'", () => {
+  const o = M.clipboardFailure()
+  assert.equal(o.kind, "error")
+  assert.equal(o.text, "Could not read the clipboard")
+})
+
 // ---- retrying one link
 
 test("a row's retry is `add` for that link, in the mode it was asked for", () => {
@@ -254,9 +315,29 @@ test("idle face: the icon alone and the title of the last saved link", () => {
   assert.deepEqual(f.tooltip, { text: "%1", args: ["Last one"] })
 })
 
-test("idle face with nothing saved yet", () => {
+test("idle face with an empty queue says so, and does not claim the vault is empty", () => {
   const f = M.face(M.summarize([], NOW))
-  assert.equal(f.tooltip.text, "Nothing saved yet")
+  assert.equal(f.tooltip.text, "Nothing in the queue yet")
+  assert.equal(M.face(M.summarize([], NOW), 0, true).tooltip.text, "Nothing in the queue yet")
+})
+
+test("a queue that could not be read is not reported as an empty one", () => {
+  assert.equal(M.face(M.summarize([], NOW), 0, false).tooltip.text, "Could not read the queue")
+  assert.equal(M.face(M.summarize([entry({ title: "T" })], NOW), 0, false).tooltip.text,
+               "Could not read the queue")
+})
+
+test("work in progress still shows when the queue cannot be read", () => {
+  assert.equal(M.face(M.summarize([], NOW), 1, false).tone, "accent")
+})
+
+test("the panel's queue note: unreadable, empty, or nothing to say", () => {
+  assert.equal(M.queueNote(0, false), "Could not read the queue")
+  assert.equal(M.queueNote(3, false), "Could not read the queue")
+  assert.equal(M.queueNote(0, true), "Nothing in the queue yet")
+  assert.equal(M.queueNote(0, null), "Nothing in the queue yet")
+  assert.equal(M.queueNote(2, true), "")
+  assert.equal(M.queueNote(2, null), "")
 })
 
 test("working face: accent, with the count", () => {
@@ -318,7 +399,7 @@ test("web.port is read from the [web] table, default 8787", () => {
 })
 
 test("serve that cannot bind its port means the library is probably already up", () => {
-  assert.equal(M.serveIsAlreadyUp(2, "oknowledge: could not listen on 127.0.0.1:8787; change web.port in the config if it is taken"), true)
+  assert.equal(M.serveIsAlreadyUp(2, "oknowledge: could not listen on 127.0.0.1:8787. Is another copy already running? Otherwise set another web.port in the config.\n"), true)
   assert.equal(M.serveIsAlreadyUp(2, "oknowledge: no config file"), false)
   assert.equal(M.serveIsAlreadyUp(0, "web.port"), false)
   assert.equal(M.serveIsAlreadyUp(3, "web.port"), false)
@@ -336,6 +417,9 @@ test("every text the model emits is translated to Spanish", () => {
       take(M.retryOutcome(code))
     }
   for (const c of ["", "x", "https://a.test/"]) take(M.clipboardOutcome(c))
+  take(M.clipboardFailure())
+  take(M.addOutcome(0, addResult({ skipped: true }), "", true))
+  for (const ok of [true, false, null]) { texts.add(M.queueNote(0, ok)); texts.add(M.face(M.summarize([], NOW), 0, ok).tooltip.text) }
   for (const e of [[], [entry({ status: "partial" })], [entry({ status: "pending", updated: ago(1) })], [entry({})]])
     texts.add(M.face(M.summarize(e, NOW)).tooltip.text)   // face.text is a count
   for (const e of [entry({}), entry({ status: "partial" }), entry({ status: "pending", updated: ago(1) })])

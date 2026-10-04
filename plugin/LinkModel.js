@@ -77,12 +77,20 @@ function parseObject(text) {
   }
 }
 
-function addOutcome(exitCode, stdout, stderr) {
+// `retrying` is true for a row's Retry. `add` on a link whose note is not
+// `partial` re-analyses nothing (the note may be the user's own) and exits 0;
+// after a plain save that is "Already saved", but after a Retry it must not
+// read as if the retry worked: the entry stays unfinished and the user should
+// know the click changed nothing.
+function addOutcome(exitCode, stdout, stderr, retrying) {
   var result = parseObject(stdout)
   var detail = firstLine(stderr)
 
   if (exitCode === 0) {
     var skipped = result !== null && result.skipped === true
+    if (skipped && retrying)
+      return { kind: "unchanged", text: "Nothing to redo: the note is already saved",
+               detail: "", retry: false }
     return { kind: "saved", text: skipped ? "Already saved" : "Saved", detail: "", retry: false }
   }
   if (exitCode === 1) {
@@ -101,6 +109,26 @@ function addOutcome(exitCode, stdout, stderr) {
     return { kind: "error", text: "Something went wrong; the link may be in the queue. Try Retry",
              detail: detail, retry: true }
   return { kind: "error", text: "Could not run oknowledge", detail: detail, retry: false }
+}
+
+function clipboardFailure() {
+  return { kind: "error", text: "Could not read the clipboard", detail: "", retry: false }
+}
+
+// Toast glyphs: md-check only for a save that happened, md-information for a
+// click that changed nothing, md-alert for everything else.
+function glyphFor(kind) {
+  if (kind === "saved") return "\u{F012C}"
+  if (kind === "unchanged") return "\u{F02FC}"
+  return "\u{F0026}"
+}
+
+// omarchy-notification-send reads a known option (--exec, -u ...) in the body
+// slot as an option. A CLI error line can say anything, so never let one
+// start with a dash.
+function notifyBody(text) {
+  var s = text === null || text === undefined ? "" : String(text)
+  return s.charAt(0) === "-" ? " " + s : s
 }
 
 function retryOutcome(exitCode) {
@@ -166,7 +194,14 @@ function summarize(entries, nowMs, limit) {
 // the queue file appears a moment after the process starts, and the bar should
 // not look idle in between. It is a floor under the queue's own pending count,
 // not an addition to it, since a run in flight is also a pending entry.
-function face(summary, inflight) {
+// `queueReadable` is false when the last `status --json` could not be read, so
+// "nothing in the queue" is never said about a queue we could not see.
+function queueNote(recentCount, queueReadable) {
+  if (queueReadable === false) return "Could not read the queue"
+  return recentCount === 0 ? "Nothing in the queue yet" : ""
+}
+
+function face(summary, inflight, queueReadable) {
   var working = Math.max(summary.working, inflight || 0)
   if (working > 0)
     return { tone: "accent", text: String(working),
@@ -174,10 +209,12 @@ function face(summary, inflight) {
   if (summary.incomplete > 0)
     return { tone: "urgent", text: String(summary.incomplete),
              tooltip: { text: "%1 unfinished", args: [summary.incomplete] } }
+  if (queueReadable === false)
+    return { tone: "normal", text: "", tooltip: { text: "Could not read the queue", args: [] } }
   for (var i = 0; i < summary.recent.length; i++)
     if (summary.recent[i].kind === "saved")
       return { tone: "normal", text: "", tooltip: { text: "%1", args: [summary.recent[i].title] } }
-  return { tone: "normal", text: "", tooltip: { text: "Nothing saved yet", args: [] } }
+  return { tone: "normal", text: "", tooltip: { text: "Nothing in the queue yet", args: [] } }
 }
 
 // ---- paths and config, the way the CLI resolves them
@@ -207,7 +244,8 @@ function webPort(toml) {
 if (typeof module !== "undefined") {
   module.exports = {
     STALE_MS: STALE_MS, looksLikeUrl: looksLikeUrl, clipboardOutcome: clipboardOutcome,
-    addArgs: addArgs, retryArgs: retryArgs, addOutcome: addOutcome, retryOutcome: retryOutcome,
+    addArgs: addArgs, retryArgs: retryArgs, clipboardFailure: clipboardFailure,
+    glyphFor: glyphFor, notifyBody: notifyBody, queueNote: queueNote, addOutcome: addOutcome, retryOutcome: retryOutcome,
     serveIsAlreadyUp: serveIsAlreadyUp, classifyEntry: classifyEntry, parseStatus: parseStatus,
     summarize: summarize, face: face, queueDir: queueDir, webPort: webPort
   }

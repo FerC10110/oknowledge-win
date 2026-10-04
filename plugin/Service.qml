@@ -29,7 +29,21 @@ Item {
   property var summary: Model.summarize([], Date.now())
   property int inflight: 0                    // `add` runs started here and not finished
   readonly property var recent: summary.recent
-  readonly property var face: Model.face(summary, inflight)
+  // False when the last `status --json` could not be read (or could not run):
+  // an empty list then means "unknown", never "nothing saved".
+  property bool queueReadable: true
+  readonly property var face: Model.face(summary, inflight, queueReadable)
+  readonly property string queueNote: Model.queueNote(summary.recent.length, queueReadable)
+  // Links with an `add` in flight here, by URL, so a second click on the same
+  // one does not start a second process. Replaced, never mutated, so bindings
+  // on it update.
+  property var busyUrls: ({})
+  function setBusy(url, delta) {
+    var next = Object.assign({}, service.busyUrls)
+    next[url] = Math.max(0, (next[url] || 0) + delta)
+    if (next[url] === 0) delete next[url]
+    service.busyUrls = next
+  }
   readonly property int working: Math.max(summary.working, inflight)
 
   // What the panel shows about the clipboard, read when it opens.
@@ -99,12 +113,27 @@ Item {
         // Only stdout is the answer. A reply that does not parse leaves what
         // we last knew on screen instead of wiping it.
         var parsed = Model.parseStatus(text)
+        statusProc.answered = true
+        service.queueReadable = parsed.ok
         if (parsed.ok) service.summary = Model.summarize(parsed.entries, Date.now())
       }
+    }
+    // A process that fails to start (no CLI) never emits `exited` or a stream:
+    // `running` just goes false. Say so after a moment, unless an answer came.
+    property bool answered: false
+    onRunningChanged: {
+      if (running) answered = false
+      else statusGrace.start()
     }
     onExited: {
       if (service.refreshAgain) { service.refreshAgain = false; service.refresh() }
     }
+  }
+
+  Timer {
+    id: statusGrace
+    interval: 1000
+    onTriggered: if (!statusProc.answered) service.queueReadable = false
   }
 
   // ---- saving a link, and retrying. Each call gets its own Process, so two
@@ -117,6 +146,7 @@ Item {
       id: run
       property string kind: "add"            // add | retry
       property string subject: ""
+      property bool retrying: false
       property var argv: []
       property int code: -1
       property string out: ""
@@ -130,7 +160,7 @@ Item {
       function finish() {
         if (finished) return
         finished = true
-        service.runFinished(kind, subject, code, out, err)
+        service.runFinished(kind, subject, code, out, err, retrying)
         run.destroy(1000)
       }
 
@@ -145,7 +175,12 @@ Item {
           waitForEnd: true
           onStreamFinished: { run.err = text; run.errDone = true; run.check() }
         }
-        // A process that crashed or never started has no meaningful code.
+        // A process that fails to start emits no `exited`: `running` goes
+        // false and nothing else happens. The grace timer then finishes the
+        // run with the default code -1, "Could not run oknowledge". A normal
+        // exit sets exitSeen first, so the timer finds nothing left to do.
+        onRunningChanged: if (!running && !run.exitSeen) grace.start()
+        // A process that crashed has no meaningful code.
         onExited: function(exitCode, exitStatus) {
           run.code = (exitStatus === 0) ? exitCode : -1
           run.exitSeen = true
@@ -158,11 +193,12 @@ Item {
     }
   }
 
-  function runFinished(kind, subject, code, out, err) {
+  function runFinished(kind, subject, code, out, err, retrying) {
     var outcome
     if (kind === "add") {
       service.inflight = Math.max(0, service.inflight - 1)
-      outcome = Model.addOutcome(code, out, err)
+      service.setBusy(subject, -1)
+      outcome = Model.addOutcome(code, out, err, retrying)
     } else {
       outcome = Model.retryOutcome(code)
     }
@@ -172,9 +208,8 @@ Item {
 
   // Feedback for gestures that open nothing (middle click, the shortcut).
   function announce(outcome, subject) {
-    var ok = outcome.kind === "saved"
-    var body = outcome.detail !== "" ? outcome.detail : subject
-    Quickshell.execDetached(["omarchy-notification-send", "-g", ok ? "\u{F012C}" : "\u{F0026}",
+    var body = Model.notifyBody(outcome.detail !== "" ? outcome.detail : subject)
+    Quickshell.execDetached(["omarchy-notification-send", "-g", Model.glyphFor(outcome.kind),
                              "-u", "normal", service.t(outcome.text), body])
   }
 
@@ -187,21 +222,26 @@ Item {
       service.announce({ kind: why.kind, text: why.text, detail: "" }, "")
       return false
     }
+    var key = String(url).trim()
+    if (service.busyUrls[key] > 0) return true       // already on its way
+    service.startAdd(key, args, false)
+    return true
+  }
+
+  function startAdd(key, args, retrying) {
     service.inflight += 1
-    runnerFactory.createObject(service, { kind: "add", subject: String(url).trim(),
+    service.setBusy(key, 1)
+    runnerFactory.createObject(service, { kind: "add", subject: key, retrying: retrying,
                                           argv: [service.cli].concat(args) })
     service.refresh()
-    return true
   }
 
   // One row's Retry: `add` for that link only. The IPC `retry` still retries all.
   function retryOne(row) {
     var args = Model.retryArgs(row)
     if (args === null) return false
-    service.inflight += 1
-    runnerFactory.createObject(service, { kind: "add", subject: row.url,
-                                          argv: [service.cli].concat(args) })
-    service.refresh()
+    if (service.busyUrls[args[1]] > 0) return true
+    service.startAdd(args[1], args, true)
     return true
   }
 
@@ -237,6 +277,20 @@ Item {
         service.announce({ kind: "empty", text: service.clip.text, detail: "" }, "")
       }
     }
+    // wl-paste missing: it never starts, so there is no exit and no stream and
+    // `saveWhenRead` would stay set until the next panel open saved by surprise.
+    onRunningChanged: if (!running && service.saveWhenRead) clipGrace.start()
+  }
+
+  Timer {
+    id: clipGrace
+    interval: 1000
+    onTriggered: {
+      if (!service.saveWhenRead) return
+      service.saveWhenRead = false
+      service.clip = Model.clipboardOutcome("")
+      service.announce(Model.clipboardFailure(), "")
+    }
   }
 
   function readClipboard() { if (!clipProc.running) clipProc.running = true }
@@ -254,10 +308,23 @@ Item {
       id: serveErr
       waitForEnd: true
     }
+    property bool exitSeen: false
+    onRunningChanged: {
+      if (running) exitSeen = false
+      else serveGrace.start()
+    }
     onExited: function(exitCode) {
+      exitSeen = true
       if (Model.serveIsAlreadyUp(exitCode, serveErr.text))
         Quickshell.execDetached(["xdg-open", service.libraryUrl()])
     }
+    // Never started (no CLI): no exit either, so tell the user.
+  }
+
+  Timer {
+    id: serveGrace
+    interval: 1000
+    onTriggered: if (!serveProc.exitSeen) service.announce(Model.addOutcome(-1, "", ""), "")
   }
 
   function openLibrary() {

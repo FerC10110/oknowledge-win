@@ -36,6 +36,9 @@ Panel {
     }
   }
 
+  // The clipboard's link already has a save running.
+  readonly property bool busy: service !== null && clip.kind === "url" && service.busyUrls[clip.url] > 0
+
   function save(mode) {
     if (service) service.saveUrl(clip.url, mode)
     close()
@@ -101,6 +104,8 @@ Panel {
 
           Button {
             text: okpanel.t("Full")
+            enabled: !okpanel.busy
+            opacity: enabled ? 1 : 0.5
             bordered: true
             foreground: okpanel.accent
             fontFamily: okpanel.fontFamily
@@ -109,6 +114,8 @@ Panel {
           }
           Button {
             text: okpanel.t("Summary")
+            enabled: !okpanel.busy
+            opacity: enabled ? 1 : 0.5
             bordered: true
             foreground: okpanel.foreground
             fontFamily: okpanel.fontFamily
@@ -130,10 +137,10 @@ Panel {
 
         Text {
           Layout.fillWidth: true
-          visible: !okpanel.service || okpanel.service.recent.length === 0
-          text: okpanel.t("Nothing saved yet")
+          visible: okpanel.service !== null && okpanel.service.queueNote !== ""
+          text: okpanel.service ? okpanel.t(okpanel.service.queueNote) : ""
           textFormat: Text.PlainText
-          color: okpanel.dim
+          color: okpanel.service && !okpanel.service.queueReadable ? okpanel.urgent : okpanel.dim
           font.family: okpanel.fontFamily
           font.pixelSize: Style.font.bodySmall
         }
@@ -172,6 +179,8 @@ Panel {
               Button {
                 visible: modelData.retryable
                 text: okpanel.t("Retry")
+                enabled: !(okpanel.service && okpanel.service.busyUrls[modelData.url] > 0)
+                opacity: enabled ? 1 : 0.5
                 bordered: true
                 foreground: okpanel.foreground
                 fontFamily: okpanel.fontFamily
