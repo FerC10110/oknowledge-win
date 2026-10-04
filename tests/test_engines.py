@@ -332,13 +332,14 @@ def test_build_engine_reads_each_engines_settings(tmp_path):
 class Host:
     """Fakes everything ensure_running touches: probe, systemctl, which, Popen, clock."""
 
-    def __init__(self, monkeypatch, up_after=None, unit=True, start_rc=0, ollama_bin=True):
+    def __init__(self, monkeypatch, up_after=None, user_unit=False, system_unit=False,
+                 start_rc=0, ollama_bin=True):
         self.calls = []
         self.spawned = []
         self.up = up_after == 0
         self.up_after = up_after
         self.probes = 0
-        self.unit, self.start_rc = unit, start_rc
+        self.user_unit, self.system_unit, self.start_rc = user_unit, system_unit, start_rc
 
         def get(url, timeout=None):
             self.probes += 1
@@ -350,8 +351,17 @@ class Host:
 
         def run(argv, **kw):
             self.calls.append(argv)
-            rc = (0 if self.unit else 1) if argv[2] == "cat" else self.start_rc
-            return type("P", (), {"returncode": rc, "stdout": "", "stderr": "denied"})()
+            assert argv[0] == "systemctl", f"unexpected command {argv}"
+            user = "--user" in argv
+            verb = argv[2] if user else argv[1]
+            stdout, rc = "", 0
+            if verb == "list-unit-files":
+                present = self.user_unit if user else self.system_unit
+                stdout = "ollama.service disabled disabled\n" if present else \
+                    "0 unit files listed.\n"
+            elif verb == "start":
+                rc = self.start_rc
+            return type("P", (), {"returncode": rc, "stdout": stdout, "stderr": "denied"})()
 
         monkeypatch.setattr("httpx.get", get)
         monkeypatch.setattr("subprocess.run", run)
@@ -360,30 +370,47 @@ class Host:
                             lambda argv, **kw: self.spawned.append((argv, kw)))
         monkeypatch.setattr("time.sleep", lambda s: None)
 
+    def started(self):
+        return [c for c in self.calls if "start" in c or "enable" in c]
+
 
 def test_ensure_running_starts_nothing_when_ollama_is_up(monkeypatch):
     from oknowledge.ai.ollama import ensure_running
 
-    host = Host(monkeypatch, up_after=0)
+    host = Host(monkeypatch, up_after=0, user_unit=True, system_unit=True)
     ensure_running("http://localhost:11434")
     assert host.calls == [] and host.spawned == []
 
 
-def test_ensure_running_starts_the_systemd_unit_when_there_is_one(monkeypatch):
+def test_ensure_running_starts_the_user_unit_when_there_is_one(monkeypatch):
     from oknowledge.ai.ollama import ensure_running
 
-    host = Host(monkeypatch, up_after=2, unit=True)
+    host = Host(monkeypatch, up_after=2, user_unit=True, system_unit=True)
     ensure_running("http://localhost:11434")
-    assert ["systemctl", "--user", "start", "ollama.service"] in host.calls
+    assert host.started() == [["systemctl", "--user", "start", "ollama.service"]]
     assert host.spawned == []
 
 
-def test_ensure_running_spawns_detached_when_there_is_no_unit(monkeypatch):
+def test_a_system_unit_is_reported_never_started_or_escalated(monkeypatch):
     from oknowledge.ai.ollama import ensure_running
 
-    host = Host(monkeypatch, up_after=2, unit=False)
+    host = Host(monkeypatch, system_unit=True)
+    with pytest.raises(EngineError) as error:
+        ensure_running("http://localhost:11434")
+    message = str(error.value)
+    assert "sudo systemctl start ollama" in message
+    assert "sudo systemctl enable --now ollama" in message
+    assert host.spawned == []
+    assert host.started() == []
+    assert not any("sudo" in part for call in host.calls for part in call)
+
+
+def test_ensure_running_spawns_detached_when_there_is_no_unit_at_all(monkeypatch):
+    from oknowledge.ai.ollama import ensure_running
+
+    host = Host(monkeypatch, up_after=2)
     ensure_running("http://localhost:11434")
-    assert not any(c[2] == "start" for c in host.calls)
+    assert host.started() == []
     (argv, kw), = host.spawned
     assert argv == ["ollama", "serve"] and kw["start_new_session"] is True
 
@@ -391,15 +418,15 @@ def test_ensure_running_spawns_detached_when_there_is_no_unit(monkeypatch):
 def test_ensure_running_gives_up_with_a_how_to_when_it_never_answers(monkeypatch):
     from oknowledge.ai.ollama import ensure_running
 
-    Host(monkeypatch, up_after=None, unit=True)
+    Host(monkeypatch, up_after=None, user_unit=True)
     with pytest.raises(EngineError, match="could not be started.*systemctl --user start ollama"):
         ensure_running("http://localhost:11434", timeout=0.01)
 
 
-def test_ensure_running_reports_a_unit_that_fails_to_start(monkeypatch):
+def test_a_user_unit_that_fails_to_start_never_gets_a_competing_spawn(monkeypatch):
     from oknowledge.ai.ollama import ensure_running
 
-    host = Host(monkeypatch, unit=True, start_rc=1)
+    host = Host(monkeypatch, user_unit=True, start_rc=1)
     with pytest.raises(EngineError, match="via systemd.*denied"):
         ensure_running("http://localhost:11434")
     assert host.spawned == []
@@ -408,7 +435,7 @@ def test_ensure_running_reports_a_unit_that_fails_to_start(monkeypatch):
 def test_ensure_running_without_unit_or_binary_is_an_engine_error(monkeypatch):
     from oknowledge.ai.ollama import ensure_running
 
-    host = Host(monkeypatch, unit=False, ollama_bin=False)
+    host = Host(monkeypatch, ollama_bin=False)
     with pytest.raises(EngineError, match="ollama is not installed"):
         ensure_running("http://localhost:11434")
     assert host.spawned == []

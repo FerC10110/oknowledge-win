@@ -22,32 +22,42 @@ def _answers(url: str) -> bool:
         return False
 
 
-def _systemctl(*args: str):
-    """Run `systemctl --user`; None when systemctl itself is not available."""
+def _systemctl(*args: str, user: bool = True):
+    """Run systemctl read-only or as the user; None when it is not available."""
+    argv = ["systemctl", *(["--user"] if user else []), *args]
     try:
-        return subprocess.run(
-            ["systemctl", "--user", *args], capture_output=True, text=True, timeout=15,
-        )
+        return subprocess.run(argv, capture_output=True, text=True, timeout=15)
     except (FileNotFoundError, subprocess.TimeoutExpired):
         return None
 
 
-def ensure_running(url: str, timeout: float = 15.0) -> None:
-    """Make sure ollama answers, starting it in a managed way if it is down.
+def _has_unit(user: bool) -> bool:
+    result = _systemctl("list-unit-files", UNIT, user=user)
+    return result is not None and UNIT in result.stdout
 
-    Never starts anything when the server is already up. Prefers the user's
-    systemd unit so systemd owns the process; only without a unit does it spawn
-    a detached `ollama serve`.
+
+def ensure_running(url: str, timeout: float = 15.0) -> None:
+    """Make sure ollama answers, starting it only in a managed, unprivileged way.
+
+    Never starts anything when the server is already up. A user unit is started
+    through systemd. A system unit needs root, and a background queue must never
+    escalate privileges, so it is reported instead of started. Only with no unit
+    at all does it spawn a detached `ollama serve`.
     """
     if _answers(url):
         return
     by_hand = "start it with `systemctl --user start ollama` or `ollama serve`"
-    unit = _systemctl("cat", UNIT)
-    if unit is not None and unit.returncode == 0:
+    if _has_unit(user=True):
         started = _systemctl("start", UNIT)
         if started is None or started.returncode != 0:
             detail = started.stderr.strip()[:200] if started else "systemctl unavailable"
             raise EngineError(f"ollama could not be started via systemd ({detail}); {by_hand}")
+    elif _has_unit(user=False):
+        raise EngineError(
+            "ollama is installed as a system service but is not running: "
+            "start it now with `sudo systemctl start ollama`, "
+            "and make it start on boot with `sudo systemctl enable --now ollama`"
+        )
     else:
         if not shutil.which("ollama"):
             raise EngineError("ollama is not installed")
