@@ -15,13 +15,34 @@ from importlib.resources import files
 from typing import Protocol
 
 DEFAULT_LIMIT = 24_000
-UNCATEGORIZED = "Sin clasificar"
+MAX_KNOWN_CATEGORIES = 60
+MAX_CATEGORY_LENGTH = 80
+MAX_TAG_LENGTH = 40
+MAX_TAGS = 8
+MAX_POINTS = 6
 LANGUAGE_NAMES = {"es": "español", "en": "inglés"}
-STRICTER = (
-    "\n\nTu respuesta anterior no era JSON válido. Respondé ONLY con el objeto "
-    "JSON pedido: sin explicación, sin comentarios, sin ```."
-)
+# Same mechanism as the index boilerplate in vault.py: by content language,
+# English for anything that is not Spanish.
+UNCATEGORIZED = {"es": "Sin clasificar", "en": "Unclassified"}
+TRUNCATION_MARKER = "[... el contenido sigue, pero se cortó acá ...]"
+RETRY_SUFFIX = {
+    "es": (
+        "\n\nTu respuesta anterior no sirvió ({reason}). Respondé sólo con el "
+        "objeto JSON pedido: sin explicación, sin comentarios, sin ```."
+    ),
+    "en": (
+        "\n\nYour previous answer was unusable ({reason}). Answer only with the "
+        "requested JSON object: no explanation, no comments, no ```."
+    ),
+}
 REQUIRED = ("title", "summary", "points", "category", "tags")
+# Tags whose symbols would otherwise be folded away and merge "c++" with "c".
+SYMBOL_TAGS = (
+    (re.compile(r"(?<!\w)c\+\+"), "cpp"),
+    (re.compile(r"(?<!\w)c#"), "csharp"),
+    (re.compile(r"(?<!\w)f#"), "fsharp"),
+    (re.compile(r"(?<![\w.])\.net(?!\w)"), "dotnet"),
+)
 
 
 class EngineError(Exception):
@@ -47,41 +68,92 @@ class Analysis:
     tags: list[str]
 
 
-def _deaccent(text: str) -> str:
-    return unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode("ascii")
+def retry_suffix(language: str, reason: str) -> str:
+    """The stricter request appended on the second attempt, naming what failed."""
+    return RETRY_SUFFIX.get(language, RETRY_SUFFIX["en"]).format(reason=reason)
+
+
+def _fold(text: str) -> str:
+    """Case-fold and drop accents from Latin letters, leaving other scripts intact.
+
+    Marks are only stripped where the base is ASCII: stripping them blindly
+    would turn Japanese が into か and mangle Hangul.
+    """
+    out = []
+    for char in unicodedata.normalize("NFC", text):
+        decomposed = unicodedata.normalize("NFKD", char)
+        if decomposed.isascii():
+            out.append(decomposed)
+        elif decomposed[0].isascii():
+            out.append("".join(c for c in decomposed if not unicodedata.combining(c)))
+        else:
+            out.append(char)
+    return "".join(out).casefold()
+
+
+def _is_placeholder(text: str) -> bool:
+    """A value still wrapped in <...>: the model echoed the schema example."""
+    text = text.strip()
+    return len(text) >= 2 and text.startswith("<") and text.endswith(">")
 
 
 def normalize_tags(tags) -> list[str]:
     out: list[str] = []
     for tag in tags or []:
-        clean = re.sub(r"[^a-z0-9]+", "-", _deaccent(str(tag)).lower()).strip("-")
+        if not isinstance(tag, str) or _is_placeholder(tag):
+            continue
+        clean = _fold(tag)
+        for pattern, replacement in SYMBOL_TAGS:
+            clean = pattern.sub(replacement, clean)
+        clean = re.sub(r"[\W_]+", "-", clean).strip("-")[:MAX_TAG_LENGTH].strip("-")
         if clean and clean not in out:
             out.append(clean)
-    return out[:8]
+    return out[:MAX_TAGS]
 
 
-def canonical_category(category: str, known) -> str:
-    wanted = _deaccent(str(category or "")).strip().lower()
-    if not wanted:
-        return UNCATEGORIZED
+def _clean_category(category: str) -> str:
+    """Path separators and control characters become spaces; whitespace collapses."""
+    spaced = "".join(
+        " " if char in "/\\" or unicodedata.category(char).startswith("C") else char
+        for char in category
+    )
+    # Leading dots go too: "..", "../x" must not survive as a category.
+    return " ".join(spaced.split()).lstrip(". ")[:MAX_CATEGORY_LENGTH].strip()
+
+
+def canonical_category(category: str, known, language: str = "es") -> str:
+    clean = _clean_category(str(category or ""))
+    if not clean:
+        return UNCATEGORIZED.get(language, UNCATEGORIZED["en"])
+    wanted = _fold(clean)
     for existing in known or []:
-        if _deaccent(existing).strip().lower() == wanted:
+        if _fold(_clean_category(existing)) == wanted:
             return existing
-    return str(category).strip()
+    return clean
 
 
 def render_prompt(text: str, meta: dict, known, language: str, limit: int = DEFAULT_LIMIT) -> str:
     template = files("oknowledge").joinpath("prompts/analyze.txt").read_text(encoding="utf-8")
-    listed = "\n".join(f"- {c}" for c in (known or [])) or "- (todavía no hay ninguna)"
+    categories = [c for c in (known or [])][:MAX_KNOWN_CATEGORIES]
+    # The template's own conditional goes first, so nothing from the page can
+    # reach it; then one pass for the values, so a placeholder-looking string
+    # in the page text or title is never substituted a second time.
+    template = re.sub(
+        r"\{\{IF_KNOWN\}\}\n(.*?)\{\{ELSE\}\}\n(.*?)\{\{END\}\}\n",
+        lambda m: m.group(1) if categories else m.group(2),
+        template,
+        flags=re.S,
+    )
+    body = text[:limit]
+    if len(text) > limit:
+        body += "\n" + TRUNCATION_MARKER
     values = {
         "LANGUAGE": LANGUAGE_NAMES.get(language, language),
-        "CATEGORIES": listed,
+        "CATEGORIES": "\n".join(f"- {c}" for c in categories),
         "URL": meta.get("url") or "",
         "TITLE": meta.get("title") or "",
-        "TEXT": text[:limit],
+        "TEXT": body,
     }
-    # One pass, so a placeholder-looking string inside the page text or title
-    # is never substituted a second time.
     return re.sub(r"\{\{([A-Z]+)\}\}", lambda m: values.get(m.group(1), m.group(0)), template)
 
 
@@ -92,15 +164,17 @@ def extract_json(raw: str) -> dict:
     that chatter can itself contain braces. So instead of slicing between the
     first "{" and the last "}", try to decode an object starting at each "{"
     in turn; the decoder knows where the object really ends, braces inside
-    strings included.
+    strings included. Decoding is not strict: models put literal newlines
+    inside string values.
 
     The reply can hold several objects, most often because the model echoed
     the schema example from the prompt before answering. An echo always comes
     before the real answer, so the last object carrying every required key
     wins. If none does, the first decodable object is returned and validation
-    reports what is missing.
+    reports what is missing. An object that merely wraps the answer
+    ({"ficha": {...}}) also offers its inner object as a candidate.
     """
-    decoder = json.JSONDecoder()
+    decoder = json.JSONDecoder(strict=False)
     found: list[dict] = []
     position = raw.find("{")
     while position != -1:
@@ -111,6 +185,9 @@ def extract_json(raw: str) -> dict:
             continue
         if isinstance(value, dict):
             found.append(value)
+            while len(value) == 1 and isinstance(inner := next(iter(value.values())), dict):
+                found.append(inner)
+                value = inner
         # Skip past the object so its nested objects are not candidates.
         position = raw.find("{", end)
     if not found:
@@ -123,6 +200,8 @@ def _text(data: dict, key: str) -> str:
     value = data[key]
     if not isinstance(value, str):
         raise AnalysisError(f"the answer has a non-text {key}")
+    if _is_placeholder(value):
+        raise AnalysisError(f"the answer left the {key} as the example placeholder")
     return value.strip()
 
 
@@ -133,29 +212,34 @@ def _items(data: dict, key: str) -> list:
     return value
 
 
-def _to_analysis(data: dict, known, meta: dict | None = None) -> Analysis:
+def _to_analysis(data: dict, known, meta: dict, language: str) -> Analysis:
     missing = [k for k in REQUIRED if k not in data]
     if missing:
         raise AnalysisError(f"the answer is missing: {', '.join(missing)}")
     summary = _text(data, "summary")
     if not summary:
         raise AnalysisError("the answer has an empty summary")
-    title = _text(data, "title") or ((meta or {}).get("title") or "").strip()
-    points = [str(p).strip() for p in _items(data, "points") if str(p).strip()]
+    title = _text(data, "title") or (meta.get("title") or "").strip() or meta.get("url") or ""
+    points = [
+        p.strip() for p in _items(data, "points")
+        if isinstance(p, str) and p.strip() and not _is_placeholder(p)
+    ]
     return Analysis(
         title=title,
         summary=summary,
-        points=points[:6],
-        category=canonical_category(_text(data, "category"), known),
+        points=points[:MAX_POINTS],
+        category=canonical_category(_text(data, "category"), known, language),
         tags=normalize_tags(_items(data, "tags")),
     )
 
 
 def analyze(engine: Engine, text: str, meta: dict, known, language: str) -> Analysis:
     prompt = render_prompt(text, meta, known, language)
-    for attempt in (prompt, prompt + STRICTER):
+    request = prompt
+    for attempt in range(2):
         try:
-            return _to_analysis(extract_json(engine.complete(attempt)), known, meta)
+            return _to_analysis(extract_json(engine.complete(request)), known, meta, language)
         except AnalysisError as error:
             last = error
-    raise AnalysisError(f"the engine never produced a usable answer: {last}")
+            request = prompt + retry_suffix(language, str(error))
+    raise AnalysisError(f"the engine never produced a usable answer: {last}") from last

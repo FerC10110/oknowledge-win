@@ -3,8 +3,8 @@ import json
 import pytest
 
 from oknowledge.ai.base import (
-    AnalysisError, Analysis, analyze, canonical_category, extract_json,
-    normalize_tags, render_prompt,
+    DEFAULT_LIMIT, TRUNCATION_MARKER, Analysis, AnalysisError, EngineError, analyze,
+    canonical_category, extract_json, normalize_tags, render_prompt, retry_suffix,
 )
 from oknowledge.ai.fake import FakeEngine
 
@@ -138,7 +138,11 @@ def test_a_broken_answer_is_retried_once_with_a_stricter_prompt():
     result = analyze(engine, "texto", META, [], "es")
     assert result.title == "WireGuard vs OpenVPN"
     assert len(engine.prompts) == 2
-    assert "ONLY" in engine.prompts[1] or "sólo" in engine.prompts[1].lower()
+    first, second = engine.prompts
+    reason = "the answer had no JSON object in it"
+    assert second.startswith(first)
+    assert second.endswith(retry_suffix("es", reason))
+    assert reason in second  # the retry says what was wrong, not a generic "invalid JSON"
 
 
 def test_two_broken_answers_in_a_row_raise():
@@ -188,7 +192,6 @@ def test_text_longer_than_the_limit_is_cut_from_the_end():
 
 
 def test_the_fake_engine_replays_replies_records_prompts_and_raises_exceptions():
-    from oknowledge.ai.base import EngineError
     engine = FakeEngine(["uno", EngineError("boom")])
     assert engine.complete("p1") == "uno"
     with pytest.raises(EngineError):
@@ -200,12 +203,14 @@ def test_the_fake_engine_replays_replies_records_prompts_and_raises_exceptions()
 
 def _example_from_prompt() -> str:
     prompt = render_prompt("t", META, [], "es")
-    return prompt[prompt.index("{"):prompt.index("}\n") + 1]
+    example, _ = json.JSONDecoder().raw_decode(prompt, prompt.index("{"))
+    return json.dumps(example, ensure_ascii=False)
 
 
 def test_an_echoed_schema_example_before_the_real_answer_loses_to_the_answer():
     example = _example_from_prompt()
     assert set(json.loads(example)) == set(GOOD)  # the echo really is complete
+    assert extract_json(example) == json.loads(example)
     raw = f"Claro, la forma es:\n{example}\nY acá está la ficha:\n```json\n{json.dumps(GOOD)}\n```"
     assert extract_json(raw) == GOOD
     result = analyze(FakeEngine([raw]), "texto", META, [], "es")
@@ -227,3 +232,221 @@ def test_two_complete_answers_in_a_row_the_last_one_wins():
 def test_objects_nested_inside_the_answer_are_not_candidates():
     data = dict(GOOD, extra={"title": "x", "summary": "x", "points": [], "category": "x", "tags": []})
     assert extract_json(json.dumps(data)) == data
+
+
+# --- round 3: failure paths of real small-model output -----------------------
+
+
+def test_a_literal_newline_inside_a_string_value_is_understood():
+    raw = '{"summary": "primera línea\nsegunda línea", "b": 1}'  # a real newline, not \\n
+    assert "\n" in raw
+    assert extract_json(raw) == {"summary": "primera línea\nsegunda línea", "b": 1}
+
+
+def test_a_multiline_summary_survives_analyze_on_the_first_attempt():
+    raw = FakeEngine.answer().replace("A summary of what the page says.", "linea uno\nlinea dos")
+    raw = raw.replace("\\n", "\n")  # a literal newline, as the model would write it
+    engine = FakeEngine([raw])
+    assert analyze(engine, "t", META, [], "es").summary == "linea uno\nlinea dos"
+    assert len(engine.prompts) == 1
+
+
+def test_every_string_in_the_prompt_example_is_a_placeholder():
+    example = json.loads(_example_from_prompt())
+    strings = [example["title"], example["summary"], example["category"],
+               *example["points"], *example["tags"]]
+    assert all(v.startswith("<") and v.endswith(">") for v in strings)
+
+
+def _rejected(reply, replies=None):
+    engine = FakeEngine(replies or [reply, reply])
+    with pytest.raises(AnalysisError):
+        analyze(engine, "t", META, [], "es")
+
+
+def test_an_echoed_example_alone_is_rejected_not_stored():
+    _rejected(_example_from_prompt())
+
+
+def test_an_echo_followed_by_a_truncated_answer_is_rejected():
+    _rejected(_example_from_prompt() + '\nAhora sí:\n{"title": "WireGuard", "summary": "se cor')
+
+
+def test_an_echo_introduced_as_the_format_is_rejected():
+    _rejected("Acá está el formato: " + _example_from_prompt())
+
+
+def test_an_echo_is_retried_and_the_real_answer_is_then_accepted():
+    engine = FakeEngine([_example_from_prompt(), json.dumps(GOOD)])
+    assert analyze(engine, "t", META, [], "es").title == "WireGuard vs OpenVPN"
+    assert len(engine.prompts) == 2
+
+
+def test_tags_that_are_not_text_are_dropped_not_stringified():
+    assert normalize_tags(["vpn", None, {"a": 1}, 3, ["x"]]) == ["vpn"]
+
+
+def test_placeholder_tags_are_dropped():
+    assert normalize_tags(["<una etiqueta>", "ok"]) == ["ok"]
+
+
+def test_points_that_are_not_text_are_dropped_not_stringified():
+    data = dict(GOOD, points=[{"point": "ficha"}, None, 7, "real", "<una idea>"])
+    result = analyze(FakeEngine([json.dumps(data)]), "t", META, [], "es")
+    assert result.points == ["real"]
+
+
+def test_the_prompt_says_when_the_text_was_cut_and_only_then():
+    cut = render_prompt("y" * (DEFAULT_LIMIT + 1), META, [], "es")
+    whole = render_prompt("y" * DEFAULT_LIMIT, META, [], "es")
+    assert TRUNCATION_MARKER in cut
+    assert TRUNCATION_MARKER not in whole
+    assert cut.index("y" * DEFAULT_LIMIT) < cut.index(TRUNCATION_MARKER)
+    assert "cortado" in whole  # the instruction itself is always there
+
+
+def test_a_non_ascii_category_that_is_already_known_is_kept():
+    assert canonical_category("日本料理", ["日本料理"]) == "日本料理"
+    assert canonical_category("日本料理", []) == "日本料理"
+    assert canonical_category("ЭКОНОМИКА", ["Экономика"]) == "Экономика"
+
+
+def test_a_category_differing_only_by_surrounding_whitespace_matches():
+    assert canonical_category("  Redes\t", ["Redes"]) == "Redes"
+    assert canonical_category("Redes", ["Redes "]) == "Redes "
+
+
+def test_category_path_separators_become_spaces():
+    assert canonical_category("../Redes/VPN", []) == "Redes VPN"
+    assert canonical_category("a\\b", []) == "a b"
+
+
+def test_a_category_with_an_embedded_newline_or_control_character_is_one_line():
+    assert canonical_category("Redes\ny\x00VPN", []) == "Redes y VPN"
+
+
+def test_collapsed_whitespace_lets_a_category_match_a_known_one():
+    assert canonical_category("Redes   y   VPN", ["Redes y VPN"]) == "Redes y VPN"
+
+
+@pytest.mark.parametrize("bad", [".", "..", "...", " / ", "\n"])
+def test_degenerate_categories_fall_back(bad):
+    assert canonical_category(bad, []) == "Sin clasificar"
+
+
+def test_a_very_long_category_is_capped():
+    assert len(canonical_category("a" * 500, [])) <= 80
+
+
+def test_the_fallback_category_follows_the_language():
+    assert canonical_category("", [], "es") == "Sin clasificar"
+    assert canonical_category("", [], "en") == "Unclassified"
+    assert canonical_category("", [], "fr") == "Unclassified"
+    engine = FakeEngine([json.dumps(dict(GOOD, category=" "))])
+    assert analyze(engine, "t", META, [], "en").category == "Unclassified"
+
+
+def test_programming_symbols_survive_in_tags():
+    assert normalize_tags(["C++", "C#", "F#", ".NET", "C"]) == ["cpp", "csharp", "fsharp", "dotnet", "c"]
+    assert normalize_tags(["C++ templates"]) == ["cpp-templates"]
+
+
+def test_non_latin_tags_survive():
+    assert normalize_tags(["日本語", "Привет мир", "がっこう"]) == ["日本語", "привет-мир", "がっこう"]
+
+
+def test_tag_shapes_hash_spaces_duplicates_and_length():
+    assert normalize_tags(["#python"]) == ["python"]
+    assert normalize_tags(["machine learning"]) == ["machine-learning"]
+    assert normalize_tags(["Año", "ano", "ANO"]) == ["ano"]
+    assert normalize_tags(["x" * 100]) == ["x" * 40]
+    assert normalize_tags(["###", "..."]) == []
+
+
+def test_an_answer_wrapped_in_a_single_key_is_unwrapped():
+    raw = json.dumps({"ficha": GOOD})
+    assert extract_json(raw) == GOOD
+    assert analyze(FakeEngine([raw]), "t", META, [], "es").title == "WireGuard vs OpenVPN"
+
+
+def test_without_known_categories_the_prompt_says_so_and_lists_no_bullet():
+    prompt = render_prompt("t", META, [], "es")
+    assert "todavía no hay ninguna" in prompt
+    assert "- (" not in prompt and "estas ya existen" not in prompt
+    assert "{{" not in prompt
+    with_known = render_prompt("t", META, ["Redes"], "es")
+    assert "estas ya existen" in with_known and "todavía no hay ninguna" not in with_known
+
+
+def test_the_known_categories_are_capped_keeping_the_caller_order():
+    known = [f"cat{i:03d}" for i in range(200)]
+    prompt = render_prompt("t", META, known, "es")
+    assert "- cat059" in prompt and "- cat060" not in prompt
+    # the cap only shapes the prompt: an existing category past it still wins
+    engine = FakeEngine([json.dumps(dict(GOOD, category="CAT150"))])
+    assert analyze(engine, "t", META, known, "es").category == "cat150"
+
+
+def test_the_page_text_is_fenced_and_the_reminder_comes_after_it():
+    prompt = render_prompt("TEXTO-DE-LA-PAGINA", META, [], "en")
+    start, end = prompt.index("<<<CONTENIDO\n"), prompt.index("\nCONTENIDO>>>")
+    assert start < prompt.index("TEXTO-DE-LA-PAGINA") < end
+    assert "inglés" in prompt[end:]  # language reminder after the content
+
+
+def test_the_retry_message_is_localized_and_names_the_failure():
+    assert "sólo" in retry_suffix("es", "x") and "ONLY" not in retry_suffix("es", "x")
+    assert "only" in retry_suffix("en", "x")
+    engine = FakeEngine([json.dumps({"title": "x"}), json.dumps(GOOD)])
+    analyze(engine, "t", META, [], "es")
+    assert "missing: summary, points, category, tags" in engine.prompts[1]
+
+
+def test_the_final_error_keeps_its_cause():
+    engine = FakeEngine(["no", json.dumps({"title": "x"})])
+    with pytest.raises(AnalysisError) as info:
+        analyze(engine, "t", META, [], "es")
+    assert isinstance(info.value.__cause__, AnalysisError)
+    assert "missing" in str(info.value)
+
+
+def test_title_falls_back_to_the_detected_title_then_to_the_url():
+    empty = json.dumps(dict(GOOD, title=""))
+    assert analyze(FakeEngine([empty]), "t", META, [], "es").title == META["title"]
+    bare = {"url": "https://e.com/x", "title": None}
+    assert analyze(FakeEngine([empty]), "t", bare, [], "es").title == "https://e.com/x"
+
+
+# --- the fake engine ----------------------------------------------------------
+
+
+def test_a_fake_reply_can_be_a_callable_of_the_prompt():
+    engine = FakeEngine([lambda p: FakeEngine.answer(title="uno" if "AAA" in p else "otro")])
+    assert json.loads(engine.complete("AAA"))["title"] == "uno"
+
+
+def test_a_fake_that_is_a_callable_answers_every_prompt_in_any_order():
+    engine = FakeEngine(lambda p: FakeEngine.answer(title=p))
+    assert [json.loads(engine.complete(p))["title"] for p in ("b", "a", "b")] == ["b", "a", "b"]
+
+
+def test_a_callable_reply_may_return_an_exception_to_raise():
+    engine = FakeEngine([lambda p: EngineError("boom")])
+    with pytest.raises(EngineError):
+        engine.complete("p")
+
+
+def test_a_fake_rejects_an_exception_class_and_non_str_replies_clearly():
+    with pytest.raises(TypeError, match="class EngineError"):
+        FakeEngine([EngineError]).complete("p")
+    with pytest.raises(TypeError, match="NoneType"):
+        FakeEngine([None]).complete("p")
+    with pytest.raises(TypeError, match="NoneType"):
+        FakeEngine([lambda p: None]).complete("p")
+
+
+def test_the_fake_answer_helper_is_valid_and_overridable():
+    assert analyze(FakeEngine([FakeEngine.answer()]), "t", META, [], "es").category == "General"
+    custom = FakeEngine.answer(category="Redes", tags=["x"])
+    assert analyze(FakeEngine([custom]), "t", META, [], "es").tags == ["x"]
+    assert json.loads(FakeEngine.answer(points=None))["points"] is None
