@@ -34,3 +34,45 @@ def test_a_url_without_scheme_is_assumed_https():
 
 def test_the_root_path_keeps_its_slash():
     assert normalize("https://example.com/") == "https://example.com/"
+
+
+def test_ref_parameter_is_preserved():
+    """ref is real content, not tracking: github.com/o/r?ref=dev should keep the param."""
+    url_with_ref = "https://example.com/page?ref=dev"
+    url_without_ref = "https://example.com/page"
+    assert normalize(url_with_ref) == url_with_ref
+    assert link_id(url_with_ref) != link_id(url_without_ref)
+
+
+def test_short_host_with_double_slash_in_path():
+    """a.co/x//y should not be misparsed as having no scheme."""
+    normalized = normalize("a.co/x//y")
+    assert normalized.startswith("https://a.co/")
+
+
+def test_non_http_schemes_are_returned_unchanged():
+    """mailto, javascript, ftp etc. should be returned as-is, stripped."""
+    assert normalize("mailto:a@b.com") == "mailto:a@b.com"
+    assert normalize("  javascript:alert(1)  ") == "javascript:alert(1)"
+
+
+def test_malformed_urls_do_not_raise():
+    """Invalid URLs should return a string, not raise."""
+    bad_url_1 = "example.com:abc/x"
+    bad_url_2 = ""
+    result_1 = normalize(bad_url_1)
+    result_2 = normalize(bad_url_2)
+    assert isinstance(result_1, str)
+    assert isinstance(result_2, str)
+    # link_id should also work without raising
+    id_1 = link_id(bad_url_1)
+    id_2 = link_id(bad_url_2)
+    assert len(id_1) == 12
+    assert len(id_2) == 12
+    assert all(c in "0123456789abcdef" for c in id_1)
+    assert all(c in "0123456789abcdef" for c in id_2)
+
+
+def test_ipv6_brackets_are_preserved():
+    """IPv6 addresses should keep their brackets in the netloc."""
+    assert normalize("https://[::1]:8080/x") == "https://[::1]:8080/x"
