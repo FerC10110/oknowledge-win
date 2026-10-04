@@ -15,11 +15,15 @@ def load(name):
     return json.loads((FIXTURES / name).read_text(encoding="utf-8"))
 
 
-def make_pdf(tmp_path, encrypt=None):
+def make_pdf(tmp_path, encrypt=None, author=None, title=None):
     from reportlab.pdfgen import canvas
 
     path = tmp_path / "paper.pdf"
     page = canvas.Canvas(str(path), encrypt=encrypt)
+    if author:
+        page.setAuthor(author)
+    if title:
+        page.setTitle(title)
     page.drawString(72, 720, "Resultados del experimento")
     page.drawString(72, 700, "La latencia bajo a la mitad")
     page.save()
@@ -328,6 +332,18 @@ def test_a_pdf_becomes_text(tmp_path):
     assert "latencia" in out.text
     assert out.type == "pdf"
     assert out.title == "paper.pdf"
+
+
+def test_a_pdfs_metadata_comes_out_as_plain_text_the_note_header_can_hold(tmp_path):
+    # pypdf hands back its own str subclass, which yaml refuses to write: the
+    # first real PDF with an author crashed `add` with exit 3.
+    import yaml
+
+    out = pdf.from_bytes(make_pdf(tmp_path, author="Ada Lovelace", title="On engines"),
+                         "https://e.com/paper.pdf")
+    assert (out.author, out.title) == ("Ada Lovelace", "On engines")
+    assert type(out.author) is str and type(out.title) is str
+    yaml.safe_dump({"author": out.author, "title": out.title})
 
 
 def test_a_pdf_with_no_text_layer_is_unreadable():

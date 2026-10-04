@@ -37,7 +37,9 @@ def from_bytes(data: bytes, url: str) -> Extracted:
             raise Unreadable(f"the PDF at {url} is protected by a password")
         pages = [_page_text(page) for page in reader.pages[:MAX_PAGES]]
         meta = reader.metadata
-        meta_title, meta_author = (meta.title, meta.author) if meta else (None, None)
+        # pypdf returns its own str subclass; yaml cannot write it.
+        meta_title, meta_author = (str(meta.title) if meta.title else None,
+                                   str(meta.author) if meta.author else None) if meta else (None, None)
     except Unreadable:
         raise
     except Exception as error:
