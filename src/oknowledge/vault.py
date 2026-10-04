@@ -95,7 +95,7 @@ def _read_marked(path: Path) -> tuple[dict, str] | None:
         return None
     try:
         front = yaml.safe_load(text[4:end])
-    except yaml.YAMLError:
+    except (yaml.YAMLError, ValueError):
         return None
     if not isinstance(front, dict) or front.get(MARKER) != MARKER_VERSION:
         return None

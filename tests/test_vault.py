@@ -202,6 +202,19 @@ def test_a_marked_file_with_broken_yaml_reads_as_none(tmp_path):
     assert f.read_bytes() == before
 
 
+def test_a_marked_file_with_an_impossible_date_reads_as_none(tmp_path):
+    cfg = make_config(tmp_path)
+    f = cfg.links_dir / "baddate.md"
+    f.write_text(
+        "---\noknowledge: 1\nurl: https://e.com/a\npublished: 2026-13-45\n---\n\nhola\n",
+        encoding="utf-8",
+    )
+    before = f.read_bytes()
+    assert read_front(f) is None
+    assert read_note(f) is None
+    assert f.read_bytes() == before
+
+
 def test_note_path_steps_around_an_unparseable_marked_file(tmp_path):
     cfg = make_config(tmp_path)
     f = cfg.links_dir / "2026-10-03-wireguard-vs-openvpn.md"
