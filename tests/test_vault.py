@@ -70,6 +70,7 @@ def test_slug_falls_back_only_when_there_is_nothing_to_use():
     assert slug("Qué pasó en Córdoba", "x") == "que-paso-en-cordoba"
     assert slug("   ", "fallback") == "fallback"
     assert slug("***", "fallback") == "fallback"
+    assert slug("日本語のタイトル", "fallback") == "fallback"
 
 
 def test_a_note_of_yours_in_our_folder_is_never_touched(tmp_path):
@@ -111,6 +112,7 @@ def test_a_foreign_file_on_the_final_path_is_refused(tmp_path):
     target.write_text("no soy tuya\n", encoding="utf-8")
     with pytest.raises(ProtectedNote):
         write_note(cfg, note, "es", path=target)
+    assert target.read_text(encoding="utf-8") == "no soy tuya\n"
 
 
 def test_a_path_outside_the_vault_is_refused(tmp_path):
@@ -208,3 +210,69 @@ def test_note_path_steps_around_an_unparseable_marked_file(tmp_path):
     path = write_note(cfg, make_note(), "es")
     assert path.name == "2026-10-03-wireguard-vs-openvpn-2.md"
     assert f.read_bytes() == before
+
+
+def test_points_empty_with_a_body_round_trips(tmp_path):
+    cfg = make_config(tmp_path)
+    note = make_note(points=[], body="Texto extraido.\n\n- una viñeta del articulo")
+    back = read_note(write_note(cfg, note, "es"))
+    assert back == note
+    assert back.points == []
+
+
+def test_a_body_with_an_inner_heading_round_trips(tmp_path):
+    cfg = make_config(tmp_path)
+    note = make_note(body="Intro\n\n## Deep dive\n\nmas texto")
+    back = read_note(write_note(cfg, note, "es"))
+    assert back.body == "Intro\n\n## Deep dive\n\nmas texto"
+    assert back == note
+
+
+def test_a_summary_with_a_heading_line_round_trips(tmp_path):
+    cfg = make_config(tmp_path)
+    note = make_note(summary="Primero.\n\n## Seccion\n\nSegundo.", body="Cuerpo.")
+    back = read_note(write_note(cfg, note, "es"))
+    assert back == note
+
+
+def test_body_bullets_are_not_points(tmp_path):
+    cfg = make_config(tmp_path)
+    note = make_note(points=["real"], body="- a\n- b")
+    back = read_note(write_note(cfg, note, "es"))
+    assert back.points == ["real"]
+    assert back.body == "- a\n- b"
+
+
+def test_english_headings_round_trip(tmp_path):
+    cfg = make_config(tmp_path)
+    note = make_note(body="Texto.")
+    assert read_note(write_note(cfg, note, "en")) == note
+
+
+def test_the_vault_root_itself_is_refused(tmp_path):
+    cfg = Config(vault=tmp_path / "vault")
+    cfg.vault.mkdir()
+    with pytest.raises(ProtectedNote):
+        write_note(cfg, make_note(), "es", path=cfg.root)
+    assert list(cfg.vault.iterdir()) == []
+
+
+def test_separators_in_saved_or_id_still_write_a_flat_file(tmp_path):
+    cfg = make_config(tmp_path)
+    note = make_note(saved="../../../pwned", id="a/b/../c", title="🔥")
+    path = write_note(cfg, note, "es")
+    assert path.parent == cfg.links_dir.resolve()
+    assert list(cfg.links_dir.iterdir()) == [path]
+    nested = write_note(cfg, make_note(saved="2026/10/03", id="z1"), "es")
+    assert nested.parent == cfg.links_dir.resolve()
+    assert not (cfg.links_dir / "2026").exists()
+
+
+def test_new_notes_honor_the_umask(tmp_path):
+    import os
+    old = os.umask(0o077)
+    try:
+        path = write_note(make_config(tmp_path), make_note(), "es")
+    finally:
+        os.umask(old)
+    assert path.stat().st_mode & 0o777 == 0o600
