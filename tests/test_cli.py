@@ -142,7 +142,7 @@ def test_reindex_reports_written_blocked_and_skipped(cfg, monkeypatch, capsys):
     monkeypatch.setattr("oknowledge.cli.rebuild_indexes", lambda config, language: result)
     assert main(["reindex"]) == 0
     out = capsys.readouterr()
-    assert "2 indexes" in out.out
+    assert "2 indexes rewritten" in out.out
     assert "Redes.md" in out.err and "not ours" in out.err
     assert "broken.md" in out.err and "could not be read" in out.err
 
@@ -199,3 +199,32 @@ def test_a_broken_config_keeps_its_own_message(tmp_path, capsys):
 def test_no_subcommand_prints_help(capsys):
     assert main([]) == 2
     assert "usage" in capsys.readouterr().err.lower()
+
+
+def test_counts_are_singular_when_there_is_one(cfg, monkeypatch, capsys):
+    monkeypatch.setattr("oknowledge.pipeline.extract", lambda url: PAGE)
+    main(["add", "https://arstechnica.com/vpn"])
+    capsys.readouterr()
+    main(["status"])
+    assert capsys.readouterr().out.startswith("1 note\n")
+    main(["reindex"])
+    out = capsys.readouterr().out
+    assert "1 index rewritten" in out
+
+
+def test_an_unreadable_config_is_a_message_not_a_traceback(tmp_path, capsys):
+    path = tmp_path / "config.toml"
+    path.write_text('vault = "/x"\n')
+    path.chmod(0)
+    try:
+        assert main(["--config", str(path), "status"]) == 2
+    finally:
+        path.chmod(0o600)
+    assert "cannot read the config file" in capsys.readouterr().err
+
+
+def test_a_directory_where_the_config_should_be_is_a_message(tmp_path, capsys):
+    path = tmp_path / "config.toml"
+    path.mkdir()
+    assert main(["--config", str(path), "status"]) == 2
+    assert "cannot read the config file" in capsys.readouterr().err

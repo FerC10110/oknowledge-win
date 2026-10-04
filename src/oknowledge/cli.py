@@ -69,6 +69,10 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _count(n: int, singular: str, plural: str) -> str:
+    return f"{n} {singular if n == 1 else plural}"
+
+
 def _warn(message: str) -> None:
     print(f"warning: {message}", file=sys.stderr)
 
@@ -100,7 +104,7 @@ def _status(cfg, args) -> int:
     if args.json:
         print(json.dumps([_entry_dict(e) for e in entries], ensure_ascii=False))
         return 0
-    print(f"{len(all_notes(cfg))} notes")
+    print(_count(len(all_notes(cfg)), "note", "notes"))
     # Only the entry's status says whether it needs attention: an `ok` entry can
     # carry the error of a re-analysis that was refused, with its note intact.
     for entry in entries:
@@ -114,7 +118,7 @@ def _status(cfg, args) -> int:
 
 def _reindex(cfg) -> int:
     result = rebuild_indexes(cfg, cfg.language)
-    print(f"{len(result.written)} indexes rewritten")
+    print(f"{_count(len(result.written), 'index', 'indexes')} rewritten")
     for path in result.blocked:
         print(f"not written: {path} is a file that is not ours, so it was left alone; "
               "rename or move it to get this index", file=sys.stderr)
@@ -150,6 +154,10 @@ def main(argv: list[str] | None = None) -> int:
     except ConfigError as error:
         message = NO_CONFIG.format(path=args.config) if not args.config.exists() else error
         print(f"oknowledge: {message}", file=sys.stderr)
+        return 2
+    except OSError as error:
+        # The file is there but cannot be read: permissions, or a directory.
+        print(f"oknowledge: cannot read the config file: {error}", file=sys.stderr)
         return 2
 
     try:
