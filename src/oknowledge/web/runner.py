@@ -12,15 +12,20 @@ background work attached to one, is still going.
 
 from __future__ import annotations
 
+import logging
 import signal
+import sys
 import threading
 import time
 import webbrowser
+from threading import Thread
 
 import uvicorn
 
 from ..config import Config, PortUnavailable
 from .app import create_app
+
+log = logging.getLogger(__name__)
 
 # How often the watchdog looks at the timer. Shutdown can be this late.
 CHECK_EVERY = 5.0
@@ -106,10 +111,31 @@ def watch(server, timer: IdleTimer, interval: float = CHECK_EVERY, sleep=time.sl
     """Ask the server to stop once the timer says so."""
     # A plain thread rather than an asyncio task: it needs no hook into the
     # app's lifecycle, which modern FastAPI no longer offers through on_event.
-    while not server.should_exit:
-        sleep(interval)
-        if timer.expired():
-            server.should_exit = True
+    try:
+        while not server.should_exit:
+            sleep(interval)
+            if timer.expired():
+                server.should_exit = True
+    except Exception:
+        # Dying silently would leave the server up with nobody to say why.
+        # Up is the safe side to fail on, so the server is left running.
+        log.exception("the idle watchdog failed; the server will not stop by itself")
+
+
+def announce(server, url: str, open_browser: bool, opener=webbrowser.open,
+             sleep=time.sleep, out=sys.stderr) -> None:
+    """Say where the library is, and open it, once the server is really up.
+
+    Decided on `server.started` (set only after the bind) rather than on a
+    delay, so a port that is taken produces neither a URL nor a browser tab.
+    """
+    while not server.started:
+        if server.should_exit:
+            return
+        sleep(0.05)
+    print(f"oknowledge: the library is at {url}", file=out)
+    if open_browser:
+        opener(url)
 
 
 def _terminate_like_ctrl_c(signum, frame):
@@ -122,18 +148,16 @@ def serve(cfg: Config, open_browser: bool = False) -> None:
         build_app(cfg, timer), host="127.0.0.1", port=cfg.port, log_level="warning",
     ))
 
-    threading.Thread(target=watch, args=(server, timer), daemon=True).start()
-
-    if open_browser:
-        opener = threading.Timer(0.8, webbrowser.open, [f"http://127.0.0.1:{cfg.port}/"])
-        opener.daemon = True
-        opener.start()
+    if cfg.idle_timeout > 0:               # 0 means never: nothing to watch
+        Thread(target=watch, args=(server, timer), daemon=True).start()
+    Thread(target=announce, args=(server, f"http://127.0.0.1:{cfg.port}/", open_browser),
+           daemon=True).start()
 
     # uvicorn finishes its graceful shutdown and then re-raises the signal it
     # caught; with the default handlers that is a traceback for Ctrl-C and an
     # abrupt kill for SIGTERM. Both mean "stop", so both end the same way.
-    previous = None
-    if threading.current_thread() is threading.main_thread():
+    installed = threading.current_thread() is threading.main_thread()
+    if installed:
         previous = signal.signal(signal.SIGTERM, _terminate_like_ctrl_c)
     interrupted = False
     try:
@@ -143,9 +167,10 @@ def serve(cfg: Config, open_browser: bool = False) -> None:
     except SystemExit:
         pass            # uvicorn's way of saying it could not bind; checked below
     finally:
-        server.should_exit = True          # lets the watchdog thread end
-        if previous is not None:
+        server.should_exit = True          # lets the helper threads end
+        if installed:
             signal.signal(signal.SIGTERM, previous)
     if not server.started and not interrupted:
-        raise PortUnavailable(f"could not listen on 127.0.0.1:{cfg.port}; "
-                              "is another copy already running?")
+        raise PortUnavailable(f"could not listen on 127.0.0.1:{cfg.port}. "
+                              "Is another copy already running? "
+                              "Otherwise set another web.port in the config.")

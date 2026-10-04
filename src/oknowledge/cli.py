@@ -232,7 +232,7 @@ def main(argv: list[str] | None = None) -> int:
             serve(cfg, args.open)
             return 0
     except PortUnavailable as error:
-        print(f"oknowledge: {error}; change web.port in the config if it is taken",
+        print(f"oknowledge: {error}",
               file=sys.stderr)
         return 2
     except ProtectedNote as error:

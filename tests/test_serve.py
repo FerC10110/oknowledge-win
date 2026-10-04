@@ -6,6 +6,7 @@ timer test drives an injected clock; nothing here sleeps.
 """
 
 import asyncio
+import io
 import signal
 
 import pytest
@@ -16,7 +17,7 @@ from oknowledge.config import Config
 from oknowledge.model import Note
 from oknowledge.vault import rebuild_indexes, write_note
 from oknowledge.web import runner
-from oknowledge.web.runner import IdleTimer, TrackActivity, build_app, watch
+from oknowledge.web.runner import IdleTimer, TrackActivity, announce, build_app, watch
 
 FAR = 10_000_000.0
 
@@ -213,6 +214,7 @@ def test_the_watchdog_stops_the_server_once_the_timer_expires():
 
     def sleep(seconds):
         naps.append(seconds)
+        assert len(naps) <= 10, "the watchdog never stopped the server"
         clock.t += 400.0
 
     watch(server, timer, interval=5.0, sleep=sleep)
@@ -258,21 +260,38 @@ class StubServer:
         self.config = config
         self.should_exit = False
         self.started = True
-        self.behaviour = lambda server: None
         StubServer.instances.append(self)
 
     def run(self):
         StubServer.behaviour(self)
 
 
+class RecordedThread:
+    """Stands in for runner.Thread: remembers what it was asked to run."""
+    made = []
+
+    def __init__(self, target=None, args=(), daemon=None, **kwargs):
+        self.target, self.args, self.daemon = target, args, daemon
+        RecordedThread.made.append(self)
+
+    def start(self):
+        self.started = True
+
+
 @pytest.fixture
 def stub_uvicorn(monkeypatch):
     StubServer.instances = []
     StubServer.behaviour = staticmethod(lambda server: None)
+    RecordedThread.made = []
     monkeypatch.setattr(runner.uvicorn, "Server", StubServer)
-    monkeypatch.setattr(runner.threading, "Thread",
-                        lambda **kw: type("T", (), {"start": lambda self: None})())
+    # The runner's own reference, not the stdlib module: TestClient and anyio
+    # start threads of their own.
+    monkeypatch.setattr(runner, "Thread", RecordedThread)
     return StubServer
+
+
+def watchdogs():
+    return [t for t in RecordedThread.made if t.target is runner.watch]
 
 
 def test_serve_listens_on_localhost_only_at_the_configured_port(vault_cfg, stub_uvicorn):
@@ -281,22 +300,92 @@ def test_serve_listens_on_localhost_only_at_the_configured_port(vault_cfg, stub_
     assert (config.host, config.port) == ("127.0.0.1", 9123)
 
 
-def test_serve_opens_the_browser_only_when_asked(vault_cfg, stub_uvicorn, monkeypatch):
-    opened = []
+def test_serve_starts_a_watchdog_on_the_server_with_the_configured_window(vault_cfg, stub_uvicorn):
+    cfg = Config(vault=vault_cfg.vault, port=9123, idle_timeout=321)
+    runner.serve(cfg)
+    (dog,) = watchdogs()
+    server, timer = dog.args
+    assert server is stub_uvicorn.instances[0]
+    assert timer.seconds == 321
+    assert dog.daemon is True and dog.started is True
 
-    class FakeTimer:
-        def __init__(self, delay, function, args):
-            self.args = args
-            self.daemon = False
 
-        def start(self):
-            opened.append(self.args)
+def test_the_timer_the_watchdog_reads_is_the_one_the_app_feeds(vault_cfg, stub_uvicorn):
+    runner.serve(vault_cfg)
+    (dog,) = watchdogs()
+    app = stub_uvicorn.instances[0].config.app
+    layer = app.middleware_stack if app.middleware_stack else app.build_middleware_stack()
+    while layer is not None and not isinstance(layer, TrackActivity):
+        layer = getattr(layer, "app", None)
+    assert layer is not None and layer.timer is dog.args[1]
 
-    monkeypatch.setattr(runner.threading, "Timer", FakeTimer)
-    runner.serve(vault_cfg, open_browser=False)
+
+def test_never_shutting_down_starts_no_watchdog(vault_cfg, stub_uvicorn):
+    runner.serve(Config(vault=vault_cfg.vault, port=9123, idle_timeout=0))
+    assert watchdogs() == []
+
+
+def test_a_watchdog_that_fails_is_logged_and_leaves_the_server_up(caplog):
+    class Broken(IdleTimer):
+        def expired(self, when=None):
+            raise RuntimeError("clock exploded")
+
+    server = FakeServer()
+    watch(server, Broken(seconds=900), sleep=lambda s: None)
+    assert server.should_exit is False
+    assert "clock exploded" in caplog.text
+
+
+# --- telling the user where it is, and opening it ---------------------------
+
+class Booting:
+    """A server that comes up after a few polls, or is told to stop first."""
+
+    def __init__(self, up_after=None, stop_after=None):
+        self.started, self.should_exit = False, False
+        self.up_after, self.stop_after, self.polls = up_after, stop_after, 0
+
+    def sleep(self, seconds):
+        self.polls += 1
+        if self.up_after is not None and self.polls >= self.up_after:
+            self.started = True
+        if self.stop_after is not None and self.polls >= self.stop_after:
+            self.should_exit = True
+
+
+def run_announce(server, open_browser):
+    opened, out = [], io.StringIO()
+    announce(server, "http://127.0.0.1:9123/", open_browser, opener=opened.append,
+             sleep=server.sleep, out=out)
+    return opened, out.getvalue()
+
+
+def test_the_url_is_printed_once_the_server_is_up():
+    opened, out = run_announce(Booting(up_after=3), open_browser=False)
+    assert "http://127.0.0.1:9123/" in out
     assert opened == []
+
+
+def test_the_browser_opens_only_after_the_server_is_up():
+    server = Booting(up_after=3)
+    opened = []
+    announce(server, "u", True, opener=lambda url: opened.append((url, server.started)),
+             sleep=server.sleep, out=io.StringIO())
+    assert opened == [("u", True)]
+
+
+def test_a_server_that_never_came_up_gets_neither_a_url_nor_a_browser():
+    """A taken port: should_exit is set by serve()'s finally, started never is."""
+    opened, out = run_announce(Booting(stop_after=2), open_browser=True)
+    assert opened == [] and out == ""
+
+
+def test_serve_announces_through_a_helper_thread_that_cannot_hold_the_process(vault_cfg, stub_uvicorn):
     runner.serve(vault_cfg, open_browser=True)
-    assert opened == [["http://127.0.0.1:9123/"]]
+    (helper,) = [t for t in RecordedThread.made if t.target is runner.announce]
+    server, url, flag = helper.args
+    assert (server, url, flag) == (stub_uvicorn.instances[0], "http://127.0.0.1:9123/", True)
+    assert helper.daemon is True
 
 
 def test_ctrl_c_ends_serve_quietly(vault_cfg, stub_uvicorn):
@@ -307,11 +396,19 @@ def test_ctrl_c_ends_serve_quietly(vault_cfg, stub_uvicorn):
     runner.serve(vault_cfg)                      # no exception
 
 
-def test_sigterm_ends_serve_quietly_and_the_old_handler_comes_back(vault_cfg, stub_uvicorn):
+def test_sigterm_during_the_run_stops_it_like_ctrl_c(vault_cfg, stub_uvicorn):
+    reached = []
+
     def terminate(server):
         signal.raise_signal(signal.SIGTERM)
+        reached.append("still running")          # must be unreachable
 
     stub_uvicorn.behaviour = staticmethod(terminate)
+    runner.serve(vault_cfg)
+    assert reached == []
+
+
+def test_sigterm_handler_is_put_back_afterwards(vault_cfg, stub_uvicorn):
     def mine(signum, frame):
         pass
 
@@ -329,7 +426,7 @@ def test_a_port_that_is_taken_is_reported_not_swallowed(vault_cfg, stub_uvicorn)
         raise SystemExit(1)                      # what uvicorn does when it cannot bind
 
     stub_uvicorn.behaviour = staticmethod(refuse)
-    with pytest.raises(runner.PortUnavailable):
+    with pytest.raises(runner.PortUnavailable, match=r"9123.*web\.port"):
         runner.serve(vault_cfg)
 
 
@@ -373,12 +470,12 @@ def test_a_taken_port_is_exit_2_with_a_hint(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr("oknowledge.cli.load_config", lambda path=None: cfg)
 
     def taken(config, open_browser):
-        raise runner.PortUnavailable("could not listen on 127.0.0.1:9123")
+        raise runner.PortUnavailable("could not listen on 127.0.0.1:9123. Set another web.port.")
 
     monkeypatch.setattr(runner, "serve", taken)
     assert main(["serve"]) == 2
     err = capsys.readouterr().err
-    assert "9123" in err and "web.port" in err and "Traceback" not in err
+    assert err == "oknowledge: could not listen on 127.0.0.1:9123. Set another web.port.\n"
 
 
 def test_a_bad_config_is_exit_2_and_never_starts_a_server(tmp_path, monkeypatch, capsys):
