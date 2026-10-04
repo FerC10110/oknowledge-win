@@ -270,11 +270,12 @@ class RebuildResult:
 
 def _claims_marker(path: Path) -> bool:
     """True if the file's frontmatter text carries an `oknowledge:` key, even if
-    the rest is too broken to parse. Lets a reindex tell a note of ours that the
+    the rest is too broken to parse. Raises OSError if the file cannot be read
+    at all (the caller reports it). Lets a reindex tell a note of ours that the
     user hand-broke from a file that was never ours."""
     try:
         text = path.read_text(encoding="utf-8")
-    except (OSError, UnicodeDecodeError):
+    except UnicodeDecodeError:
         return False
     if not text.startswith("---\n"):
         return False
@@ -295,7 +296,13 @@ def _scan(cfg: Config) -> tuple[list[tuple[Path, Note]], list[Path]]:
             continue
         front = read_front(path)
         is_index = front is not None and front.get("kind") == "index"
-        if not is_index and _claims_marker(path):
+        if is_index:
+            continue
+        try:
+            if _claims_marker(path):
+                skipped.append(path)
+        except OSError:
+            # Cannot tell whether it is ours, but we failed to index it: say so.
             skipped.append(path)
     return found, skipped
 
@@ -325,20 +332,32 @@ def index_path(cfg: Config, category: str) -> Path:
     return cfg.root / f"{name}.md"
 
 
-def write_index(cfg: Config, category: str, notes: list[Note]) -> Path:
-    ordered = sorted(notes, key=lambda n: (n.saved, n.title), reverse=True)
+def _plain(text: str) -> str:
+    """One line, no whitespace runs."""
+    return " ".join(text.split())
+
+
+def write_index(cfg: Config, category: str, entries: list[tuple[Path, Note]]) -> Path:
+    """Write the index for one category. `entries` are (real path on disk, note)
+    pairs, so every wikilink names the file that actually exists."""
+    ordered = sorted(entries, key=lambda e: (e[1].saved, e[1].title, e[0].name), reverse=True)
 
     front = yaml.safe_dump(
         {MARKER: MARKER_VERSION, "kind": "index", "category": category},
         sort_keys=False, allow_unicode=True,
     ).strip()
 
-    lines = [f"---\n{front}\n---\n", f"# {category} · {len(ordered)} links\n", f"{INDEX_NOTICE}\n"]
-    for note in ordered:
-        stem = note_path(cfg, note).stem
-        tags = " ".join(f"#{t}" for t in note.tags)
+    count = f"{len(ordered)} link" + ("" if len(ordered) == 1 else "s")
+    lines = [f"---\n{front}\n---\n", f"# {_plain(category)} · {count}\n", f"{INDEX_NOTICE}\n"]
+    for path, note in ordered:
+        label = _plain(re.sub(r"[|\[\]]", " ", note.title))
+        line = f"- [[{path.stem}|{label}]]"
         head = note.summary.strip().splitlines()[0] if note.summary.strip() else ""
-        lines.append(f"- [[{stem}|{note.title}]]\n  `{tags}` — {head}")
+        tags = " ".join(f"#{t}" for t in note.tags)
+        detail = " — ".join(part for part in (f"`{tags}`" if tags else "", head) if part)
+        if detail:
+            line += f"\n  {detail}"
+        lines.append(line)
 
     target = index_path(cfg, category)
     resolved = _ensure_inside_root(cfg, target)
@@ -358,20 +377,28 @@ def rebuild_indexes(cfg: Config) -> RebuildResult:
     for either.
     """
     found, skipped = _scan(cfg)
-    grouped: dict[str, list[Note]] = {}
-    for _, note in found:
-        grouped.setdefault(note.category, []).append(note)
+    grouped: dict[str, list[tuple[Path, Note]]] = {}
+    for path, note in found:
+        grouped.setdefault(note.category, []).append((path, note))
 
     written: list[Path] = []
     blocked: list[Path] = []
-    for category, notes in sorted(grouped.items()):
+    claimed: set[Path] = set()
+    for category, entries in sorted(grouped.items()):
+        target = index_path(cfg, category)
+        if target in claimed:
+            # Two categories sanitize to the same file name. The first in sorted
+            # order wins, so the winner is stable across rebuilds.
+            blocked.append(target)
+            continue
+        claimed.add(target)
         try:
-            written.append(write_index(cfg, category, notes))
+            written.append(write_index(cfg, category, entries))
         except ProtectedNote:
             # One category in the way must not stop the others from updating.
-            blocked.append(index_path(cfg, category))
+            blocked.append(target)
 
-    keep = {p.name for p in written}
+    keep = {p.name for p in claimed}
     if cfg.root.is_dir():
         for path in cfg.root.glob("*.md"):
             front = read_front(path)

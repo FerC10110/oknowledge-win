@@ -1,4 +1,6 @@
 
+import os
+
 import pytest
 
 from oknowledge.config import Config
@@ -139,7 +141,7 @@ def test_a_hand_broken_note_of_ours_is_reported_as_skipped(tmp_path):
 
     assert result.skipped == [broken]
     assert result.written == [index_path(cfg, "Redes")]
-    assert "# Redes · 1 links" in index_path(cfg, "Redes").read_text(encoding="utf-8")
+    assert "# Redes · 1 link\n" in index_path(cfg, "Redes").read_text(encoding="utf-8")
     assert broken.read_text(encoding="utf-8") == broken_text
 
 
@@ -170,7 +172,7 @@ def test_write_index_itself_still_refuses_an_unmarked_file(tmp_path):
     cfg = make_config(tmp_path)
     (cfg.root / "Redes.md").write_text("# mine\n", encoding="utf-8")
     with pytest.raises(ProtectedNote):
-        write_index(cfg, "Redes", [note("a1", "WireGuard", "Redes")])
+        write_index(cfg, "Redes", [(cfg.links_dir / "x.md", note("a1", "WireGuard", "Redes"))])
 
 
 def test_a_clean_rebuild_blocks_nothing(tmp_path):
@@ -187,6 +189,115 @@ def test_an_index_symlinked_outside_the_folder_is_not_written(tmp_path):
     index_path(cfg, "Redes").symlink_to(outside)
 
     with pytest.raises(ProtectedNote):
-        write_index(cfg, "Redes", [note("a1", "WireGuard", "Redes")])
+        write_index(cfg, "Redes", [(cfg.links_dir / "x.md", note("a1", "WireGuard", "Redes"))])
 
     assert outside.read_text(encoding="utf-8").endswith("keep\n")
+
+
+def test_two_categories_with_one_slug_write_the_first_and_block_the_other(tmp_path):
+    cfg = make_config(tmp_path)
+    write_note(cfg, note("a1", "Uno", "IA-LLMs"), "es")
+    write_note(cfg, note("b2", "Dos", "IA/LLMs"), "es")
+
+    first = rebuild_indexes(cfg)
+    text = index_path(cfg, "IA-LLMs").read_text(encoding="utf-8")
+    second = rebuild_indexes(cfg)
+
+    assert index_path(cfg, "IA-LLMs") == index_path(cfg, "IA/LLMs")
+    assert first.written == [index_path(cfg, "IA-LLMs")]
+    assert first.blocked == [index_path(cfg, "IA/LLMs")]
+    assert "Uno" in text and "Dos" not in text
+    assert index_path(cfg, "IA-LLMs").read_text(encoding="utf-8") == text
+    assert second.blocked == first.blocked
+
+
+def test_the_index_links_to_the_real_filename_after_a_rename(tmp_path):
+    cfg = make_config(tmp_path)
+    path = write_note(cfg, note("a1", "WireGuard", "Redes"), "es")
+    renamed = path.rename(path.with_name("mi-nombre.md"))
+
+    rebuild_indexes(cfg)
+
+    text = index_path(cfg, "Redes").read_text(encoding="utf-8")
+    assert f"[[{renamed.stem}|WireGuard]]" in text
+
+
+def test_a_hand_edited_title_keeps_the_link_and_shows_the_new_title(tmp_path):
+    cfg = make_config(tmp_path)
+    path = write_note(cfg, note("a1", "WireGuard", "Redes"), "es")
+    path.write_text(path.read_text(encoding="utf-8").replace("title: WireGuard", "title: VPN moderna"),
+                    encoding="utf-8")
+
+    rebuild_indexes(cfg)
+
+    text = index_path(cfg, "Redes").read_text(encoding="utf-8")
+    assert f"[[{path.stem}|VPN moderna]]" in text
+
+
+def test_duplicate_ids_each_link_to_their_own_file(tmp_path):
+    cfg = make_config(tmp_path)
+    p1 = write_note(cfg, note("a1", "WireGuard", "Redes"), "es")
+    p2 = cfg.links_dir / "copia.md"
+    p2.write_bytes(p1.read_bytes())
+
+    rebuild_indexes(cfg)
+
+    text = index_path(cfg, "Redes").read_text(encoding="utf-8")
+    assert f"[[{p1.stem}|" in text and "[[copia|" in text
+
+
+def test_pipes_and_brackets_in_a_title_do_not_break_the_wikilink(tmp_path):
+    cfg = make_config(tmp_path)
+    path = write_note(cfg, note("a1", "WireGuard vs OpenVPN | Ars [Technica]", "Redes"), "es")
+
+    rebuild_indexes(cfg)
+
+    text = index_path(cfg, "Redes").read_text(encoding="utf-8")
+    assert f"[[{path.stem}|WireGuard vs OpenVPN Ars Technica]]" in text
+
+
+def test_a_newline_in_a_category_does_not_break_the_heading(tmp_path):
+    cfg = make_config(tmp_path)
+    write_note(cfg, note("a1", "Algo", "Redes\nOtra"), "es")
+    rebuild_indexes(cfg)
+    assert "# Redes Otra · 1 link\n" in index_path(cfg, "Redes\nOtra").read_text(encoding="utf-8")
+
+
+def test_the_heading_is_singular_for_one_link_and_no_empty_backticks(tmp_path):
+    cfg = make_config(tmp_path)
+    write_note(cfg, note("a1", "Algo", "Redes", tags=()), "es")
+    rebuild_indexes(cfg)
+    text = index_path(cfg, "Redes").read_text(encoding="utf-8")
+    assert "# Redes · 1 link\n" in text
+    assert "``" not in text
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="chmod 000 does not bite as root")
+def test_a_note_that_cannot_be_read_is_reported_and_keeps_the_other_indexes(tmp_path):
+    cfg = make_config(tmp_path)
+    locked = write_note(cfg, note("a1", "WireGuard", "Redes"), "es")
+    write_note(cfg, note("b2", "Masa madre", "Cocina"), "es")
+    locked.chmod(0o000)
+    try:
+        result = rebuild_indexes(cfg)
+    finally:
+        locked.chmod(0o644)
+    assert result.skipped == [locked]
+    assert index_path(cfg, "Cocina").exists()
+
+
+def test_an_escaping_symlink_reaches_blocked_in_a_rebuild(tmp_path):
+    cfg = make_config(tmp_path)
+    outside = tmp_path / "elsewhere.md"
+    outside.write_text("---\noknowledge: 1\nkind: index\n---\nkeep\n", encoding="utf-8")
+    link = index_path(cfg, "Redes")
+    link.symlink_to(outside)
+    write_note(cfg, note("a1", "WireGuard", "Redes"), "es")
+    write_note(cfg, note("b2", "Masa madre", "Cocina"), "es")
+
+    result = rebuild_indexes(cfg)
+
+    assert result.blocked == [link]
+    assert index_path(cfg, "Cocina").exists()
+    assert outside.read_text(encoding="utf-8").endswith("keep\n")
+    assert link.is_symlink()
