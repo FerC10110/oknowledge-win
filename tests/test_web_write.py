@@ -63,6 +63,13 @@ class Recorder:
         await self.app(scope, receive, watched)
 
 
+@pytest.fixture(autouse=True)
+def state_tree(tmp_path, monkeypatch):
+    """Every test in this file, whether or not it uses `setup`: an edit takes
+    the real queue lock, which creates a file under XDG_STATE_HOME."""
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
+
+
 @pytest.fixture
 def config_path(tmp_path, monkeypatch):
     """Nothing here may touch the real ~/.config/oknowledge/config.toml."""
@@ -84,6 +91,13 @@ def setup(tmp_path, config_path, monkeypatch):
     write_note(cfg, note("b2", "Masa madre", "Cocina"), "es")
     rebuild_indexes(cfg, "es")
     return cfg, TestClient(create_app(cfg))
+
+
+def test_no_test_in_this_file_can_reach_the_real_state_directory(tmp_path):
+    """Asked of a test that uses no fixture of ours: the pin is module-wide."""
+    from oknowledge.queue import state_dir
+
+    assert state_dir().is_relative_to(tmp_path)
 
 
 def test_the_state_directory_is_under_tmp_path(setup, tmp_path):
