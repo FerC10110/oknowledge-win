@@ -19,6 +19,17 @@ ENDPOINTS = {
 }
 
 
+def _server_message(response) -> str:
+    """The server's own explanation, if it sent one (never the request headers)."""
+    try:
+        error = response.json().get("error", "")
+    except Exception:
+        return ""
+    if isinstance(error, dict):
+        error = error.get("message", "")
+    return str(error).strip()[:300]
+
+
 class ApiEngine:
     name = "api"
 
@@ -41,6 +52,10 @@ class ApiEngine:
             raise EngineError(f"no API key: set {self.key_env or 'ai.api.key'}")
         return secret
 
+    @staticmethod
+    def _redact(text: str, secret: str) -> str:
+        return text.replace(secret, "***")
+
     def complete(self, prompt: str) -> str:
         secret = self._secret()
         messages = [{"role": "user", "content": prompt}]
@@ -52,18 +67,26 @@ class ApiEngine:
             body = {"model": self.model, "messages": messages}
         try:
             response = httpx.post(self.url, headers=headers, json=body, timeout=self.timeout)
-            response.raise_for_status()
+            if response.status_code >= 400:
+                raise EngineError(
+                    f"{self.provider} failed: "
+                    f"{self._redact(_server_message(response), secret) or f'HTTP {response.status_code}'}"
+                )
             data = response.json()
             if self.provider == "anthropic":
                 text = data["content"][0]["text"]
             else:
                 text = data["choices"][0]["message"]["content"]
+        except EngineError:
+            raise
         except httpx.TimeoutException as error:
             raise EngineError(f"{self.provider} timed out after {self.timeout}s") from error
         except (KeyError, IndexError, TypeError, ValueError) as error:
             raise EngineError(f"{self.provider} sent an unexpected reply: {error!r}") from error
         except Exception as error:
-            raise EngineError(f"{self.provider} failed: {error}") from error
+            raise EngineError(
+                f"{self.provider} failed: {self._redact(str(error), secret)}"
+            ) from error
         if not isinstance(text, str) or not text.strip():
             raise EngineError(f"{self.provider} sent an unexpected reply: no text")
         return text

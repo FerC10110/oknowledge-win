@@ -24,13 +24,18 @@ class OpenCodeEngine:
         argv = [self.binary, "run", "--pure", "-m", self.model, prompt]
         try:
             with tempfile.TemporaryDirectory() as cwd:
+                # stdin must be closed: opencode blocks on an open non-TTY pipe.
+                # stdout only is the answer; its header and ANSI codes go to stderr.
                 proc = subprocess.run(
                     argv, cwd=cwd, capture_output=True, text=True, timeout=self.timeout,
+                    stdin=subprocess.DEVNULL,
                 )
         except FileNotFoundError as error:
             raise EngineError(f"opencode is not installed (no '{self.binary}' on PATH): {error}") from error
         except subprocess.TimeoutExpired as error:
             raise EngineError(f"opencode timed out after {self.timeout}s") from error
+        except OSError as error:
+            raise EngineError(f"opencode could not be run: {error}") from error
         if proc.returncode != 0:
             raise EngineError(f"opencode failed: {proc.stderr.strip()[:300]}")
         if not proc.stdout.strip():

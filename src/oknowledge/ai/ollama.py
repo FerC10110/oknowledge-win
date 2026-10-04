@@ -5,6 +5,7 @@ from __future__ import annotations
 import shutil
 import subprocess
 import time
+from urllib.parse import urlparse
 
 import httpx
 
@@ -12,6 +13,7 @@ from .base import EngineError
 
 
 UNIT = "ollama.service"
+LOCAL_HOSTS = ("localhost", "127.0.0.1", "::1")
 
 
 def _answers(url: str) -> bool:
@@ -27,7 +29,7 @@ def _systemctl(*args: str, user: bool = True):
     argv = ["systemctl", *(["--user"] if user else []), *args]
     try:
         return subprocess.run(argv, capture_output=True, text=True, timeout=15)
-    except (FileNotFoundError, subprocess.TimeoutExpired):
+    except (OSError, subprocess.TimeoutExpired):
         return None
 
 
@@ -46,6 +48,10 @@ def ensure_running(url: str, timeout: float = 15.0) -> None:
     """
     if _answers(url):
         return
+    if urlparse(url).hostname not in LOCAL_HOSTS:
+        raise EngineError(
+            f"ollama is not answering at {url}; that URL is remote, so nothing was started"
+        )
     by_hand = "start it with `systemctl --user start ollama` or `ollama serve`"
     if _has_unit(user=True):
         started = _systemctl("start", UNIT)
@@ -61,10 +67,13 @@ def ensure_running(url: str, timeout: float = 15.0) -> None:
     else:
         if not shutil.which("ollama"):
             raise EngineError("ollama is not installed")
-        subprocess.Popen(
-            ["ollama", "serve"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-            start_new_session=True,
-        )
+        try:
+            subprocess.Popen(
+                ["ollama", "serve"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                start_new_session=True,
+            )
+        except OSError as error:
+            raise EngineError(f"ollama could not be started: {error}; {by_hand}") from error
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         if _answers(url):

@@ -29,6 +29,8 @@ def test_opencode_runs_in_an_empty_directory_and_without_plugins(monkeypatch):
     def fake_run(argv, **kwargs):
         seen["argv"] = argv
         seen["cwd"] = kwargs["cwd"]
+        assert kwargs["stdin"] is subprocess.DEVNULL
+        assert "stderr" not in kwargs or kwargs["stderr"] != subprocess.STDOUT
         seen["cwd_was_empty"] = not list(__import__("pathlib").Path(kwargs["cwd"]).iterdir())
         return type("P", (), {"returncode": 0, "stdout": GOOD, "stderr": ""})()
 
@@ -183,8 +185,12 @@ def test_the_api_engine_sends_the_key_from_the_environment(monkeypatch):
     out = ApiEngine(provider="anthropic", model="claude-sonnet-5", key_env="MY_KEY").complete("hola")
 
     assert out == GOOD
-    assert seen["headers"]["x-api-key"] == "sk-secret"
-    assert "anthropic" in seen["url"]
+    assert seen["url"] == "https://api.anthropic.com/v1/messages"
+    assert seen["headers"] == {"x-api-key": "sk-secret", "anthropic-version": "2023-06-01"}
+    assert seen["body"] == {
+        "model": "claude-sonnet-5", "max_tokens": 2000,
+        "messages": [{"role": "user", "content": "hola"}],
+    }
     assert seen["timeout"]
 
 
@@ -221,11 +227,73 @@ def test_the_api_engine_speaks_the_openai_shape(monkeypatch):
     seen = {}
     monkeypatch.setenv("MY_KEY", "sk-secret")
     monkeypatch.setattr("httpx.post", lambda url, headers=None, json=None, timeout=None:
-                        seen.update(headers=headers) or Response(
+                        seen.update(url=url, headers=headers, body=json) or Response(
                             {"choices": [{"message": {"content": GOOD}}]}))
-    out = ApiEngine(provider="openai", model="m", key_env="MY_KEY").complete("hola")
+    out = ApiEngine(provider="openai", model="gpt-x", key_env="MY_KEY").complete("hola")
     assert out == GOOD
-    assert seen["headers"]["Authorization"] == "Bearer sk-secret"
+    assert seen["url"] == "https://api.openai.com/v1/chat/completions"
+    assert seen["headers"] == {"Authorization": "Bearer sk-secret"}
+    assert seen["body"] == {"model": "gpt-x", "messages": [{"role": "user", "content": "hola"}]}
+
+
+def test_the_api_engine_surfaces_the_servers_error_without_the_key(monkeypatch):
+    monkeypatch.setenv("MY_KEY", "sk-secret")
+    monkeypatch.setattr(
+        "httpx.post",
+        lambda url, headers=None, json=None, timeout=None: Response(
+            {"error": {"type": "authentication_error", "message": "invalid x-api-key sk-secret"}},
+            status=401),
+    )
+    with pytest.raises(EngineError) as error:
+        ApiEngine(provider="anthropic", model="m", key_env="MY_KEY").complete("hola")
+    assert "invalid x-api-key" in str(error.value)
+    assert "sk-secret" not in str(error.value)
+
+
+def test_opencode_answer_is_stdout_only_without_the_terminal_chrome(monkeypatch):
+    chrome = "\x1b[0m\n> build · ling-3.1-flash-free\n\x1b[0m"
+    monkeypatch.setattr(
+        "subprocess.run",
+        lambda argv, **kw: type("P", (), {"returncode": 0, "stdout": GOOD, "stderr": chrome})(),
+    )
+    out = OpenCodeEngine(model="m").complete("hola")
+    assert out == GOOD
+    assert "\x1b" not in out and "build" not in out
+
+
+def test_opencode_permission_error_is_an_engine_error(monkeypatch):
+    def denied(argv, **kw):
+        raise PermissionError(13, "Permission denied")
+
+    monkeypatch.setattr("subprocess.run", denied)
+    with pytest.raises(EngineError, match="opencode could not be run.*Permission denied"):
+        OpenCodeEngine(model="m").complete("hola")
+
+
+def test_opencode_argument_too_long_is_an_engine_error(monkeypatch):
+    def too_long(argv, **kw):
+        raise OSError(7, "Argument list too long")
+
+    monkeypatch.setattr("subprocess.run", too_long)
+    with pytest.raises(EngineError, match="Argument list too long"):
+        OpenCodeEngine(model="m").complete("x")
+
+
+def test_an_unknown_engine_in_the_chain_falls_through(tmp_path, monkeypatch):
+    from oknowledge.ai.fake import FakeEngine
+
+    real = build_engine
+    monkeypatch.setattr(
+        "oknowledge.ai.build_engine",
+        lambda name, cfg: FakeEngine([GOOD]) if name == "ollama" else real(name, cfg),
+    )
+    analysis, used = analyze_with_chain(make_config(tmp_path, ["gpt5", "ollama"]), "t", META, [])
+    assert used == "ollama"
+
+
+def test_an_unknown_engine_alone_fails_naming_it(tmp_path):
+    with pytest.raises(AllEnginesFailed, match="gpt5"):
+        analyze_with_chain(make_config(tmp_path, ["gpt5"]), "t", META, [])
 
 
 def test_the_chain_falls_through_to_the_next_engine(tmp_path, monkeypatch):
@@ -439,3 +507,39 @@ def test_ensure_running_without_unit_or_binary_is_an_engine_error(monkeypatch):
     with pytest.raises(EngineError, match="ollama is not installed"):
         ensure_running("http://localhost:11434")
     assert host.spawned == []
+
+
+def test_without_systemctl_a_missing_unit_means_the_detached_spawn(monkeypatch):
+    from oknowledge.ai.ollama import ensure_running
+
+    host = Host(monkeypatch, up_after=2)
+
+    def no_systemctl(argv, **kw):
+        host.calls.append(argv)
+        raise FileNotFoundError(2, "No such file or directory", "systemctl")
+
+    monkeypatch.setattr("subprocess.run", no_systemctl)
+    ensure_running("http://localhost:11434")
+    assert [argv for argv, _ in host.spawned] == [["ollama", "serve"]]
+
+
+def test_a_remote_ollama_url_never_starts_a_local_server(monkeypatch):
+    from oknowledge.ai.ollama import ensure_running
+
+    host = Host(monkeypatch, up_after=None)
+    with pytest.raises(EngineError, match="remote.*nothing was started"):
+        ensure_running("http://gpu-box:11434")
+    assert host.calls == [] and host.spawned == []
+
+
+def test_a_failing_spawn_is_an_engine_error(monkeypatch):
+    from oknowledge.ai.ollama import ensure_running
+
+    Host(monkeypatch)
+
+    def denied(argv, **kw):
+        raise PermissionError(13, "Permission denied")
+
+    monkeypatch.setattr("subprocess.Popen", denied)
+    with pytest.raises(EngineError, match="could not be started.*Permission denied"):
+        ensure_running("http://localhost:11434")
