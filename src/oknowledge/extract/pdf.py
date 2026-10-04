@@ -12,6 +12,9 @@ from ..net import NetworkError, fetch
 from . import Unreadable, _host
 
 MAX_PAGES = 20
+# A PDF cannot be cut short (pypdf needs the cross-reference table at the end),
+# so it gets a higher ceiling than a web page instead of being truncated.
+PDF_MAX_BYTES = 32 * 1024 * 1024
 PLACEHOLDER_TITLES = {"untitled"}   # what PDF generators (reportlab, ...) write when nobody set one
 
 
@@ -49,7 +52,11 @@ def from_bytes(data: bytes, url: str) -> Extracted:
 
 def from_url(url: str) -> Extracted:
     try:
-        fetched = fetch(url)
+        fetched = fetch(url, max_bytes=PDF_MAX_BYTES)
     except NetworkError as error:
+        if error.too_large:
+            raise Unreadable(
+                f"the PDF is too big to read (limit {PDF_MAX_BYTES // 2**20} MiB): {error}"
+            ) from error
         raise Unreadable(f"could not download the PDF: {error}") from error
     return from_bytes(fetched.content, fetched.final_url)

@@ -5,6 +5,7 @@ from __future__ import annotations
 from urllib.parse import urlsplit
 
 from ..model import Extracted
+from ..net import NetworkError
 from ..urls import normalize
 
 __all__ = ["Extracted", "Unreadable", "detect_type", "extract"]
@@ -29,6 +30,10 @@ def _host(url: str) -> str:
 
 def _is(host: str, domains: set[str]) -> bool:
     return any(host == d or host.endswith("." + d) for d in domains)
+
+
+def _content_type(headers: dict[str, str]) -> str:
+    return headers.get("content-type", "").split(";")[0].strip().lower()
 
 
 def detect_type(url: str) -> str:
@@ -64,10 +69,18 @@ def extract(url: str) -> Extracted:
     from .article import NotAWebPage, from_url
     try:
         return from_url(url)
+    except NetworkError as error:
+        # A big PDF behind an extensionless URL trips the web-page size cap
+        # before we can see what it is; the headers still say. Fetch it again
+        # under the PDF ceiling (pdf.from_url explains if it is over that too).
+        if error.too_large and _content_type(error.headers) == "application/pdf":
+            from .pdf import from_url as pdf_from_url
+            return pdf_from_url(url)
+        raise
     except NotAWebPage as error:
         # The URL gave no hint (arxiv.org/pdf/2301.12345) but the response is a PDF.
         fetched = error.fetched
-        if fetched.content_type.split(";")[0].strip().lower() == "application/pdf":
+        if _content_type({"content-type": fetched.content_type}) == "application/pdf":
             from .pdf import from_bytes
             return from_bytes(fetched.content, fetched.final_url)
         raise

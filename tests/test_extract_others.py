@@ -404,14 +404,128 @@ def test_reddit_answers_that_are_not_a_thread_are_unreadable(monkeypatch, body):
         social.from_url("https://www.reddit.com/r/linux/comments/x/y/")
 
 
-def test_a_host_that_merely_contains_reddit_is_not_reddit(monkeypatch):
-    monkeypatch.setattr(social, "fetch", served({"https://notreddit.com/a": reply("<html>")}))
-    with pytest.raises(Unreadable, match="logged-in"):
+def page(name):
+    return (FIXTURES / name).read_text(encoding="utf-8")
+
+
+def test_a_post_with_preview_tags_gives_title_blurb_image_and_author(monkeypatch):
+    url = "https://x.com/someone/status/1"
+    monkeypatch.setattr(social, "fetch", served({url: reply(page("social_post.html"), "text/html", url)}))
+    out = social.from_url(url)
+    assert out.title == 'someone on X: "WireGuard cut my latency in half"'
+    assert out.text == "Moved from OpenVPN last week. Ping went from 40ms to 20ms."
+    assert out.cover_url == "https://pbs.example.com/media/wg.jpg"
+    assert out.author == "@someone"
+    assert out.type == "social"
+    assert out.source == "x.com"
+
+
+def test_a_page_with_only_a_title_still_gives_a_note_with_an_empty_body(monkeypatch):
+    url = "https://www.tiktok.com/@maker/video/1"
+    monkeypatch.setattr(social, "fetch", served({url: reply(page("social_title_only.html"), "text/html", url)}))
+    out = social.from_url(url)
+    assert out.title == "A video by @maker"
+    assert out.text == ""
+    assert out.cover_url is None and out.author is None
+
+
+def test_twitter_cards_and_plain_tags_are_the_fallbacks():
+    html = (
+        '<title> Plain  title </title><meta name="description" content="plain blurb">'
+        '<meta name="twitter:image" content="https://i/x.png">')
+    out = social.from_preview_tags(html, "https://threads.net/@a/post/1")
+    assert (out.title, out.text, out.cover_url) == ("Plain title", "plain blurb", "https://i/x.png")
+    cards = social.from_preview_tags(
+        '<meta name="twitter:title" content="T"><meta name="twitter:description" content="D">',
+        "https://x.com/a/status/2")
+    assert (cards.title, cards.text) == ("T", "D")
+
+
+def test_a_login_wall_with_no_preview_tags_is_unreadable_and_says_why(monkeypatch):
+    url = "https://www.instagram.com/p/abc/"
+    monkeypatch.setattr(social, "fetch", served({url: reply(page("social_login_wall.html"), "text/html", url)}))
+    with pytest.raises(Unreadable, match="without logging in"):
+        social.from_url(url)
+
+
+def test_a_host_that_merely_contains_reddit_is_read_by_its_tags(monkeypatch):
+    monkeypatch.setattr(social, "fetch", served({"https://notreddit.com/a": reply("<html></html>")}))
+    with pytest.raises(Unreadable, match="without logging in"):
         social.from_url("https://notreddit.com/a")
 
 
-def test_a_login_walled_post_is_unreadable_and_says_why(monkeypatch):
-    monkeypatch.setattr(social, "fetch", served({
-        "https://x.com/user/status/1": reply("<html>Log in</html>", "text/html")}))
-    with pytest.raises(Unreadable, match="logged-in"):
-        social.from_url("https://x.com/user/status/1")
+# --- PDF size ceiling --------------------------------------------------------
+
+def big_pdf(tmp_path, size):
+    """A valid PDF padded with trailing comment bytes up to `size`."""
+    data = make_pdf(tmp_path)
+    return data + b"\n%" + b"x" * (size - len(data) - 2)
+
+
+def test_a_pdf_between_the_page_cap_and_the_pdf_ceiling_is_accepted(monkeypatch, tmp_path):
+    size = 9 * 1024 * 1024
+    assert net.MAX_BYTES < size < pdf.PDF_MAX_BYTES
+    data = big_pdf(tmp_path, size)
+    asked = {}
+
+    def fake(url, max_bytes=None, **kwargs):
+        asked["max_bytes"] = max_bytes
+        assert len(data) <= max_bytes
+        return reply(data, "application/pdf", url)
+
+    monkeypatch.setattr(pdf, "fetch", fake)
+    assert "Resultados" in pdf.from_url("https://e.com/thesis.pdf").text
+    assert asked["max_bytes"] == pdf.PDF_MAX_BYTES == 32 * 1024 * 1024
+
+
+def test_a_pdf_over_the_ceiling_is_refused_naming_size_and_limit(monkeypatch):
+    too_big = net.NetworkError(
+        f"page is {40 * 2**20} bytes, over {32 * 2**20} bytes: https://e.com/b.pdf",
+        status=200, headers={"content-type": "application/pdf"}, too_large=True)
+    monkeypatch.setattr(pdf, "fetch", served({"https://e.com/b.pdf": too_big}))
+    with pytest.raises(Unreadable) as raised:
+        pdf.from_url("https://e.com/b.pdf")
+    assert str(40 * 2**20) in str(raised.value) and "32 MiB" in str(raised.value)
+
+
+def test_the_real_fetch_enforces_the_ceiling_on_a_declared_pdf_size(monkeypatch):
+    import httpx
+
+    class Client:
+        def __init__(self, **kw): pass
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def stream(self, method, url):
+            response = httpx.Response(
+                200, headers={"content-type": "application/pdf",
+                              "content-length": str(40 * 2**20)},
+                content=b"%PDF", request=httpx.Request(method, url))
+            class Ctx:
+                def __enter__(s): return response
+                def __exit__(s, *a): return False
+            return Ctx()
+
+    monkeypatch.setattr(net.httpx, "Client", Client)
+    monkeypatch.setattr(pdf, "fetch", net.fetch)
+    with pytest.raises(Unreadable, match=r"41943040 bytes.*32 MiB|32 MiB.*41943040"):
+        pdf.from_url("https://e.com/b.pdf")
+
+
+def test_a_big_extensionless_pdf_is_refetched_under_the_pdf_ceiling(monkeypatch, tmp_path):
+    url = "https://arxiv.org/pdf/2301.12345"
+    data = make_pdf(tmp_path)
+    page_cap = net.NetworkError(
+        f"page is {9 * 2**20} bytes, over {net.MAX_BYTES} bytes: {url}",
+        status=200, headers={"content-type": "application/pdf; qs=1"}, too_large=True)
+    monkeypatch.setattr(article, "fetch", served({url: page_cap}))
+    monkeypatch.setattr(pdf, "fetch", served({url: reply(data, "application/pdf", url)}))
+    assert extract(url).type == "pdf"
+
+
+def test_an_oversized_web_page_is_still_refused_at_the_page_cap(monkeypatch):
+    url = "https://e.com/huge"
+    big = net.NetworkError("page over 8388608 bytes", status=200,
+                           headers={"content-type": "text/html"}, too_large=True)
+    monkeypatch.setattr(article, "fetch", served({url: big}))
+    with pytest.raises(net.NetworkError, match="over"):
+        extract(url)

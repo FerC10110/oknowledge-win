@@ -27,10 +27,11 @@ class NetworkError(Exception):
     """
 
     def __init__(self, message: str, status: int | None = None,
-                 headers: dict[str, str] | None = None):
+                 headers: dict[str, str] | None = None, too_large: bool = False):
         super().__init__(message)
         self.status = status
         self.headers = headers or {}
+        self.too_large = too_large   # refused for size; `headers` still tells what it was
 
 
 def _known(name: str | None) -> str | None:
@@ -94,13 +95,18 @@ def fetch(url: str, timeout: float = 30.0, max_bytes: int | None = None) -> Fetc
                         status=response.status_code,
                         headers={k.lower(): v for k, v in response.headers.items()})
                 declared = response.headers.get("content-length", "")
+                seen = {k.lower(): v for k, v in response.headers.items()}
                 if declared.isdigit() and int(declared) > max_bytes:
-                    raise NetworkError(f"page over {max_bytes} bytes: {url}")
+                    raise NetworkError(
+                        f"page is {int(declared)} bytes, over {max_bytes} bytes: {url}",
+                        status=response.status_code, headers=seen, too_large=True)
                 chunks, size = [], 0
                 for chunk in response.iter_bytes():
                     size += len(chunk)
                     if size > max_bytes:
-                        raise NetworkError(f"page over {max_bytes} bytes: {url}")
+                        raise NetworkError(
+                            f"page over {max_bytes} bytes: {url}",
+                            status=response.status_code, headers=seen, too_large=True)
                     if time.monotonic() > deadline:
                         raise NetworkError(f"download too slow: {url}")
                     chunks.append(chunk)
