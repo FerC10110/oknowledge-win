@@ -36,9 +36,11 @@ Omarchy y la interfaz web.
 - **El sistema sólo escribe dentro de `oknowledge/`** y sólo en archivos que
   lleven el marcador `oknowledge: 1` en el frontmatter.
 - **Interfaz moderna y minimalista, sin ruido.**
-- **Código, nombres de archivo, claves de datos y textos de interfaz en
-  inglés**, igual que mis plugins. El contenido generado — resumen, categoría,
-  tags — sale en español.
+- **Dos idiomas independientes.** El de la interfaz — inglés por defecto,
+  español opcional — y el de lo que escribe la IA, que se elige aparte. Uno
+  puede usar la interfaz en inglés y recibir los resúmenes en español.
+- **Código, nombres de archivo y claves de datos en inglés**, igual que mis
+  otros plugins.
 
 ## El repositorio
 
@@ -303,7 +305,7 @@ servido con un poco de JavaScript.
 | **Search** | campo siempre visible; busca en título, resumen, puntos, tags y en el contenido completo cuando está; cada resultado muestra el fragmento donde apareció |
 | **Item** | resumen, puntos, contenido original si está; abrir el link, cambiar categoría, editar tags, reprocesar con otro motor, borrar |
 | **Categories** | renombrar y fusionar, reescribiendo las notas afectadas y regenerando los índices |
-| **Settings** | la cadena de motores (habilitar, deshabilitar, reordenar), el modelo de cada uno, el idioma y el default `full`/`summary` |
+| **Settings** | la cadena de motores (habilitar, deshabilitar, reordenar), el modelo de cada uno, el idioma del contenido, el idioma de la interfaz y el default `full`/`summary` |
 
 El índice se arma en memoria al arrancar leyendo el frontmatter de todas las
 notas, y se refresca cuando cambia un archivo. Con unos cientos de notas es
@@ -324,6 +326,35 @@ Moderna y minimalista, sin ruido:
 - Las acciones de una ficha aparecen al pasar el mouse, no antes.
 - Modo claro y oscuro según el sistema.
 
+## Los dos idiomas
+
+Son dos ajustes distintos que no se tocan entre sí.
+
+**El idioma de la interfaz** — el panel del widget y la web — es **inglés por
+defecto, español opcional**, con el mismo mecanismo que mis otros plugins: la
+preferencia vive en `~/.config/omarchy/plugin-language.json`
+(`{"language": "es"}`), es **compartida entre todos los plugins**, y cambiarla
+en cualquiera los cambia a todos. Sin ese archivo, o con un contenido que no se
+entiende, todo se ve en inglés.
+
+- El plugin lo lee con un `FileView` y usa el `I18n.js` de siempre: la clave es
+  el texto en inglés, los parámetros son `%1`, `%2`, y sólo existe la tabla
+  `es` porque el inglés es la identidad.
+- La web hace lo mismo del lado de Python: un módulo `i18n.py` con la misma
+  idea — texto en inglés como clave, una tabla `es` — leyendo **ese mismo
+  archivo**. Dos implementaciones, una sola preferencia.
+- **No entra en `config.toml`**: no es un ajuste de este proyecto, es una
+  preferencia del escritorio.
+
+**El idioma del contenido** es `[ai] language` en `config.toml`, y por defecto
+es `es`: los resúmenes, los puntos clave y las categorías salen en español
+aunque la página esté en inglés y aunque la interfaz esté en inglés. Ese es el
+caso de uso previsto — interfaz en inglés, respuestas en español — y por eso
+son dos perillas separadas.
+
+Los nombres de las categorías y los tags que ya existen no se traducen al
+cambiar ninguno de los dos idiomas: son contenido, no interfaz.
+
 ## Configuración
 
 `~/.config/oknowledge/config.toml`, permisos `600`:
@@ -333,9 +364,12 @@ vault = "/home/fer/Documents/obsidian_vaults/fer"
 folder = "oknowledge"
 default_content = "full"        # full | summary
 
+# El idioma de la interfaz NO está acá: vive en
+# ~/.config/omarchy/plugin-language.json, compartido con los demás plugins.
+
 [ai]
 chain = ["opencode"]            # orden = prioridad; lo que no está, no se usa
-language = "es"
+language = "es"                 # idioma de los resúmenes, independiente de la interfaz
 
 [ai.opencode]
 model = "opencode/ling-3.1-flash-free"
@@ -398,6 +432,11 @@ muestra con un botón de reintento. **En ningún caso se pierde la URL.**
 6. Fusionar dos categorías desde la web y confirmar que las notas afectadas y
    los índices quedan consistentes.
 7. Cambiar la cadena a `["ollama"]` y repetir el punto 2.
+8. Con la interfaz en inglés y `[ai] language = "es"`, guardar un artículo en
+   inglés: la interfaz sigue en inglés y el resumen sale en español.
+9. Escribir `{"language": "es"}` en `~/.config/omarchy/plugin-language.json`:
+   el panel y la web pasan a español sin reiniciar nada, y los resúmenes ya
+   guardados no cambian.
 
 ## Fuera de alcance
 
@@ -407,4 +446,6 @@ muestra con un botón de reintento. **En ningún caso se pierde la URL.**
 - **Importar lo viejo**: favoritos del navegador, links de WhatsApp, archivos
   de texto. Merece un `oknowledge import`, después de que el flujo nuevo ande.
 - Sincronizar entre máquinas, varios usuarios, publicar el plugin.
-- Traducir la interfaz al español.
+- Idiomas de interfaz más allá de inglés y español.
+- Traducir contenido ya guardado al cambiar `[ai] language`: afecta a los links
+  nuevos, no reescribe los viejos.
