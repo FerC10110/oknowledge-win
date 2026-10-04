@@ -22,29 +22,37 @@ MAX_TITLE = 300
 REMOVED = {"[removed]", "[deleted]"}
 
 
+def _str(value) -> str:
+    if value is not None and not isinstance(value, str):
+        raise TypeError(f"expected text, got {type(value).__name__}")
+    return (value or "").strip()
+
+
 def from_reddit(data, url: str) -> Extracted:
     try:
         post = data[0]["data"]["children"][0]["data"]
         comments = data[1]["data"]["children"] if len(data) > 1 else []
-        parts = [post.get("selftext") or ""]
+        selftext = _str(post.get("selftext"))
+        parts = [] if selftext in REMOVED else [selftext]
         for child in comments[:MAX_COMMENTS]:
-            body = (child.get("data") or {}).get("body")
-            if body and body.strip() not in REMOVED:
+            body = _str((child.get("data") or {}).get("body"))
+            if body and body not in REMOVED:
                 parts.append(f"- {body}")
+        title = _str(post.get("title"))
+        author = _str(post.get("author")) or None
+        text = "\n\n".join(p for p in parts if p)
     except (KeyError, IndexError, TypeError, AttributeError) as error:
-        raise Unreadable(f"unexpected reddit payload for {url}") from error
+        raise Unreadable(
+            f"unexpected reddit payload for {url}: {type(error).__name__}: {error}") from error
 
-    text = "\n\n".join(p.strip() for p in parts if p.strip() and p.strip() not in REMOVED)
-    title = post.get("title") or ""
     if not title and not text:
         raise Unreadable(f"the thread has no title and no text: {url}")
-
     return Extracted(
         title=title or url,
         text=text,
         type="social",
         source=_host(url),
-        author=post.get("author"),
+        author=author,
     )
 
 

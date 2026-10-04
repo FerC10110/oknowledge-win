@@ -59,6 +59,11 @@ def extract(url: str) -> Extracted:
         return _extract(url)
     except NetworkError as error:
         raise Unreadable(str(error)) from error
+    except (AttributeError, TypeError, KeyError, ValueError) as error:
+        # Backstop for a payload shape no extractor foresaw. The type stays in
+        # the message so a bug of ours is not disguised as "the page is unreadable".
+        raise Unreadable(
+            f"could not read {url}: {type(error).__name__}: {error}") from error
 
 
 def _extract(url: str) -> Extracted:

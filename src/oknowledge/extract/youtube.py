@@ -42,7 +42,8 @@ def _caption_url(data: dict) -> str | None:
         for lang in CAPTION_LANGS:
             for kind in ("subtitles", "automatic_captions"):
                 for track in (data.get(kind) or {}).get(lang) or []:
-                    if track.get("ext") == "vtt" and isinstance(track.get("url"), str):
+                    if (isinstance(track, dict) and track.get("ext") == "vtt"
+                            and isinstance(track.get("url"), str)):
                         return track["url"]
     except (AttributeError, TypeError):
         pass

@@ -39,30 +39,46 @@ def _slug(url: str) -> str | None:
     return f"{owner}/{repo}"
 
 
+def _text(repo: dict, key: str) -> str:
+    value = repo.get(key)
+    if value is not None and not isinstance(value, str):
+        raise Unreadable(f"unexpected GitHub payload: {key} is {type(value).__name__}, not text")
+    return (value or "").strip()
+
+
 def from_api(repo: dict, readme: str, url: str) -> Extracted:
-    description = (repo.get("description") or "").strip()
+    description = _text(repo, "description")
+    language = _text(repo, "language")
+    topics = repo.get("topics") or []
+    if not isinstance(topics, list) or not all(isinstance(t, str) for t in topics):
+        raise Unreadable("unexpected GitHub payload: topics is not a list of text")
+    owner = repo.get("owner") or {}
+    if not isinstance(owner, dict):
+        raise Unreadable(f"unexpected GitHub payload: owner is {type(owner).__name__}, not an object")
+    login = owner.get("login")
+    full_name = _text(repo, "full_name")
+    pushed = str(repo.get("pushed_at") or "")[:10] or None
+
     if not description and not readme.strip():
         # The language and star count alone are not a note worth keeping.
         raise Unreadable(f"the repository has no description or readme: {url}")
     facts = [
         description,
-        f"Primary language: {repo.get('language') or 'unknown'}.",
+        f"Primary language: {language or 'unknown'}.",
         f"Stars: {repo.get('stargazers_count', 0)}.",
     ]
-    topics = repo.get("topics") or []
     if topics:
         facts.append("Topics: " + ", ".join(topics) + ".")
     text = "\n".join(f for f in facts if f.strip())
     if readme.strip():
         text += "\n\n" + readme.strip()
 
-    pushed = str(repo.get("pushed_at") or "")[:10] or None
     return Extracted(
-        title=repo.get("full_name") or _slug(url) or url,
+        title=full_name or _slug(url) or url,
         text=text,
         type="github",
         source=_host(url),
-        author=(repo.get("owner") or {}).get("login"),
+        author=login if isinstance(login, str) else None,
         published=pushed,
         cover_url=None,
     )

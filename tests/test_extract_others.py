@@ -738,7 +738,6 @@ def test_one_bad_page_does_not_lose_the_rest(monkeypatch, tmp_path):
 
 @pytest.mark.parametrize("title", ["Microsoft Word - informe final.doc", "paper.docx", "Untitled", "  "])
 def test_generator_placeholder_titles_fall_back_to_the_file_name(title):
-    from pypdf import PdfWriter
     import io
 
     from reportlab.pdfgen import canvas
@@ -778,3 +777,47 @@ def test_a_network_failure_from_a_github_page_is_unreadable(monkeypatch):
         extract(url)
     with pytest.raises(Unreadable):
         github.from_url(url)
+
+
+# --- payload shape surprises --------------------------------------------------
+
+@pytest.mark.parametrize("change", [
+    {"description": 5},
+    {"topics": ["ai", 3]},
+    {"topics": "ai"},
+    {"owner": "sst"},
+    {"language": ["TypeScript"]},
+    {"full_name": 7},
+])
+def test_a_malformed_github_payload_is_unreadable(change):
+    with pytest.raises(Unreadable, match="unexpected GitHub payload"):
+        github.from_api(dict(load("github_repo.json"), **change), "", "https://github.com/sst/opencode")
+
+
+@pytest.mark.parametrize("selftext", [5, ["x"]])
+def test_a_reddit_payload_with_a_non_text_selftext_is_unreadable(selftext):
+    thread = [{"data": {"children": [{"data": {"title": "T", "selftext": selftext}}]}}]
+    with pytest.raises(Unreadable, match="TypeError"):
+        social.from_reddit(thread, "https://reddit.com/r/x/comments/1/t/")
+
+
+def test_a_comment_that_is_not_text_is_unreadable():
+    thread = [{"data": {"children": [{"data": {"title": "T", "selftext": "s"}}]}},
+              {"data": {"children": [{"data": {"body": 9}}]}}]
+    with pytest.raises(Unreadable):
+        social.from_reddit(thread, "https://reddit.com/r/x/comments/1/t/")
+
+
+def test_the_dispatcher_turns_an_unforeseen_type_error_into_unreadable_naming_it(monkeypatch):
+    def broken(url):
+        return {}["missing"]
+
+    monkeypatch.setattr(github, "from_url", broken)
+    with pytest.raises(Unreadable, match="KeyError") as raised:
+        extract("https://github.com/sst/opencode")
+    assert "github.com/sst/opencode" in str(raised.value)
+
+
+def test_a_none_track_does_not_stop_the_search_in_other_languages():
+    data = {"subtitles": {"es": [None, "x"], "en": [{"ext": "vtt", "url": "english"}]}}
+    assert youtube._caption_url(data) == "english"
