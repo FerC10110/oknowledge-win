@@ -269,3 +269,23 @@ def test_the_queue_syncs_the_directory_entry(tmp_path, monkeypatch):
 
 def test_an_unknown_id_is_none(tmp_path):
     assert Queue(tmp_path).get("nope") is None
+
+
+def test_a_lookup_of_a_malformed_id_is_just_a_miss(tmp_path):
+    # The id arrives straight from a web route, so "not found" is the honest
+    # answer; only the write paths treat a bad id as a bug.
+    q = Queue(tmp_path)
+    for bogus in ["../escape", "/etc/passwd", "a b", ""]:
+        assert q.get(bogus) is None
+
+
+def test_writing_through_a_malformed_id_is_refused(tmp_path):
+    q = Queue(tmp_path)
+    for bogus in ["../escape", "/etc/passwd"]:
+        with pytest.raises(ValueError):
+            q.enqueue(bogus, "https://e.com/x", "full")
+        with pytest.raises(ValueError):
+            q.set_status(bogus, "ok")
+        with pytest.raises(ValueError):
+            with q.lock(bogus):
+                pass

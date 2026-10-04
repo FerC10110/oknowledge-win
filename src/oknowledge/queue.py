@@ -99,6 +99,11 @@ class Queue:
         ))
 
     def get(self, link_id: str) -> QueueEntry | None:
+        # A lookup answers "no such entry" for a malformed id instead of raising:
+        # the id reaches here straight from a web route, and "not found" is the
+        # honest answer. The write paths below still reject it loudly.
+        if not _ID.fullmatch(link_id):
+            return None
         path = self._path(link_id)
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
@@ -110,6 +115,7 @@ class Queue:
                    title: str | None = None) -> QueueEntry | None:
         if status not in STATUSES:
             raise ValueError(f"unknown status {status!r}; expected one of {sorted(STATUSES)}")
+        _check_id(link_id)
         entry = self.get(link_id)
         if entry is None:
             return None
