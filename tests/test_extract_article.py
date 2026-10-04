@@ -16,6 +16,11 @@ def html():
     return FIXTURE.read_text(encoding="utf-8")
 
 
+def test_a_byte_order_mark_does_not_survive_into_the_text():
+    body = "Hola".encode("utf-8-sig")
+    assert net.Fetched(200, "text/html; charset=utf-8-sig", body, "https://e.com/a").text == "Hola"
+
+
 def test_the_article_text_comes_out_and_the_chrome_does_not(html):
     out = from_html(html, "https://arstechnica.com/vpn")
     assert "runs inside the kernel" in out.text

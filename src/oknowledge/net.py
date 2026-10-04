@@ -53,12 +53,17 @@ class Fetched:
         if encoding is None:
             sniffed = _META_CHARSET.search(self.content[:4096])
             encoding = _known(sniffed.group(1).decode("ascii", "ignore")) if sniffed else None
+        decoded = None
         if encoding and codecs.lookup(encoding).name != "utf-8" and not self.content.isascii():
             try:
-                return self.content.decode("utf-8")
+                decoded = self.content.decode("utf-8")
             except UnicodeDecodeError:
                 pass
-        return self.content.decode(encoding or "utf-8", errors="replace")
+        if decoded is None:
+            decoded = self.content.decode(encoding or "utf-8", errors="replace")
+        # Strip the BOM on every path: left in, U+FEFF leads the extracted text
+        # and from there the note's title.
+        return decoded.lstrip("\ufeff")
 
 
 def fetch(url: str, timeout: float = 30.0, max_bytes: int | None = None) -> Fetched:
