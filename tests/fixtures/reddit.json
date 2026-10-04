@@ -1,0 +1,13 @@
+[
+  {"data": {"children": [{"data": {
+    "title": "Why I moved from OpenVPN to WireGuard",
+    "selftext": "Después de dos años con OpenVPN, cambié a WireGuard y la latencia bajó a la mitad.",
+    "author": "someone",
+    "created_utc": 1789000000,
+    "subreddit": "linux"
+  }}]}},
+  {"data": {"children": [
+    {"data": {"body": "Lo mismo me pasó en una Raspberry Pi."}},
+    {"data": {"body": "Ojo con el MTU."}}
+  ]}}
+]

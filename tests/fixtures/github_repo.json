@@ -1,0 +1,9 @@
+{
+  "full_name": "sst/opencode",
+  "description": "AI coding agent, built for the terminal",
+  "language": "TypeScript",
+  "stargazers_count": 31245,
+  "topics": ["ai", "cli"],
+  "owner": {"login": "sst"},
+  "pushed_at": "2026-09-30T12:00:00Z"
+}

@@ -1,0 +1,14 @@
+{
+  "title": "Cómo funciona WireGuard",
+  "channel": "Redes en 10",
+  "description": "Explicación corta del protocolo y de por qué es rápido.",
+  "upload_date": "20260915",
+  "duration": 612,
+  "thumbnail": "https://i.ytimg.com/vi/abc/hq.jpg",
+  "automatic_captions": {
+    "es": [
+      {"ext": "json3", "url": "https://example.com/captions.json3"},
+      {"ext": "vtt", "url": "https://example.com/captions.vtt"}
+    ]
+  }
+}

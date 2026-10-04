@@ -143,6 +143,14 @@ def test_an_error_status_is_a_network_error_naming_the_status(serve, status):
         net.fetch("https://e.com/x")
 
 
+def test_an_error_status_carries_the_status_and_headers_for_the_caller(serve):
+    serve(lambda request: httpx.Response(403, headers={"X-RateLimit-Remaining": "0"}))
+    with pytest.raises(net.NetworkError) as raised:
+        net.fetch("https://e.com/x")
+    assert raised.value.status == 403
+    assert raised.value.headers["x-ratelimit-remaining"] == "0"
+
+
 @pytest.mark.parametrize("error,word", [
     (httpx.ConnectTimeout, "ConnectTimeout"),
     (httpx.ReadTimeout, "ReadTimeout"),

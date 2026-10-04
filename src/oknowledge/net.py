@@ -20,7 +20,17 @@ _META_CHARSET = re.compile(rb"<meta[^>]+charset\s*=\s*[\"']?([\w.:-]+)", re.I)
 
 
 class NetworkError(Exception):
-    """The page could not be fetched."""
+    """The page could not be fetched.
+
+    For an HTTP error status, `status` and `headers` carry the response's, so a
+    caller can tell a rate limit from a missing page.
+    """
+
+    def __init__(self, message: str, status: int | None = None,
+                 headers: dict[str, str] | None = None):
+        super().__init__(message)
+        self.status = status
+        self.headers = headers or {}
 
 
 def _known(name: str | None) -> str | None:
@@ -79,7 +89,10 @@ def fetch(url: str, timeout: float = 30.0, max_bytes: int | None = None) -> Fetc
                           max_redirects=MAX_REDIRECTS) as client:
             with client.stream("GET", url) as response:
                 if response.status_code >= 400:
-                    raise NetworkError(f"{response.status_code} for {url}")
+                    raise NetworkError(
+                        f"{response.status_code} for {url}",
+                        status=response.status_code,
+                        headers={k.lower(): v for k, v in response.headers.items()})
                 declared = response.headers.get("content-length", "")
                 if declared.isdigit() and int(declared) > max_bytes:
                     raise NetworkError(f"page over {max_bytes} bytes: {url}")

@@ -5,11 +5,20 @@ from __future__ import annotations
 import trafilatura
 
 from ..model import Extracted
-from ..net import fetch
+from ..net import Fetched, fetch
 from . import Unreadable, _host
 
 MIN_CHARS = 200
 HTML_TYPES = ("text/html", "application/xhtml+xml", "text/plain")
+
+
+class NotAWebPage(Unreadable):
+    """The URL answered with something that is not HTML. Carries the response,
+    so the dispatcher can hand it to the right extractor without a second fetch."""
+
+    def __init__(self, message: str, fetched: Fetched):
+        super().__init__(message)
+        self.fetched = fetched
 
 
 def from_html(html: str, url: str) -> Extracted:
@@ -43,5 +52,5 @@ def from_url(url: str) -> Extracted:
     fetched = fetch(url)
     kind = fetched.content_type.split(";")[0].strip().lower()
     if kind and kind not in HTML_TYPES:
-        raise Unreadable(f"{url} is {kind}, not a web page")
+        raise NotAWebPage(f"{url} is {kind}, not a web page", fetched)
     return from_html(fetched.text, fetched.final_url)

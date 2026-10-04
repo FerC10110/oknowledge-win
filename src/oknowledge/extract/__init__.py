@@ -61,5 +61,13 @@ def extract(url: str) -> Extracted:
     if kind == "social":
         from .social import from_url
         return from_url(url)
-    from .article import from_url
-    return from_url(url)
+    from .article import NotAWebPage, from_url
+    try:
+        return from_url(url)
+    except NotAWebPage as error:
+        # The URL gave no hint (arxiv.org/pdf/2301.12345) but the response is a PDF.
+        fetched = error.fetched
+        if fetched.content_type.split(";")[0].strip().lower() == "application/pdf":
+            from .pdf import from_bytes
+            return from_bytes(fetched.content, fetched.final_url)
+        raise
