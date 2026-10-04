@@ -28,14 +28,14 @@ def make_pdf(tmp_path, encrypt=None):
 
 @pytest.fixture(autouse=True)
 def no_network_and_no_ytdlp(monkeypatch):
-    """Whatever a test forgets to fake fails loudly instead of reaching out."""
+    """Whatever a test forgets to fake fails loudly instead of reaching out.
+    (tests/conftest.py also blocks httpx and subprocess for every module.)"""
 
     def refuse(*args, **kwargs):
         raise AssertionError("a test reached the network or ran yt-dlp")
 
     for module in (youtube, github, pdf, social, article):
         monkeypatch.setattr(module, "fetch", refuse)
-    monkeypatch.setattr(youtube.subprocess, "run", refuse)
 
 
 def served(responses):
@@ -218,15 +218,61 @@ def test_from_url_survives_a_garbled_readme(monkeypatch):
     assert "AI coding agent" in github.from_url("https://github.com/sst/opencode").text
 
 
-def test_a_missing_repo_says_it_is_missing_or_private(monkeypatch):
+def test_a_missing_repo_that_is_not_a_page_either_says_missing_or_private(monkeypatch):
     monkeypatch.setattr(github, "fetch", served({API: net.NetworkError("404", status=404)}))
+    monkeypatch.setattr(article, "from_url", served({
+        "https://github.com/sst/opencode": net.NetworkError("404 for page", status=404)}))
     with pytest.raises(Unreadable, match="not found or private"):
         github.from_url("https://github.com/sst/opencode")
+
+
+def test_a_404_from_the_api_falls_back_to_the_page(monkeypatch):
+    """github.com/solutions/... looks like owner/repo but is a site page."""
+    sentinel = object()
+    monkeypatch.setattr(github, "fetch", served({
+        "https://api.github.com/repos/solutions/ci": net.NetworkError("404", status=404)}))
+    monkeypatch.setattr(article, "from_url", lambda u: sentinel)
+    assert github.from_url("https://github.com/solutions/ci") is sentinel
+
+
+def test_a_repo_with_no_description_and_no_readme_is_unreadable(monkeypatch):
+    bare = dict(load("github_repo.json"), description=None)
+    monkeypatch.setattr(github, "fetch", served({
+        API: reply(json.dumps(bare)), API + "/readme": net.NetworkError("404", status=404)}))
+    with pytest.raises(Unreadable, match="no description or readme"):
+        github.from_url("https://github.com/sst/opencode")
+
+
+@pytest.mark.parametrize("error", [
+    net.NetworkError("500", status=500),
+    net.NetworkError("could not fetch: ReadTimeout"),
+    net.NetworkError("403", status=403, headers={"x-ratelimit-remaining": "0"}),
+])
+def test_a_readme_call_that_fails_for_another_reason_than_404_is_not_success(monkeypatch, error):
+    monkeypatch.setattr(github, "fetch", served({
+        API: reply((FIXTURES / "github_repo.json").read_text(encoding="utf-8")),
+        API + "/readme": error}))
+    with pytest.raises(Unreadable):
+        github.from_url("https://github.com/sst/opencode")
+
+
+def test_the_facts_are_in_english():
+    out = github.from_api(dict(load("github_repo.json"), language=None), "", "https://github.com/sst/opencode")
+    assert "Primary language: unknown." in out.text and "Stars: 31245." in out.text
+    assert "Topics: ai, cli." in out.text
 
 
 def test_a_rate_limited_api_says_so_and_when_it_resets(monkeypatch):
     limited = net.NetworkError("403", status=403, headers={
         "x-ratelimit-remaining": "0", "x-ratelimit-reset": "1790000000"})
+    monkeypatch.setattr(github, "fetch", served({API: limited}))
+    with pytest.raises(Unreadable, match="rate limit") as raised:
+        github.from_url("https://github.com/sst/opencode")
+    assert "2026-09-21 14:13 UTC" in str(raised.value)
+
+
+def test_a_retry_after_header_is_a_rate_limit_too(monkeypatch):
+    limited = net.NetworkError("429", status=429, headers={"retry-after": "60"})
     monkeypatch.setattr(github, "fetch", served({API: limited}))
     with pytest.raises(Unreadable, match="rate limit"):
         github.from_url("https://github.com/sst/opencode")
@@ -420,13 +466,18 @@ def test_a_post_with_preview_tags_gives_title_blurb_image_and_author(monkeypatch
     assert out.source == "x.com"
 
 
-def test_a_page_with_only_a_title_still_gives_a_note_with_an_empty_body(monkeypatch):
+def test_a_page_with_only_an_og_title_still_gives_a_note_with_an_empty_body(monkeypatch):
     url = "https://www.tiktok.com/@maker/video/1"
     monkeypatch.setattr(social, "fetch", served({url: reply(page("social_title_only.html"), "text/html", url)}))
     out = social.from_url(url)
     assert out.title == "A video by @maker"
     assert out.text == ""
     assert out.cover_url is None and out.author is None
+
+
+def test_a_plain_title_alone_is_not_a_preview():
+    with pytest.raises(Unreadable):
+        social.from_preview_tags("<head><title>Instagram</title></head>", "https://instagram.com/p/1")
 
 
 def test_twitter_cards_and_plain_tags_are_the_fallbacks():
@@ -441,11 +492,31 @@ def test_twitter_cards_and_plain_tags_are_the_fallbacks():
     assert (cards.title, cards.text) == ("T", "D")
 
 
-def test_a_login_wall_with_no_preview_tags_is_unreadable_and_says_why(monkeypatch):
+def test_a_real_login_wall_with_just_a_site_name_title_is_unreadable(monkeypatch):
     url = "https://www.instagram.com/p/abc/"
     monkeypatch.setattr(social, "fetch", served({url: reply(page("social_login_wall.html"), "text/html", url)}))
     with pytest.raises(Unreadable, match="without logging in"):
         social.from_url(url)
+
+
+def test_only_the_first_title_in_the_head_counts():
+    html = ('<head><title>Real</title><meta name="description" content="d"></head>'
+            '<body><svg><title>Close</title></svg><svg><title>Home</title></svg></body>')
+    assert social.from_preview_tags(html, "https://x.com/a").title == "Real"
+
+
+@pytest.mark.parametrize("tail", ['<meta name="description" content="d"></head><body>', "</head><body>" + "x" * 5000])
+def test_an_unclosed_title_does_not_swallow_the_page(tail):
+    parser = social._Meta()
+    parser.feed("<head><title>Broken" + tail)
+    parser.close()
+    assert parser.title == "Broken"
+
+
+def test_an_endless_title_is_capped():
+    parser = social._Meta()
+    parser.feed("<head><title>" + "t" * 5000 + "</title>")
+    assert len(parser.title) == social.MAX_TITLE
 
 
 def test_a_host_that_merely_contains_reddit_is_read_by_its_tags(monkeypatch):
@@ -518,8 +589,16 @@ def test_a_big_extensionless_pdf_is_refetched_under_the_pdf_ceiling(monkeypatch,
         f"page is {9 * 2**20} bytes, over {net.MAX_BYTES} bytes: {url}",
         status=200, headers={"content-type": "application/pdf; qs=1"}, too_large=True)
     monkeypatch.setattr(article, "fetch", served({url: page_cap}))
-    monkeypatch.setattr(pdf, "fetch", served({url: reply(data, "application/pdf", url)}))
+    inner = served({url: reply(data, "application/pdf", url)})
+    asked = []
+
+    def fake(u, **kwargs):
+        asked.append(kwargs.get("max_bytes"))
+        return inner(u)
+
+    monkeypatch.setattr(pdf, "fetch", fake)
     assert extract(url).type == "pdf"
+    assert asked == [pdf.PDF_MAX_BYTES]
 
 
 def test_an_oversized_web_page_is_still_refused_at_the_page_cap(monkeypatch):
@@ -527,5 +606,175 @@ def test_an_oversized_web_page_is_still_refused_at_the_page_cap(monkeypatch):
     big = net.NetworkError("page over 8388608 bytes", status=200,
                            headers={"content-type": "text/html"}, too_large=True)
     monkeypatch.setattr(article, "fetch", served({url: big}))
-    with pytest.raises(net.NetworkError, match="over"):
+    with pytest.raises(Unreadable, match="over"):
         extract(url)
+
+
+def test_a_removed_reddit_post_is_not_text():
+    thread = [
+        {"data": {"children": [{"data": {"title": "T", "selftext": "[removed]", "author": "a"}}]}},
+        {"data": {"children": [{"data": {"body": "[deleted]"}}]}}]
+    out = social.from_reddit(thread, "https://reddit.com/r/x/comments/1/t/")
+    assert out.title == "T" and out.text == ""
+
+
+def test_a_reddit_post_with_neither_title_nor_text_is_unreadable():
+    thread = [{"data": {"children": [{"data": {"selftext": "[deleted]"}}]}}]
+    with pytest.raises(Unreadable):
+        social.from_reddit(thread, "https://reddit.com/r/x/comments/1/t/")
+
+
+# --- youtube: real yt-dlp output and its odd shapes ---------------------------
+
+def test_real_ytdlp_output_is_read_and_manual_captions_beat_automatic_ones():
+    data = load("ytdlp_real.json")
+    out = youtube.from_ytdlp(data, "https://www.youtube.com/watch?v=dQw4w9WgXcQ", captions=None)
+    assert out.title.startswith("Rick Astley - Never Gonna Give You Up")
+    assert out.author == "Rick Astley"
+    assert out.published == "2009-10-25"
+    assert out.cover_url.startswith("https://i.ytimg.com/")
+    assert out.text.startswith("The official video")
+    # manual en is json3 only, so the automatic en vtt is the one that can be read
+    assert youtube._caption_url(data) == data["automatic_captions"]["en"][0]["url"]
+
+
+def test_a_manual_vtt_track_wins_over_an_automatic_one_in_the_same_language():
+    data = {"subtitles": {"es": [{"ext": "vtt", "url": "manual"}]},
+            "automatic_captions": {"es": [{"ext": "vtt", "url": "auto"}]}}
+    assert youtube._caption_url(data) == "manual"
+
+
+@pytest.mark.parametrize("data", [
+    {"subtitles": "oops", "automatic_captions": None},
+    {"subtitles": {"es": [None, 3, {"ext": "vtt"}]}},
+])
+def test_caption_shape_surprises_mean_no_captions_not_a_crash(data):
+    assert youtube._caption_url(data) is None
+
+
+@pytest.mark.parametrize("data", [
+    {"title": 5, "description": ["x"]},
+    {"title": "T", "description": 7, "channel": ["a"], "upload_date": 20260915},
+])
+def test_field_type_surprises_are_unreadable_or_survived_never_a_crash(data):
+    try:
+        out = youtube.from_ytdlp(data, "https://youtube.com/watch?v=a", captions=None)
+    except Unreadable:
+        return
+    assert isinstance(out.title, str)
+
+
+def test_a_spoken_line_starting_with_language_survives_and_entities_are_decoded():
+    vtt = ("WEBVTT\nKind: captions\nLanguage: es\n\n"
+           "1\n00:00:01.000 --> 00:00:03.000\nLanguage: es una palabra &amp; mas\n\n"
+           "NOTE a comment\n\n00:00:03.000 --> 00:00:05.000\n&gt;&gt; Kind: of fun\n")
+    text = youtube.vtt_to_text(vtt)
+    assert text == "Language: es una palabra & mas >> Kind: of fun"
+
+
+def test_a_caption_body_that_is_not_vtt_is_discarded(monkeypatch):
+    fake_ytdlp(monkeypatch, stdout=(FIXTURES / "ytdlp.json").read_text(encoding="utf-8"))
+    monkeypatch.setattr(youtube, "fetch", served({
+        "https://example.com/captions.vtt": reply("<html>Before you continue</html>", "text/html")}))
+    out = youtube.from_url("https://youtube.com/watch?v=abc")
+    assert "Before you continue" not in out.text and "Explicación corta" in out.text
+
+
+def test_the_ytdlp_command_line_is_pinned(monkeypatch):
+    seen = fake_ytdlp(monkeypatch, stdout=(FIXTURES / "ytdlp_real.json").read_text(encoding="utf-8"))
+    monkeypatch.setattr(youtube, "fetch", served({
+        load("ytdlp_real.json")["automatic_captions"]["en"][0]["url"]:
+            reply("WEBVTT\n\n00:00:01.000 --> 00:00:02.000\nhola\n", "text/vtt")}))
+    youtube.from_url("https://youtube.com/watch?v=abc")
+    for flag in ("--dump-json", "--skip-download", "--no-playlist", "--no-warnings"):
+        assert flag in seen["cmd"]
+    assert seen["cmd"][seen["cmd"].index("--playlist-items") + 1] == "1"
+
+
+def test_several_json_documents_from_a_playlist_say_playlist(monkeypatch):
+    fake_ytdlp(monkeypatch, stdout='{"a": 1}\n{"a": 2}\n')
+    with pytest.raises(Unreadable, match="playlist"):
+        youtube.from_url("https://www.youtube.com/playlist?list=PL1")
+
+
+# --- pdf: AES, bad pages, placeholder titles ----------------------------------
+
+def test_an_aes_encrypted_pdf_with_an_empty_user_password_is_read(tmp_path):
+    import io
+
+    from pypdf import PdfReader, PdfWriter
+
+    writer = PdfWriter(clone_from=PdfReader(io.BytesIO(make_pdf(tmp_path))))
+    writer.encrypt(user_password="", owner_password="owner", algorithm="AES-256")
+    buffer = io.BytesIO()
+    writer.write(buffer)
+    assert b"/AESV3" in buffer.getvalue()
+    assert "Resultados del experimento" in pdf.from_bytes(buffer.getvalue(), "https://e.com/p.pdf").text
+
+
+def test_one_bad_page_does_not_lose_the_rest(monkeypatch, tmp_path):
+    from pypdf import PageObject
+
+    real = PageObject.extract_text
+    calls = []
+
+    def flaky(self, *a, **k):
+        calls.append(1)
+        if len(calls) == 1:
+            raise ValueError("broken page")
+        return real(self, *a, **k)
+
+    from reportlab.pdfgen import canvas
+    path = tmp_path / "two.pdf"
+    c = canvas.Canvas(str(path))
+    c.drawString(72, 720, "primera")
+    c.showPage()
+    c.drawString(72, 720, "segunda pagina")
+    c.save()
+    monkeypatch.setattr(PageObject, "extract_text", flaky)
+    out = pdf.from_bytes(path.read_bytes(), "https://e.com/two.pdf")
+    assert "segunda pagina" in out.text and "primera" not in out.text
+
+
+@pytest.mark.parametrize("title", ["Microsoft Word - informe final.doc", "paper.docx", "Untitled", "  "])
+def test_generator_placeholder_titles_fall_back_to_the_file_name(title):
+    from pypdf import PdfWriter
+    import io
+
+    from reportlab.pdfgen import canvas
+    buffer = io.BytesIO()
+    c = canvas.Canvas(buffer)
+    c.setTitle(title)
+    c.drawString(72, 720, "contenido")
+    c.save()
+    assert pdf.from_bytes(buffer.getvalue(), "https://e.com/real-name.pdf").title == "real-name.pdf"
+
+
+def test_a_real_title_is_kept():
+    import io
+
+    from reportlab.pdfgen import canvas
+    buffer = io.BytesIO()
+    c = canvas.Canvas(buffer)
+    c.setTitle("Attention Is All You Need")
+    c.drawString(72, 720, "contenido")
+    c.save()
+    assert pdf.from_bytes(buffer.getvalue(), "https://e.com/1706.pdf").title == "Attention Is All You Need"
+
+
+# --- extract() only ever raises Unreadable -----------------------------------
+
+def test_a_network_failure_from_the_article_path_is_unreadable(monkeypatch):
+    url = "https://e.com/gone"
+    monkeypatch.setattr(article, "fetch", served({url: net.NetworkError("404 for " + url, status=404)}))
+    with pytest.raises(Unreadable, match="404"):
+        extract(url)
+
+
+def test_a_network_failure_from_a_github_page_is_unreadable(monkeypatch):
+    url = "https://docs.github.com/en/gone"
+    monkeypatch.setattr(article, "fetch", served({url: net.NetworkError("404 for " + url, status=404)}))
+    with pytest.raises(Unreadable):
+        extract(url)
+    with pytest.raises(Unreadable):
+        github.from_url(url)

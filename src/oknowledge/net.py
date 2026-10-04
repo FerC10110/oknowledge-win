@@ -89,13 +89,12 @@ def fetch(url: str, timeout: float = 30.0, max_bytes: int | None = None) -> Fetc
         with httpx.Client(headers=headers, timeout=timeout, follow_redirects=True,
                           max_redirects=MAX_REDIRECTS) as client:
             with client.stream("GET", url) as response:
+                seen = {k.lower(): v for k, v in response.headers.items()}
                 if response.status_code >= 400:
                     raise NetworkError(
                         f"{response.status_code} for {url}",
-                        status=response.status_code,
-                        headers={k.lower(): v for k, v in response.headers.items()})
+                        status=response.status_code, headers=seen)
                 declared = response.headers.get("content-length", "")
-                seen = {k.lower(): v for k, v in response.headers.items()}
                 if declared.isdigit() and int(declared) > max_bytes:
                     raise NetworkError(
                         f"page is {int(declared)} bytes, over {max_bytes} bytes: {url}",

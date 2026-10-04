@@ -18,6 +18,8 @@ from ..net import NetworkError, fetch
 from . import Unreadable, _host, _is
 
 MAX_COMMENTS = 20
+MAX_TITLE = 300
+REMOVED = {"[removed]", "[deleted]"}
 
 
 def from_reddit(data, url: str) -> Extracted:
@@ -27,17 +29,18 @@ def from_reddit(data, url: str) -> Extracted:
         parts = [post.get("selftext") or ""]
         for child in comments[:MAX_COMMENTS]:
             body = (child.get("data") or {}).get("body")
-            if body:
+            if body and body.strip() not in REMOVED:
                 parts.append(f"- {body}")
     except (KeyError, IndexError, TypeError, AttributeError) as error:
         raise Unreadable(f"unexpected reddit payload for {url}") from error
 
-    text = "\n\n".join(p.strip() for p in parts if p.strip())
-    if not text:
-        raise Unreadable(f"the thread has no text: {url}")
+    text = "\n\n".join(p.strip() for p in parts if p.strip() and p.strip() not in REMOVED)
+    title = post.get("title") or ""
+    if not title and not text:
+        raise Unreadable(f"the thread has no title and no text: {url}")
 
     return Extracted(
-        title=post.get("title") or url,
+        title=title or url,
         text=text,
         type="social",
         source=_host(url),
@@ -51,34 +54,51 @@ def _reddit_json_url(url: str) -> str:
 
 
 class _Meta(HTMLParser):
-    """Collects <meta> name/property -> content pairs and the <title>."""
+    """Collects <meta> name/property -> content pairs and the document's <title>.
+
+    Only the first <title> before the body counts (icons inside the page carry
+    <title> too), and an unclosed one is cut off instead of eating the page."""
 
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
         self.meta: dict[str, str] = {}
         self.title = ""
-        self._in_title = False
+        self._state = "before"     # before -> inside -> done
+        self._in_body = False
 
     def handle_starttag(self, tag, attrs):
-        if tag == "title":
-            self._in_title = True
-        elif tag == "meta":
+        if tag == "body":
+            self._in_body = True
+            self._state = "done"
+        elif self._in_body:
+            return
+        elif tag == "title" and self._state == "before":
+            self._state = "inside"
+        elif tag in ("meta", "head") and self._state == "inside":
+            self._state = "done"       # an unclosed <title> ended here
+        if tag == "meta" and not self._in_body:
             a = {k.lower(): (v or "") for k, v in attrs}
             key = (a.get("property") or a.get("name") or "").lower()
             if key and a.get("content", "").strip():
                 self.meta.setdefault(key, a["content"].strip())
 
     def handle_endtag(self, tag):
-        if tag == "title":
-            self._in_title = False
+        if tag in ("title", "head") and self._state == "inside":
+            self._state = "done"
 
     def handle_data(self, data):
-        if self._in_title:
-            self.title += data
+        if self._state != "inside":
+            return
+        if "<" in data:                # an unclosed <title>: the rest is page markup
+            data, self._state = data.split("<", 1)[0], "done"
+        self.title = (self.title + data)[:MAX_TITLE]
 
 
 def from_preview_tags(html: str, url: str) -> Extracted:
-    """Build a note from the link-preview tags of a page, as far as they go."""
+    """Build a note from the link-preview tags of a page, as far as they go.
+
+    A bare <title> is usually just the site name on a login wall ("Instagram"),
+    so it only counts next to an og:/twitter: title or a description."""
     parser = _Meta()
     try:
         parser.feed(html)
@@ -90,12 +110,12 @@ def from_preview_tags(html: str, url: str) -> Extracted:
     def first(*keys: str) -> str:
         return next((meta[k] for k in keys if k in meta), "")
 
-    title = first("og:title", "twitter:title") or " ".join(parser.title.split())
+    card_title = first("og:title", "twitter:title")
     description = first("og:description", "twitter:description", "description")
-    if not title and not description:
+    if not card_title and not description:
         raise Unreadable(f"{_host(url)} shows no preview without logging in: {url}")
     return Extracted(
-        title=title or url,
+        title=card_title or " ".join(parser.title.split()) or url,
         text=description,
         type="social",
         source=_host(url),

@@ -5,7 +5,7 @@ description = "Save a link, get a summarized note in your Obsidian vault"
 requires-python = ">=3.13"
 dependencies = [
   "trafilatura>=2.0",
-  "pypdf>=5.1",
+  "pypdf[crypto]>=5.1",
   "httpx>=0.28",
   "fastapi>=0.115",
   "uvicorn>=0.34",

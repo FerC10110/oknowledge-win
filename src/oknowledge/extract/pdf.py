@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+import re
 from urllib.parse import unquote, urlsplit
 
 from pypdf import PdfReader
@@ -15,7 +16,18 @@ MAX_PAGES = 20
 # A PDF cannot be cut short (pypdf needs the cross-reference table at the end),
 # so it gets a higher ceiling than a web page instead of being truncated.
 PDF_MAX_BYTES = 32 * 1024 * 1024
-PLACEHOLDER_TITLES = {"untitled"}   # what PDF generators (reportlab, ...) write when nobody set one
+# What PDF generators write when nobody set a title: "untitled" (reportlab),
+# "Microsoft Word - report.doc", or the source file name ("paper.docx").
+PLACEHOLDER_TITLE = re.compile(
+    r"^(untitled|microsoft (word|powerpoint|excel) - .*|.+\.(docx?|pptx?|xlsx?|odt|tex|indd))$",
+    re.I)
+
+
+def _page_text(page) -> str:
+    try:
+        return page.extract_text() or ""
+    except Exception:
+        return ""    # one broken page should not lose the others
 
 
 def from_bytes(data: bytes, url: str) -> Extracted:
@@ -23,7 +35,7 @@ def from_bytes(data: bytes, url: str) -> Extracted:
         reader = PdfReader(io.BytesIO(data))
         if reader.is_encrypted and not reader.decrypt(""):
             raise Unreadable(f"the PDF at {url} is protected by a password")
-        pages = [page.extract_text() or "" for page in reader.pages[:MAX_PAGES]]
+        pages = [_page_text(page) for page in reader.pages[:MAX_PAGES]]
         meta = reader.metadata
         meta_title, meta_author = (meta.title, meta.author) if meta else (None, None)
     except Unreadable:
@@ -38,7 +50,7 @@ def from_bytes(data: bytes, url: str) -> Extracted:
 
     name = unquote(urlsplit(url).path.rsplit("/", 1)[-1]) or url
     title = (meta_title or "").strip()
-    if title.lower() in PLACEHOLDER_TITLES:
+    if PLACEHOLDER_TITLE.match(title):
         title = ""
     title = title or name
     return Extracted(

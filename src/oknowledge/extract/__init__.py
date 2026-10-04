@@ -32,8 +32,8 @@ def _is(host: str, domains: set[str]) -> bool:
     return any(host == d or host.endswith("." + d) for d in domains)
 
 
-def _content_type(headers: dict[str, str]) -> str:
-    return headers.get("content-type", "").split(";")[0].strip().lower()
+def _content_type(header: str) -> str:
+    return header.split(";")[0].strip().lower()
 
 
 def detect_type(url: str) -> str:
@@ -52,7 +52,16 @@ def detect_type(url: str) -> str:
 
 
 def extract(url: str) -> Extracted:
-    """Fetch the URL and turn it into text. This is the door the pipeline uses."""
+    """Fetch the URL and turn it into text. This is the door the pipeline uses.
+
+    The only exception that leaves here is Unreadable."""
+    try:
+        return _extract(url)
+    except NetworkError as error:
+        raise Unreadable(str(error)) from error
+
+
+def _extract(url: str) -> Extracted:
     kind = detect_type(url)
     if kind == "youtube":
         from .youtube import from_url
@@ -73,14 +82,14 @@ def extract(url: str) -> Extracted:
         # A big PDF behind an extensionless URL trips the web-page size cap
         # before we can see what it is; the headers still say. Fetch it again
         # under the PDF ceiling (pdf.from_url explains if it is over that too).
-        if error.too_large and _content_type(error.headers) == "application/pdf":
+        if error.too_large and _content_type(error.headers.get("content-type", "")) == "application/pdf":
             from .pdf import from_url as pdf_from_url
             return pdf_from_url(url)
         raise
     except NotAWebPage as error:
         # The URL gave no hint (arxiv.org/pdf/2301.12345) but the response is a PDF.
         fetched = error.fetched
-        if _content_type({"content-type": fetched.content_type}) == "application/pdf":
+        if _content_type(fetched.content_type) == "application/pdf":
             from .pdf import from_bytes
             return from_bytes(fetched.content, fetched.final_url)
         raise

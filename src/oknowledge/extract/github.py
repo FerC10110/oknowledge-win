@@ -40,19 +40,21 @@ def _slug(url: str) -> str | None:
 
 
 def from_api(repo: dict, readme: str, url: str) -> Extracted:
+    description = (repo.get("description") or "").strip()
+    if not description and not readme.strip():
+        # The language and star count alone are not a note worth keeping.
+        raise Unreadable(f"the repository has no description or readme: {url}")
     facts = [
-        repo.get("description") or "",
-        f"Lenguaje principal: {repo.get('language') or 'desconocido'}.",
-        f"Estrellas: {repo.get('stargazers_count', 0)}.",
+        description,
+        f"Primary language: {repo.get('language') or 'unknown'}.",
+        f"Stars: {repo.get('stargazers_count', 0)}.",
     ]
     topics = repo.get("topics") or []
     if topics:
-        facts.append("Temas: " + ", ".join(topics) + ".")
+        facts.append("Topics: " + ", ".join(topics) + ".")
     text = "\n".join(f for f in facts if f.strip())
     if readme.strip():
         text += "\n\n" + readme.strip()
-    if not text.strip():
-        raise Unreadable(f"the repository has no description or readme: {url}")
 
     pushed = str(repo.get("pushed_at") or "")[:10] or None
     return Extracted(
@@ -81,16 +83,30 @@ def _explain(error: NetworkError, slug: str) -> str:
     return f"could not read {slug}: {error}"
 
 
+def _as_page(url: str, reason: str | None = None) -> Extracted:
+    """Read the URL as an ordinary web page (what a non-repository GitHub URL is)."""
+    try:
+        return article.from_url(url)
+    except NetworkError as error:
+        raise Unreadable(f"{reason + '; and ' if reason else ''}could not read {url}: {error}") from error
+    except Unreadable as error:
+        if reason:
+            raise Unreadable(f"{reason}; and as a page: {error}") from error
+        raise
+
+
 def from_url(url: str) -> Extracted:
     slug = _slug(url)
     if slug is None:
-        # gist.github.com, docs.github.com, a user page, /features, /orgs/...:
-        # not a repository, so read it as the web page it is.
-        return article.from_url(url)
+        # gist.github.com, docs.github.com, a user page, /features, /orgs/...
+        return _as_page(url)
 
     try:
         repo = json.loads(fetch(f"{API}/{slug}").text)
     except NetworkError as error:
+        if error.status == 404:
+            # github.com/solutions/ci looks like owner/repo but is a site page.
+            return _as_page(url, _explain(error, slug))
         raise Unreadable(_explain(error, slug)) from error
     except ValueError as error:
         raise Unreadable(f"GitHub gave an unreadable answer for {slug}") from error
@@ -101,6 +117,9 @@ def from_url(url: str) -> Extracted:
     try:
         payload = json.loads(fetch(f"{API}/{slug}/readme").text)
         readme = base64.b64decode(payload.get("content", "")).decode("utf-8", "replace")
-    except (NetworkError, ValueError, AttributeError, binascii.Error):
-        readme = ""    # no readme, or one we cannot read: the repo facts still make a note
+    except NetworkError as error:
+        if error.status != 404:    # a repo with no README is normal; a 5xx or a limit is not
+            raise Unreadable(_explain(error, slug)) from error
+    except (ValueError, AttributeError, binascii.Error):
+        readme = ""    # a README we cannot decode: the description still makes a note
     return from_api(repo, readme, url)
