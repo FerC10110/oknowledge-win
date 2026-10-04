@@ -7,6 +7,7 @@ import pytest
 
 from oknowledge.cli import main
 from oknowledge.config import Config
+from oknowledge.extract import Unreadable
 from oknowledge.model import Extracted
 from oknowledge.pipeline import Result
 from oknowledge.queue import Queue, state_dir
@@ -147,9 +148,16 @@ def test_reindex_reports_written_blocked_and_skipped(cfg, monkeypatch, capsys):
     assert "broken.md" in out.err and "could not be read" in out.err
 
 
-def test_reindex_runs_for_real(cfg, capsys):
+def test_reindex_runs_for_real(cfg, monkeypatch, capsys):
+    monkeypatch.setattr("oknowledge.pipeline.extract", lambda url: PAGE)
+    main(["add", "https://arstechnica.com/vpn"])
+    indexes = list(cfg.root.glob("*.md"))
+    assert len(indexes) == 1
+    indexes[0].unlink()
+    capsys.readouterr()
     assert main(["reindex"]) == 0
-    assert "0 indexes" in capsys.readouterr().out
+    assert capsys.readouterr().out == "1 index rewritten\n"
+    assert len(list(cfg.root.glob("*.md"))) == 1
 
 
 def test_retry_shows_why_a_link_failed(cfg, monkeypatch, capsys):
@@ -177,7 +185,7 @@ def test_a_disk_error_is_a_message_not_a_traceback(cfg, monkeypatch, capsys):
     def boom(config, language):
         raise OSError(28, "No space left on device")
     monkeypatch.setattr("oknowledge.cli.rebuild_indexes", boom)
-    assert main(["reindex"]) == 1
+    assert main(["reindex"]) == 3
     assert "oknowledge: [Errno 28] No space left on device" in capsys.readouterr().err
 
 
@@ -228,3 +236,150 @@ def test_a_directory_where_the_config_should_be_is_a_message(tmp_path, capsys):
     path.mkdir()
     assert main(["--config", str(path), "status"]) == 2
     assert "cannot read the config file" in capsys.readouterr().err
+
+
+def test_re_adding_a_partial_link_reprocesses_it(cfg, monkeypatch, capsys):
+    url = "https://arstechnica.com/vpn"
+    monkeypatch.setattr("oknowledge.pipeline.extract",
+                        lambda u: (_ for _ in ()).throw(Unreadable("down")))
+    assert main(["add", url]) == 1
+    capsys.readouterr()
+    monkeypatch.setattr("oknowledge.pipeline.extract", lambda u: PAGE)
+    assert main(["add", url]) == 0
+    out = capsys.readouterr().out
+    assert out.startswith("saved:") and "already" not in out
+    assert [e.status for e in Queue().entries()] == ["ok"]
+
+
+def test_re_adding_an_ok_link_says_already_saved(cfg, monkeypatch, capsys):
+    monkeypatch.setattr("oknowledge.pipeline.extract", lambda u: PAGE)
+    main(["add", "https://arstechnica.com/vpn"])
+    capsys.readouterr()
+    assert main(["add", "https://arstechnica.com/vpn"]) == 0
+    assert capsys.readouterr().out.startswith("already saved:")
+
+
+def test_locked_with_json_is_still_one_object_and_exit_1(cfg, monkeypatch, capsys):
+    fake_add(monkeypatch, Result(id="a1", url="u", path=None, status="pending", error="locked"))
+    assert main(["add", "https://e.com/x", "--json"]) == 1
+    captured = capsys.readouterr()
+    assert json.loads(captured.out)["status"] == "pending"
+
+
+@pytest.mark.parametrize("text", [
+    'vault = [',
+    'vault = 5\n',
+    'vault = "{vault}"\nai = 3\n',
+    'vault = "{vault}"\n[web]\nport = "x"\n',
+    'vault = "{vault}"\nfolder = 3\n',
+    'vault = "{vault}"\n[ai]\nchain = 5\n',
+])
+def test_a_malformed_config_is_a_message_with_exit_2(tmp_path, capsys, text):
+    path = tmp_path / "config.toml"
+    path.write_text(text.format(vault=tmp_path))
+    assert main(["--config", str(path), "status"]) == 2
+    captured = capsys.readouterr()
+    assert captured.err.startswith("oknowledge: ") and "Traceback" not in captured.err
+    assert captured.out == ""
+
+
+def test_a_config_that_is_not_utf8_is_a_message(tmp_path, capsys):
+    path = tmp_path / "config.toml"
+    path.write_bytes(b'vault = "\xff\xfe"\n')
+    assert main(["--config", str(path), "status"]) == 2
+    assert "UTF-8" in capsys.readouterr().err
+
+
+def test_a_protected_note_exits_3_and_says_if_the_link_was_queued(cfg, monkeypatch, capsys):
+    from oknowledge.vault import ProtectedNote
+
+    def boom(config, url, **kw):
+        raise ProtectedNote("links is outside the vault")
+    monkeypatch.setattr("oknowledge.cli.add", boom)
+    assert main(["add", "https://e.com/x"]) == 3
+    err = capsys.readouterr().err
+    assert "refused to write" in err and "the link was not queued" in err
+
+
+def test_an_unexpected_error_exits_3_and_reports_the_queue(cfg, monkeypatch, capsys):
+    from oknowledge.urls import link_id, normalize
+    Queue().enqueue(link_id(normalize("https://e.com/x")), "https://e.com/x", "full")
+
+    def boom(config, url, **kw):
+        raise RuntimeError("surprise")
+    monkeypatch.setattr("oknowledge.cli.add", boom)
+    assert main(["add", "https://e.com/x"]) == 3
+    captured = capsys.readouterr()
+    assert "unexpected error: RuntimeError: surprise" in captured.err
+    assert "the link is in the queue" in captured.err
+    assert captured.out == ""
+
+
+@pytest.mark.parametrize("url", ["", "   "])
+def test_an_empty_url_is_rejected_before_the_pipeline(cfg, monkeypatch, capsys, url):
+    fake_add(monkeypatch, lambda u: pytest.fail("the pipeline must not run"))
+    assert main(["add", url]) == 2
+    assert "empty" in capsys.readouterr().err
+    assert list(cfg.links_dir.glob("*.md")) == []
+
+
+def test_an_unknown_engine_is_refused_by_argparse(cfg, capsys):
+    with pytest.raises(SystemExit) as exit_:
+        main(["add", "https://e.com/x", "--engine", "gpt9"])
+    assert exit_.value.code == 2
+    assert "invalid choice" in capsys.readouterr().err
+    assert list(cfg.links_dir.glob("*.md")) == []
+
+
+def test_a_failed_reanalysis_says_the_note_was_left_alone(cfg, monkeypatch, capsys):
+    fake_add(monkeypatch, Result(id="a1", url="u", path=cfg.links_dir / "n.md",
+                                 status="failed", error="all engines down"))
+    assert main(["add", "https://e.com/x", "--reprocess"]) == 1
+    err = capsys.readouterr().err
+    assert "left as it is" in err and "all engines down" in err
+    assert "incomplete" not in err
+
+
+def test_control_characters_do_not_break_the_status_table(cfg, capsys):
+    q = Queue()
+    q.enqueue("a1", "https://e.com/x", "full")
+    q.set_status("a1", "failed", error="bad\nthing", title="Two\nlines\x1b[31m")
+    main(["status"])
+    lines = capsys.readouterr().out.splitlines()
+    assert len(lines) == 2 and "\x1b" not in lines[1]
+
+
+def test_status_reports_unreadable_queue_files(cfg, capsys):
+    q = Queue()
+    q.enqueue("a1", "https://e.com/x", "full")
+    (q.dir / "b2.json").write_text("{not json")
+    assert main(["status", "--json"]) == 0
+    captured = capsys.readouterr()
+    assert len(json.loads(captured.out)) == 1
+    assert "1 queue file" in captured.err and "could not be read" in captured.err
+
+
+def test_stdout_stays_empty_when_the_answer_goes_to_stderr(cfg, monkeypatch, capsys):
+    for result in (
+        Result(id="a", url="u", path=None, status="partial", error="403"),
+        Result(id="a", url="u", path=None, status="pending", error="locked"),
+        Result(id="a", url="u", path=cfg.links_dir / "n.md", status="failed", error="x"),
+    ):
+        fake_add(monkeypatch, result)
+        assert main(["add", "https://e.com/x"]) == 1
+        assert capsys.readouterr().out == ""
+
+
+def test_retry_survives_an_unreadable_queue_listing(cfg, monkeypatch, capsys):
+    from oknowledge.pipeline import retry
+    q = Queue()
+    q.enqueue("a1", "https://e.com/x", "full")
+    q.set_status("a1", "failed", error="old")
+
+    def boom():
+        raise PermissionError("locks/x.lock")
+    monkeypatch.setattr(q, "orphaned", boom)
+    monkeypatch.setattr("oknowledge.pipeline.extract", lambda u: PAGE)
+    results = retry(cfg, queue=q)
+    assert [r.status for r in results] == ["failed", "ok"]
+    assert "could not list the queue" in results[0].error

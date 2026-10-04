@@ -43,41 +43,76 @@ class Config:
         return self.root / "attachments"
 
 
+def _table(data: dict, key: str, where: str) -> dict:
+    value = data.get(key, {})
+    if not isinstance(value, dict):
+        raise ConfigError(f"{where} must be a table, not {value!r}")
+    return value
+
+
+def _integer(table: dict, key: str, default: int, where: str) -> int:
+    value = table.get(key, default)
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ConfigError(f"{where} must be a whole number, not {value!r}")
+    return value
+
+
 def load(path: Path = CONFIG_PATH) -> Config:
+    """Read and validate the config. Whatever is wrong with the file, the answer
+    is a ConfigError saying what, never a traceback: this is the file the user
+    writes by hand. (A file that exists but cannot be opened is an OSError,
+    which the caller reports as such.)"""
     path = Path(path)
     if not path.exists():
         raise ConfigError(f"no config file at {path}")
-    data = tomllib.loads(path.read_text(encoding="utf-8"))
+    try:
+        data = tomllib.loads(path.read_text(encoding="utf-8"))
+    except UnicodeDecodeError:
+        raise ConfigError(f"{path} is not valid UTF-8 text") from None
+    except tomllib.TOMLDecodeError as error:
+        raise ConfigError(f"{path} is not valid TOML: {error}") from None
 
     raw_vault = data.get("vault")
     if not raw_vault:
         raise ConfigError("vault is required in the config file")
+    if not isinstance(raw_vault, str):
+        raise ConfigError(f"vault must be a path in quotes, not {raw_vault!r}")
     vault = Path(raw_vault).expanduser()
     if not vault.is_dir():
         raise ConfigError(f"vault is not a directory: {vault}")
+
+    folder = data.get("folder", "oknowledge")
+    if not isinstance(folder, str) or not folder:
+        raise ConfigError(f"folder must be a name in quotes, not {folder!r}")
 
     content = data.get("default_content", "full")
     if content not in CONTENT_MODES:
         raise ConfigError(f"default_content must be full or summary, not {content!r}")
 
-    ai = data.get("ai", {})
-    chain = tuple(ai.get("chain", ("opencode",)))
+    ai = _table(data, "ai", "ai")
+    raw_chain = ai.get("chain", ("opencode",))
+    if not isinstance(raw_chain, (list, tuple)) or not all(isinstance(n, str) for n in raw_chain):
+        raise ConfigError(f"ai.chain must be a list of engine names, not {raw_chain!r}")
+    chain = tuple(raw_chain)
     if not chain:
         raise ConfigError("ai.chain cannot be empty: nothing would analyse the page")
     for name in chain:
         if name not in ENGINE_NAMES:
             raise ConfigError(f"unknown engine in ai.chain: {name!r}")
+    language = ai.get("language", "es")
+    if not isinstance(language, str):
+        raise ConfigError(f"ai.language must be text in quotes, not {language!r}")
 
     engines = {name: dict(value) for name, value in ai.items() if isinstance(value, dict)}
-    web = data.get("web", {})
+    web = _table(data, "web", "web")
 
     return Config(
         vault=vault,
-        folder=data.get("folder", "oknowledge"),
+        folder=folder,
         default_content=content,
         chain=chain,
-        language=ai.get("language", "es"),
+        language=language,
         engines=engines,
-        port=int(web.get("port", 8787)),
-        idle_timeout=int(web.get("idle_timeout", 900)),
+        port=_integer(web, "port", 8787, "web.port"),
+        idle_timeout=_integer(web, "idle_timeout", 900, "web.idle_timeout"),
     )

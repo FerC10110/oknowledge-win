@@ -488,10 +488,16 @@ def retry(cfg: Config, queue: Queue | None = None) -> list[Result]:
     """
     q = queue or Queue()
     owed: dict[str, QueueEntry] = {}
-    for entry in (*q.unfinished(), *q.orphaned()):
-        owed.setdefault(entry.id, entry)
-
     results: list[Result] = []
+    for listing in (q.unfinished, q.orphaned):
+        # Each listing can fail as a whole (an unreadable lock file, say) and
+        # must not stop the other, nor the links already found.
+        try:
+            for entry in listing():
+                owed.setdefault(entry.id, entry)
+        except Exception as error:
+            results.append(Result(id="queue", url="", path=None, status="failed",
+                                  error=f"could not list the queue ({_typed(error)})"))
     for entry in owed.values():
         try:
             results.append(add(cfg, entry.url, content=entry.content,
