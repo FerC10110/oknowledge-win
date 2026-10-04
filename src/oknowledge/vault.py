@@ -10,15 +10,15 @@ Two rules, and both live here for a reason: the vault belongs to the user.
 
 from __future__ import annotations
 
-import os
+import os  # noqa: F401  (tests patch os.replace through this module)
 import re
-import secrets
 import unicodedata
 from dataclasses import dataclass, field
 from pathlib import Path
 
 import yaml
 
+from .atomic import atomic_write
 from .config import Config
 from .model import Note
 
@@ -213,38 +213,13 @@ def _ensure_inside_root(cfg: Config, target: Path) -> Path:
     return resolved
 
 
-def _atomic_write(target: Path, text: str) -> None:
-    """Write via a temp file in the same directory, then os.replace over target.
-
-    The temp file is created with mode 0o666 so the umask applies to new notes;
-    an existing note keeps its current mode.
-    """
-    mode = target.stat().st_mode & 0o777 if target.exists() else None
-    tmp = target.parent / f".oknowledge-{secrets.token_hex(8)}.tmp"
-    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o666)
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
-            f.write(text)
-            f.flush()
-            os.fsync(f.fileno())
-        if mode is not None:
-            os.chmod(tmp, mode)
-        os.replace(tmp, target)
-    except BaseException:
-        try:
-            os.unlink(tmp)
-        except FileNotFoundError:
-            pass
-        raise
-
-
 def write_note(cfg: Config, note: Note, language: str, path: Path | None = None) -> Path:
     target = path or note_path(cfg, note)
     resolved = _ensure_inside_root(cfg, target)       # location first, before any write
     if resolved.exists() and read_front(resolved) is None:
         raise ProtectedNote(f"refusing to overwrite a file without the marker: {target}")
     resolved.parent.mkdir(parents=True, exist_ok=True)
-    _atomic_write(resolved, render(note, language))
+    atomic_write(resolved, render(note, language))
     return resolved
 
 
@@ -374,7 +349,7 @@ def write_index(cfg: Config, category: str, entries: list[tuple[Path, Note]], la
     if resolved.exists() and read_front(resolved) is None:
         raise ProtectedNote(f"refusing to overwrite a file without the marker: {target}")
     resolved.parent.mkdir(parents=True, exist_ok=True)
-    _atomic_write(resolved, "\n".join(lines) + "\n")
+    atomic_write(resolved, "\n".join(lines) + "\n")
     return resolved
 
 
