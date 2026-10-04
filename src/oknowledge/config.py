@@ -77,13 +77,23 @@ def load(path: Path = CONFIG_PATH) -> Config:
         raise ConfigError("vault is required in the config file")
     if not isinstance(raw_vault, str):
         raise ConfigError(f"vault must be a path in quotes, not {raw_vault!r}")
-    vault = Path(raw_vault).expanduser()
+    try:
+        vault = Path(raw_vault).expanduser()
+    except RuntimeError:                      # "~nosuchuser/x": no such home directory
+        raise ConfigError(f"vault {raw_vault!r} starts with ~ but that home "
+                          "directory does not exist") from None
     if not vault.is_dir():
         raise ConfigError(f"vault is not a directory: {vault}")
 
     folder = data.get("folder", "oknowledge")
     if not isinstance(folder, str) or not folder:
         raise ConfigError(f"folder must be a name in quotes, not {folder!r}")
+    if folder in (".", "..") or "/" in folder or "\\" in folder:
+        # Everything we write lives under <vault>/<folder>, and the containment
+        # check is computed from that same root: a folder that escapes the vault
+        # would escape the check with it.
+        raise ConfigError(f"folder must be one plain folder name inside the vault, "
+                          f"not {folder!r}")
 
     content = data.get("default_content", "full")
     if content not in CONTENT_MODES:

@@ -15,6 +15,9 @@ Exit codes, which the Omarchy plugin relies on:
     3  something unexpected went wrong (a disk or permission error, a refused
        write, a bug). Nothing is guaranteed to have been saved; the message
        says whether the link reached the queue.
+
+`status` and `reindex` exit 0 when they ran, even if they report that an index
+was blocked or queue files were unreadable: the report is the result.
 """
 
 from __future__ import annotations
@@ -105,9 +108,11 @@ def _add(cfg, args) -> int:
         return 2
     content = "summary" if args.summary else ("full" if args.full else None)
     result = add(cfg, url, content=content, engine=args.engine, reprocess=args.reprocess)
-    if result.skipped and result.status != "ok":
-        # Pasting a link again is what someone does when it did not work. The
-        # note is unfinished, so do what `retry` would: process it again.
+    if result.skipped and result.status == "partial":
+        # Pasting a link again is what someone does when it did not work, so
+        # finish it, as `retry` would. Invariant: `partial` is ours to rewrite;
+        # every other status (ok, failed, or one the user typed by hand) is
+        # theirs and is never reprocessed without --reprocess.
         result = add(cfg, url, content=content, engine=args.engine, reprocess=True)
     if args.json:
         print(json.dumps(_result_dict(result), ensure_ascii=False))

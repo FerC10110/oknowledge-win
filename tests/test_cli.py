@@ -405,3 +405,36 @@ def test_an_unprobeable_lock_costs_one_link_not_the_whole_list(cfg, monkeypatch)
         bad.chmod(0o600)
     assert sorted(r.id for r in results) == sorted([ids["a"], ids["c"]])
     assert q.get(ids["b"]).status == "pending"
+
+
+def test_re_adding_a_note_with_a_hand_typed_status_leaves_it_alone(cfg, monkeypatch, capsys):
+    url = "https://arstechnica.com/vpn"
+    monkeypatch.setattr("oknowledge.pipeline.extract", lambda u: PAGE)
+    main(["add", url])
+    note = next(cfg.links_dir.glob("*.md"))
+    text = note.read_text(encoding="utf-8").replace("status: ok", "status: done")
+    assert "status: done" in text
+    note.write_text(text + "\nMy own thoughts.\n", encoding="utf-8")
+    before = note.read_text(encoding="utf-8")
+    capsys.readouterr()
+    assert main(["add", url]) == 0
+    assert capsys.readouterr().out.startswith("already saved:")
+    assert note.read_text(encoding="utf-8") == before
+
+
+def test_a_vault_with_an_unknown_home_is_a_message(tmp_path, capsys):
+    path = tmp_path / "config.toml"
+    path.write_text('vault = "~nosuchuser_zz/x"\n')
+    assert main(["--config", str(path), "status"]) == 2
+    err = capsys.readouterr().err
+    assert "home directory does not exist" in err and "Traceback" not in err
+
+
+@pytest.mark.parametrize("folder", ["../escape", "/abs", "a/b", "", "..", "."])
+def test_a_folder_that_leaves_the_vault_is_refused(tmp_path, capsys, folder):
+    (tmp_path / "v").mkdir()
+    path = tmp_path / "config.toml"
+    path.write_text(f'vault = "{tmp_path / "v"}"\nfolder = "{folder}"\n')
+    assert main(["--config", str(path), "status"]) == 2
+    assert "folder must be" in capsys.readouterr().err
+    assert not (tmp_path / "escape").exists()
