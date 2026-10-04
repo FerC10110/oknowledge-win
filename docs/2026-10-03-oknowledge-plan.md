@@ -2503,7 +2503,6 @@ from ..net import fetch
 from . import Unreadable, _host
 
 MAX_PAGES = 20
-MIN_CHARS = 200
 
 
 def from_bytes(data: bytes, url: str) -> Extracted:
@@ -2514,8 +2513,6 @@ def from_bytes(data: bytes, url: str) -> Extracted:
         raise Unreadable(f"could not read the PDF at {url}: {error}") from error
 
     text = "\n\n".join(p.strip() for p in pages if p.strip()).strip()
-    if len(text) < MIN_CHARS and not text:
-        raise Unreadable(f"the PDF at {url} has no text layer")
     if not text:
         raise Unreadable(f"the PDF at {url} has no text layer")
 
