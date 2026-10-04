@@ -5,6 +5,7 @@ from __future__ import annotations
 from urllib.parse import urlsplit
 
 from ..model import Extracted
+from ..urls import normalize
 
 __all__ = ["Extracted", "Unreadable", "detect_type", "extract"]
 
@@ -12,6 +13,9 @@ SOCIAL_HOSTS = {
     "reddit.com", "x.com", "twitter.com", "instagram.com", "tiktok.com",
     "threads.net", "bsky.app",
 }
+
+
+YOUTUBE_HOSTS = {"youtube.com", "youtu.be", "youtube-nocookie.com"}
 
 
 class Unreadable(Exception):
@@ -23,16 +27,21 @@ def _host(url: str) -> str:
     return host[4:] if host.startswith("www.") else host
 
 
+def _is(host: str, domains: set[str]) -> bool:
+    return any(host == d or host.endswith("." + d) for d in domains)
+
+
 def detect_type(url: str) -> str:
+    url = normalize(url)
     host = _host(url)
     path = urlsplit(url).path.lower()
-    if host in {"youtube.com", "youtu.be", "m.youtube.com"}:
+    if _is(host, YOUTUBE_HOSTS):
         return "youtube"
-    if host == "github.com":
+    if _is(host, {"github.com"}):
         return "github"
     if path.endswith(".pdf"):
         return "pdf"
-    if host in SOCIAL_HOSTS or host.endswith(".reddit.com"):
+    if _is(host, SOCIAL_HOSTS):
         return "social"
     return "article"
 
