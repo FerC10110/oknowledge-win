@@ -643,3 +643,36 @@ def test_a_note_whose_id_the_queue_cannot_name_is_still_editable(setup):
 
     assert response.status_code == 303
     assert find_note(cfg, "has spaces")[1].category == "Redes"
+
+
+@pytest.mark.parametrize("path,data", [
+    ("/item/a1/category", {"category": "Redes"}),
+    ("/item/a1/tags", {"tags": "vpn"}),
+    ("/item/a1/delete", {}),
+])
+def test_the_lock_is_still_held_while_the_note_is_written(setup, monkeypatch, path, data):
+    """Holding the lock is the fix; taking it and letting go before the work
+    would only move the race, so assert it is still held at the end of it.
+    flock belongs to the open file, so a second fd conflicts even in this
+    process -- which is exactly the case that matters, since the background
+    re-analysis is a thread of this same server."""
+    from oknowledge import vault
+    from oknowledge.queue import Locked, Queue
+
+    _, client = setup
+    reindexed = vault.rebuild_indexes
+    held = []
+
+    def watched(cfg, language):
+        try:
+            with Queue().lock("a1"):
+                held.append(False)        # got it: nobody is holding it
+        except Locked:
+            held.append(True)
+        return reindexed(cfg, language)
+
+    monkeypatch.setattr(vault, "rebuild_indexes", watched)
+    client.post(path, data=data)
+
+    assert held, "the vault never got as far as rebuilding the indexes"
+    assert all(held), "the link's queue lock was released before the work was done"
