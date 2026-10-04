@@ -71,6 +71,8 @@ NO_STATUS = ("the note was saved, but its queue status could not be recorded "
              "({reason})")
 KEPT_NOTE = ("the note already saved was left as it is: a failed re-analysis "
              "never replaces a finished note")
+RECONCILED = ("the note is already saved and finished, so the queue entry was "
+              "brought into line with it instead of re-analysing the link")
 COVER_TIMEOUT = 15.0
 COVER_MAX_BYTES = 5 * 1024 * 1024
 
@@ -477,14 +479,80 @@ def _reindex(cfg: Config) -> list[str]:
     ]
 
 
+def _reconcile(cfg: Config, q: Queue, entry: QueueEntry) -> Result | None:
+    """Settle one owed entry against the note on disk, without re-analysing.
+
+    Returns the Result when the entry was settled, or None when the link
+    really does still owe work and add() should take it from here.
+
+    This exists because of one reachable sequence. add() writes the note, the
+    process dies before its final set_status -- the Omarchy shell restarting
+    mid-save is enough, and its own notes call that normal -- so the entry
+    stays pending and orphaned() offers it to every retry from then on. Days
+    later the user has edited that note by hand. A retry whose extraction and
+    analysis both succeed would write a fresh note straight over it: _process()
+    computes `kept` for exactly this, but only _give_up() ever reads it, so the
+    guard covers the failure paths and not the one that writes.
+
+    So: the queue is bookkeeping and the note is the durable artifact, and when
+    they disagree while the note is complete, the bookkeeping is what is wrong.
+    The entry becomes ok and the note is not touched. `status: partial` is the
+    one value we write to mean unfinished, so it is the only one still
+    re-analysed -- a `done` of the user's, or a deleted status line, which
+    reads back as ok, falls on the protected side. That is the same test
+    _process() makes, now made before anything can be written.
+
+    An explicit reprocess is untouched: asking for a fresh analysis is asking
+    for the note to be replaced, and both ways of asking (the web's button,
+    which confirms, and a hand-typed `add --reprocess`) still do exactly that.
+
+    The accepted trade-off: a link saved at `summary` whose entry asked for
+    `full` stays at summary until somebody asks again, explicitly. A user's
+    hand edits are worth more than an automatic depth upgrade.
+    """
+    # The note at risk is the one add() would write over, which is keyed by the
+    # url, while the entry we have been asked to settle is keyed by its file
+    # name. For an entry we wrote they are the same id.
+    link = link_id(normalize(entry.url))
+    with ExitStack() as stack:
+        try:
+            stack.enter_context(q.lock(link))
+        except Locked as error:
+            # Somebody is working on this link right now and will record what
+            # happened. Nothing to do, and nothing to report but why.
+            return Result(id=entry.id, url=entry.url, path=None, status="pending",
+                          error=str(error))
+        except OSError:
+            # An unlockable state tree. add() carries on without the lock
+            # because a lost link costs more than a duplicated one -- but here
+            # carrying on would mean overwriting a finished note, so the
+            # decision is made unlocked and it can only ever protect.
+            pass
+        found = find_note(cfg, link)
+        if found is None or found[1].status == "partial":
+            return None
+        path, note = found
+        # The error of the last attempt stays in `error`, as _give_up() leaves
+        # it: an `ok` entry's error is a note for anyone who looks, and the
+        # widget shows it only on an unfinished row.
+        trouble = _record(q, entry.id, "ok", entry.error or "", note.title)
+        return Result(id=entry.id, url=entry.url, path=path.resolve(), status="ok",
+                      skipped=True, warnings=[RECONCILED, *trouble])
+
+
 def retry(cfg: Config, queue: Queue | None = None) -> list[Result]:
-    """Finish every link the queue still owes.
+    """Finish every link the queue still owes, and settle the ones only the
+    bookkeeping thinks are owed.
 
     unfinished() is partial and failed only. A process that died between
     enqueue and its final set_status leaves its entry pending, and no retry
     would ever look at it again -- the link would be lost, which is the one
     thing this module does not allow. orphaned() is exactly those abandoned
     entries, so both lists are walked, de-duplicated by id.
+
+    Every entry goes through _reconcile() first, which never re-analyses a
+    note that is already finished. Re-analysing one would replace content the
+    user may have written themselves, and a retry is not a request for that.
     """
     q = queue or Queue()
     owed: dict[str, QueueEntry] = {}
@@ -500,6 +568,10 @@ def retry(cfg: Config, queue: Queue | None = None) -> list[Result]:
                                   error=f"could not list the queue ({_typed(error)})"))
     for entry in owed.values():
         try:
+            settled = _reconcile(cfg, q, entry)
+            if settled is not None:
+                results.append(settled)
+                continue
             results.append(add(cfg, entry.url, content=entry.content,
                                reprocess=True, queue=q))
         except Exception as error:

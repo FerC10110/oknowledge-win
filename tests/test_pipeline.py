@@ -972,3 +972,200 @@ def test_the_rename_can_never_write_outside_the_links_folder(cfg, q, monkeypatch
 
 def test_the_state_directory_is_under_tmp_path(tmp_path):
     assert state_dir().is_relative_to(tmp_path)
+
+
+# --- retry reconciles; it never re-analyses a finished note -------------------
+#
+# The guard in _process() is read only by _give_up(), so every existing test of
+# it exercises a FAILED analysis. The hole is the success path: extraction and
+# analysis both work, _save() writes the fresh note over the file, and days of
+# the user's own editing go with it. retry() is where that is reachable without
+# anyone asking for it.
+
+
+def hand_edit(path, status="done"):
+    """What the user's own editing looks like: our marker, their status, their
+    prose. Returns the exact bytes that must survive a retry."""
+    text = path.read_text(encoding="utf-8")
+    if status:
+        text = text.replace("status: ok", f"status: {status}")
+    else:
+        text = "\n".join(l for l in text.splitlines() if not l.startswith("status:")) + "\n"
+    text = text.replace("title: WireGuard vs OpenVPN", "title: Mi resumen de WireGuard")
+    text += "\n## Lo que pienso\n\nEsto lo escribí yo y no lo quiero perder.\n"
+    path.write_text(text, encoding="utf-8")
+    return text
+
+
+def died_after_saving(q, link, url, mode="full"):
+    """Re-create the entry a process that died between writing the note and
+    recording its status leaves behind: pending, and nobody holding the lock."""
+    q.enqueue(link, url, mode)
+    assert [e.id for e in q.orphaned()] == [link]
+    assert not q.unfinished()
+
+
+def test_retry_over_an_orphaned_entry_keeps_a_finished_note_byte_for_byte(
+        cfg, q, monkeypatch):
+    extraction(monkeypatch, PAGE)
+    no_cover(monkeypatch)
+    saved = add(cfg, "https://arstechnica.com/vpn", queue=q)
+    died_after_saving(q, saved.id, "https://arstechnica.com/vpn")
+    mine = hand_edit(saved.path)
+
+    # Both would succeed. This is the gap: the old guard was never consulted
+    # on the path that writes.
+    extraction(monkeypatch, PAGE)
+    cfg.engines["fake"]["replies"] = [ANSWER]
+    results = retry(cfg, queue=q)
+
+    assert saved.path.read_text(encoding="utf-8") == mine
+    assert q.get(saved.id).status == "ok"
+    assert not q.orphaned() and not q.unfinished()
+    assert [r.status for r in results] == ["ok"]
+    assert results[0].skipped is True
+    assert results[0].path == saved.path
+
+
+def test_retry_over_a_failed_entry_keeps_a_finished_note_byte_for_byte(
+        cfg, q, monkeypatch):
+    extraction(monkeypatch, PAGE)
+    no_cover(monkeypatch)
+    saved = add(cfg, "https://arstechnica.com/vpn", queue=q)
+    q.set_status(saved.id, "failed", error="the site was down")
+    mine = hand_edit(saved.path)
+
+    cfg.engines["fake"]["replies"] = [ANSWER]
+    retry(cfg, queue=q)
+
+    assert saved.path.read_text(encoding="utf-8") == mine
+    assert q.get(saved.id).status == "ok"
+
+
+def test_reconciling_asks_no_engine_and_fetches_no_page(cfg, q, monkeypatch):
+    extraction(monkeypatch, PAGE)
+    no_cover(monkeypatch)
+    saved = add(cfg, "https://arstechnica.com/vpn", queue=q)
+    died_after_saving(q, saved.id, "https://arstechnica.com/vpn")
+
+    def never(url):
+        pytest.fail("retry fetched a page for a link whose note is finished")
+
+    monkeypatch.setattr("oknowledge.pipeline.extract", never)
+    cfg.engines["fake"]["replies"] = []          # an engine call would raise too
+
+    assert [r.status for r in retry(cfg, queue=q)] == ["ok"]
+
+
+@pytest.mark.parametrize("status", ["ok", "done", "reviewed", ""])
+def test_any_status_but_partial_is_the_users_content(cfg, q, monkeypatch, status):
+    """`partial` is the one value we write to mean unfinished. A deleted status
+    line reads back as ok, so it has to fall on the protected side too."""
+    extraction(monkeypatch, PAGE)
+    no_cover(monkeypatch)
+    saved = add(cfg, "https://arstechnica.com/vpn", queue=q)
+    died_after_saving(q, saved.id, "https://arstechnica.com/vpn")
+    mine = hand_edit(saved.path, status=status)
+
+    cfg.engines["fake"]["replies"] = [ANSWER]
+    retry(cfg, queue=q)
+
+    assert saved.path.read_text(encoding="utf-8") == mine
+
+
+def test_retry_still_finishes_a_partial_note(cfg, q, monkeypatch):
+    """The other half of the rule: an unfinished note of ours is exactly what
+    retry exists for, and it is replaced."""
+    extraction(monkeypatch, Unreadable("503"))
+    saved = add(cfg, "https://arstechnica.com/vpn", queue=q)
+    assert read_note(saved.path).status == "partial"
+
+    extraction(monkeypatch, PAGE)
+    no_cover(monkeypatch)
+    cfg.engines["fake"]["replies"] = [ANSWER]
+    results = retry(cfg, queue=q)
+
+    assert [r.status for r in results] == ["ok"]
+    assert results[0].skipped is False
+    assert read_note(results[0].path).title == "WireGuard vs OpenVPN"
+    assert read_note(results[0].path).status == "ok"
+
+
+def test_retry_still_saves_a_link_whose_note_never_landed(cfg, q, monkeypatch):
+    """The prime rule. An entry with no note at all is real work owed."""
+    url = "https://arstechnica.com/vpn"
+    q.enqueue(link_id(url), url, "full")
+    extraction(monkeypatch, PAGE)
+    no_cover(monkeypatch)
+
+    results = retry(cfg, queue=q)
+
+    assert [r.status for r in results] == ["ok"]
+    assert len(all_notes(cfg)) == 1
+    assert q.get(link_id(url)).status == "ok"
+
+
+def test_an_explicit_reprocess_still_replaces_a_finished_note(cfg, q, monkeypatch):
+    """Asking for a fresh analysis is the one thing that replaces note content,
+    and the web's button has carried a confirmation since task 13."""
+    extraction(monkeypatch, PAGE)
+    no_cover(monkeypatch)
+    saved = add(cfg, "https://arstechnica.com/vpn", queue=q)
+    hand_edit(saved.path)
+    assert read_note(saved.path).title == "Mi resumen de WireGuard"
+
+    cfg.engines["fake"]["replies"] = [ANSWER]
+    again = add(cfg, "https://arstechnica.com/vpn", reprocess=True, queue=q)
+
+    assert again.status == "ok" and again.skipped is False
+    assert read_note(again.path).title == "WireGuard vs OpenVPN"
+
+
+def test_a_note_saved_at_summary_stays_there_until_asked_again(cfg, q, monkeypatch):
+    """The accepted trade-off: the entry asks for `full`, the finished note is
+    `summary`, and a hand edit is worth more than an automatic upgrade."""
+    extraction(monkeypatch, PAGE)
+    no_cover(monkeypatch)
+    saved = add(cfg, "https://arstechnica.com/vpn", content="summary", queue=q)
+    assert read_note(saved.path).body is None
+    died_after_saving(q, saved.id, "https://arstechnica.com/vpn", mode="full")
+
+    cfg.engines["fake"]["replies"] = [ANSWER]
+    retry(cfg, queue=q)
+
+    assert read_note(saved.path).body is None
+    assert q.get(saved.id).status == "ok"
+
+    # ... and asking explicitly is what upgrades it.
+    cfg.engines["fake"]["replies"] = [ANSWER]
+    add(cfg, "https://arstechnica.com/vpn", content="full", reprocess=True, queue=q)
+    assert read_note(saved.path).body is not None
+
+
+def test_reconciling_says_what_it_did(cfg, q, monkeypatch):
+    extraction(monkeypatch, PAGE)
+    no_cover(monkeypatch)
+    saved = add(cfg, "https://arstechnica.com/vpn", queue=q)
+    died_after_saving(q, saved.id, "https://arstechnica.com/vpn")
+
+    result = retry(cfg, queue=q)[0]
+
+    assert "re-analys" in " ".join(result.warnings)
+    assert result.error is None
+
+
+def test_a_link_somebody_else_holds_is_left_for_them(cfg, q, monkeypatch):
+    """A `failed` entry is offered to retry whoever holds the lock (only
+    `pending` is gated on that), so this is the path that has to refuse."""
+    extraction(monkeypatch, PAGE)
+    no_cover(monkeypatch)
+    saved = add(cfg, "https://arstechnica.com/vpn", queue=q)
+    q.set_status(saved.id, "failed", error="the site was down")
+    mine = hand_edit(saved.path)
+
+    with q.lock(saved.id):
+        results = retry(cfg, queue=q)
+
+    assert [r.status for r in results] == ["pending"]
+    assert saved.path.read_text(encoding="utf-8") == mine
+    assert q.get(saved.id).status == "failed"      # not settled by somebody else
