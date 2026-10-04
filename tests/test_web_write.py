@@ -899,17 +899,57 @@ def test_an_unknown_link_leaves_no_lock_behind(setup, tmp_path, path, data):
 
 # --- the coverage test watches every unsafe method (L3) ---------------------
 
+def unsafe_routes(app):
+    """Every (path, method) the origin check has to cover, from the app itself.
+
+    Shaped by SAFE_METHODS and not by a list of verbs, because that is how the
+    middleware decides: a PUT or a DELETE added later is covered without
+    anyone remembering to cover it, and this is what keeps saying so.
+    """
+    from oknowledge.web.app import SAFE_METHODS
+
+    return {(route.path, method) for route in app.routes
+            for method in getattr(route, "methods", set()) - SAFE_METHODS}
+
+
 def test_the_cross_site_test_covers_every_unsafe_method(setup):
     import re
 
-    from oknowledge.web.app import SAFE_METHODS
-
     _, client = setup
-    unsafe = {(route.path, method) for route in client.app.routes
-              for method in getattr(route, "methods", set()) - SAFE_METHODS}
+    unsafe = unsafe_routes(client.app)
     assert unsafe, "no unsafe routes found: this test is not looking at the app"
     tested = [path for path, _ in WRITE_ROUTES]
     for route, method in sorted(unsafe):
         pattern = re.compile("^" + re.sub(r"\{[^}]+\}", "[^/]+", route) + "$")
         assert any(pattern.match(path) for path in tested), \
             f"no cross-site test for {method} {route}"
+
+
+def test_the_coverage_check_is_not_blind_to_a_method_we_do_not_use_yet(setup):
+    """Every unsafe route in the app is a POST today, so the check above would
+    read the same if it only looked at POST. Give it a DELETE to find."""
+    cfg, _ = setup
+    app = create_app(cfg)
+
+    @app.delete("/item/{link_id}/purge")
+    def purge(link_id: str):
+        return {"purged": link_id}
+
+    assert ("/item/{link_id}/purge", "DELETE") in unsafe_routes(app)
+
+
+def test_the_origin_check_covers_a_method_we_do_not_use_yet(setup):
+    """The middleware checks the method against SAFE_METHODS rather than a
+    list of the routes we happen to have, so this is the property that lets a
+    future write route be safe before anyone thinks about it."""
+    cfg, _ = setup
+    app = create_app(cfg)
+
+    @app.delete("/item/{link_id}/purge")
+    def purge(link_id: str):
+        return {"purged": link_id}
+
+    client = TestClient(app)
+    assert client.delete("/item/a1/purge",
+                         headers={"Sec-Fetch-Site": "cross-site"}).status_code == 403
+    assert client.delete("/item/a1/purge").status_code == 200
