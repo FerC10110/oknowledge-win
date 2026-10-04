@@ -38,3 +38,16 @@ class Extracted:
     author: str | None = None
     published: str | None = None     # YYYY-MM-DD
     cover_url: str | None = None
+
+
+@dataclass
+class QueueEntry:
+    """The state of a link while it is processed, and after it fails."""
+
+    id: str
+    url: str
+    content: str
+    status: str                      # pending | ok | partial | failed
+    updated: str                     # ISO 8601 UTC
+    title: str | None = None
+    error: str | None = None
