@@ -209,8 +209,12 @@ def note_path(cfg: Config, note: Note) -> Path:
     return candidate
 
 
-def _ensure_inside_root(cfg: Config, target: Path) -> Path:
-    """Resolve target (following symlinks) and require it strictly inside cfg.root."""
+def ensure_inside_root(cfg: Config, target: Path) -> Path:
+    """Resolve target (following symlinks) and require it strictly inside cfg.root.
+
+    Public because every write to the vault has to pass it, including the ones
+    made outside this module: one containment rule, in one place.
+    """
     resolved = target.resolve()
     root = cfg.root.resolve()
     if resolved == root or not resolved.parent.is_relative_to(root):
@@ -220,7 +224,7 @@ def _ensure_inside_root(cfg: Config, target: Path) -> Path:
 
 def write_note(cfg: Config, note: Note, language: str, path: Path | None = None) -> Path:
     target = path or note_path(cfg, note)
-    resolved = _ensure_inside_root(cfg, target)       # location first, before any write
+    resolved = ensure_inside_root(cfg, target)        # location first, before any write
     if resolved.exists() and read_front(resolved) is None:
         raise ProtectedNote(f"refusing to overwrite a file without the marker: {target}")
     resolved.parent.mkdir(parents=True, exist_ok=True)
@@ -350,7 +354,7 @@ def write_index(cfg: Config, category: str, entries: list[tuple[Path, Note]], la
         lines.append(line)
 
     target = index_path(cfg, category)
-    resolved = _ensure_inside_root(cfg, target)
+    resolved = ensure_inside_root(cfg, target)
     if resolved.exists() and read_front(resolved) is None:
         raise ProtectedNote(f"refusing to overwrite a file without the marker: {target}")
     resolved.parent.mkdir(parents=True, exist_ok=True)

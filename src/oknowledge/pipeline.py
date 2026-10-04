@@ -16,20 +16,23 @@ from __future__ import annotations
 
 import datetime as dt
 import os
+from contextlib import ExitStack
 from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import urlsplit
 
 from .ai import AllEnginesFailed, analyze_with_chain
 from .ai.base import DEFAULT_LIMIT, UNCATEGORIZED
-from .config import Config
+from .config import CONTENT_MODES, Config
 from .extract import Unreadable, detect_type, extract
 from .model import Extracted, Note, QueueEntry
 from .net import fetch
 from .queue import Locked, Queue
 from .urls import link_id, normalize
 from .vault import (
+    ProtectedNote,
     categories,
+    ensure_inside_root,
     find_note,
     note_stem,
     read_note,
@@ -49,9 +52,21 @@ TRUNCATED = {
     "en": "\n\n(The page was longer than the model takes: the summary covers its "
           "first part only, but the full content is kept below.)",
 }
+# The same notice for a note that keeps no body, where the one above would
+# promise a "contenido original" section the file does not have.
+TRUNCATED_SUMMARY = {
+    "es": "\n\n(La página era más larga de lo que entra en el modelo: "
+          "el resumen se hizo sobre su primera parte.)",
+    "en": "\n\n(The page was longer than the model takes: the summary covers "
+          "its first part only.)",
+}
 # A cover is only saved if what came back really is an image we know: a default
 # extension would file an HTML error page away as cover.jpg.
 EXTENSIONS = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp"}
+NO_LOCK = ("the queue could not be locked, so the link was saved without one "
+           "({reason})")
+NO_ENTRY = ("the queue entry could not be written ({reason}), so `oknowledge "
+            "retry` will not see this link")
 KEPT_NOTE = ("the note already saved was left as it is: a failed re-analysis "
              "never replaces a finished note")
 COVER_TIMEOUT = 15.0
@@ -161,27 +176,74 @@ def add(cfg: Config, url: str, content: str | None = None, engine: str | None = 
     q = queue or Queue()
     clean = normalize(url)
     link = link_id(clean)
-    mode = content or cfg.default_content
+    trouble: list[str] = []
 
-    found = find_note(cfg, link)
-    # One shape for every path a Result can carry: find_note() reports the path
-    # it globbed and write_note() the resolved one, so a vault reached through a
-    # symlink would otherwise give two spellings for one note.
-    existing = (found[0].resolve(), found[1]) if found else None
-    if existing and not reprocess:
-        path, note = existing
-        return Result(id=link, url=clean, path=path, status=note.status, skipped=True)
-    try:
-        # The lock first, the queue only inside it. enqueue() overwrites, so
-        # queueing a link another process holds would reset its entry to
-        # pending and throw away the title and error it had recorded.
-        with q.lock(link):
+    with ExitStack() as stack:
+        try:
+            stack.enter_context(q.lock(link))
+        except Locked as error:
+            # Expected, not a failure: somebody else has this link. The queue
+            # was left exactly as it was, and a later retry will finish it.
+            return Result(id=link, url=clean, path=None, status="pending",
+                          error=str(error))
+        except OSError as error:
+            # The state tree is unwritable while the vault -- usually on
+            # another filesystem -- is perfectly fine: a full /home, a locks/
+            # left root-owned by one sudo run, an unmounted XDG_STATE_HOME.
+            # The queue is bookkeeping; the note is the durable artifact. So
+            # carry on without the lock, which gives up mutual exclusion
+            # deliberately: a duplicated note is recoverable, a lost link is
+            # not, and this module exists for the second rule.
+            trouble.append(NO_LOCK.format(reason=_typed(error)))
+
+        # The scan belongs inside the lock. From outside it, it can miss a note
+        # another process is halfway through writing, and we would then write a
+        # second file for the same link: one URL listed twice in the index, in
+        # a tool whose whole point is that links stop piling up unfindably.
+        found = find_note(cfg, link)
+        # One shape for every path a Result can carry: find_note() reports the
+        # path it globbed and write_note() the resolved one, so a vault reached
+        # through a symlink would otherwise give two spellings for one note.
+        existing = (found[0].resolve(), found[1]) if found else None
+        if existing and not reprocess:
+            path, note = existing
+            return Result(id=link, url=clean, path=path, status=note.status,
+                          skipped=True, warnings=trouble)
+
+        mode, complaints = _mode(cfg, content, existing[1] if existing else None)
+        trouble += complaints
+
+        try:
+            # enqueue() overwrites, so it belongs inside the lock too: queueing
+            # a link another process holds would reset its entry to pending and
+            # throw away the title and error it had recorded.
             q.enqueue(link, clean, mode)
-            return _process(cfg, q, link, clean, mode, engine, existing)
-    except Locked as error:
-        # Expected, not a failure: somebody else has this link. The queue was
-        # left exactly as it was, and a later retry will finish it.
-        return Result(id=link, url=clean, path=None, status="pending", error=str(error))
+        except OSError as error:
+            trouble.append(NO_ENTRY.format(reason=_typed(error)))
+
+        # _process() is not guarded: an OSError from the vault is a real
+        # failure to report, and retry() turns it into a failed Result.
+        result = _process(cfg, q, link, clean, mode, engine, existing)
+        result.warnings = [*trouble, *result.warnings]
+        return result
+
+
+def _mode(cfg: Config, content: str | None, existing: Note | None) -> tuple[str, list[str]]:
+    """The content mode to save under, and anything the user should hear about.
+
+    The mode reaches here from the queue's JSON file, which the QML widget
+    reads and a user can therefore hand-edit, and from a note's frontmatter,
+    which they edit by design. Anything other than "full" means "keep no body",
+    so an unknown value must not be taken at face value. An existing note's own
+    mode is inherited, so a plain --reprocess under a `summary` default does not
+    quietly discard a body that is already saved.
+    """
+    wanted = content or (existing.content if existing else None) or cfg.default_content
+    if wanted in CONTENT_MODES:
+        return wanted, []
+    return cfg.default_content, [
+        f"{wanted!r} is not a content mode, so {cfg.default_content!r} was used"
+    ]
 
 
 def _process(cfg: Config, q: Queue, link: str, url: str, mode: str,
@@ -190,11 +252,14 @@ def _process(cfg: Config, q: Queue, link: str, url: str, mode: str,
     # would have named it: a second file carrying the same id is the duplicate
     # link that find_note() exists to prevent.
     target = existing[0] if existing else None
-    # An analyzed note is the user's content. Somebody who asks to reprocess is
-    # asking for more, not less, so when there is nothing to put in its place
-    # it is left alone and only the attempt is recorded. The rule is narrow: a
-    # partial note never replaces an ok one.
-    kept = existing[1] if existing and existing[1].status == "ok" else None
+    # A note that is not ours-and-unfinished is the user's content. Somebody who
+    # asks to reprocess is asking for more, not less, so when there is nothing
+    # to put in its place it is left alone and only the attempt is recorded.
+    # The test is inverted on purpose: `status: partial` is the one value we
+    # write ourselves to mean "unfinished", and this vault is edited by hand, so
+    # a `status: done` or `status: reviewed` of the user's -- or a deleted status
+    # line, which reads back as ok -- has to fall on the protected side.
+    kept = existing[1] if existing and existing[1].status != "partial" else None
 
     try:
         page = extract(url)
@@ -218,7 +283,9 @@ def _process(cfg: Config, q: Queue, link: str, url: str, mode: str,
 
     summary = analysis.summary
     if len(page.text) > DEFAULT_LIMIT:
-        summary += TRUNCATED.get(cfg.language, TRUNCATED["en"])
+        # Only the full-content note keeps the text the longer notice promises.
+        notice = TRUNCATED if mode == "full" else TRUNCATED_SUMMARY
+        summary += notice.get(cfg.language, notice["en"])
 
     note = Note(
         id=link,
@@ -307,17 +374,29 @@ def _rename_to_title(cfg: Config, note: Note, path: Path) -> tuple[Path, str | N
     there is no instant at which two files carry the same id, which is the
     thing all of this exists to prevent.
     """
-    ideal = (cfg.links_dir / f"{note_stem(note)}.md").resolve()
+    wanted = f"{note_stem(note)}.md"
+    squatted = (f"the note kept the name {path.name}: another file already "
+                f"holds {wanted}")
+    ideal = _usable_name(cfg, cfg.links_dir / wanted)
+    if ideal is None:
+        return path, squatted
     if ideal == path:
         return path, None
     if ideal.exists():
-        taken = read_note(ideal)
+        try:
+            taken = read_note(ideal)
+        except Exception:
+            # A file pathological enough to break the reader is not a name we
+            # can take. vault._read_marked() does not catch RecursionError,
+            # which queue.get() guards for, so the shape is known to exist --
+            # and this runs after the note and its status are already safe, so
+            # raising here would lose the caller its Result.
+            taken = None
         if taken is None or taken.id != note.id:
             # A file of the user's, or one of ours we cannot read. Our own name
             # is already correct and unique, so leave both alone -- but say so,
             # or the user is left with an oddly named note and no explanation.
-            return path, (f"the note kept the name {path.name}: another file "
-                          f"already holds {ideal.name}")
+            return path, squatted
     try:
         os.replace(path, ideal)
     except OSError as error:
@@ -325,6 +404,28 @@ def _rename_to_title(cfg: Config, note: Note, path: Path) -> tuple[Path, str | N
         return path, (f"the note stayed as {path.name}: it could not be renamed "
                       f"to {ideal.name} ({_typed(error)})")
     return ideal, None
+
+
+def _usable_name(cfg: Config, ideal: Path) -> Path | None:
+    """The resolved ideal path, if it really is a free name in the links folder.
+
+    The name is resolved before anything moves onto it, so a symlink sitting
+    there decides where the note lands: one pointing out of the vault sent it
+    outside <vault>/oknowledge/, the one thing the vault module refuses to do,
+    and one pointing back inside gave the note a name of the symlink's own
+    choosing. (rename(2) does not follow a destination symlink -- it would have
+    replaced the link itself, destroying a file of the user's instead.) Either
+    way the name is not ours to take. write_note() checks the same containment
+    rule before every write, and the rename has to as well, or it is less safe
+    than the call whose output it moves.
+    """
+    if ideal.is_symlink():
+        return None
+    try:
+        resolved = ensure_inside_root(cfg, ideal)
+    except (ProtectedNote, OSError):
+        return None
+    return resolved if resolved.parent == cfg.links_dir.resolve() else None
 
 
 def _reindex(cfg: Config) -> list[str]:
@@ -339,8 +440,16 @@ def _reindex(cfg: Config) -> list[str]:
         done = rebuild_indexes(cfg, cfg.language)
     except Exception as error:
         return [f"the indexes could not be rebuilt: {_reason(error)}"]
-    return [f"the index {path.name} was left as it is: another file holds that name"
-            for path in done.blocked]
+    return [
+        *(f"the index {path.name} was left as it is: another file holds that name"
+          for path in done.blocked),
+        # A marked note of ours that cannot be parsed is missing from every
+        # index, and it is the same hand-broken note that makes find_note()
+        # blind and lets a second file for the link through. We cannot identify
+        # it, so the least we can do is say it is there.
+        *(f"the note {path.name} is ours but could not be read, so it is in no index"
+          for path in done.skipped),
+    ]
 
 
 def retry(cfg: Config, queue: Queue | None = None) -> list[Result]:

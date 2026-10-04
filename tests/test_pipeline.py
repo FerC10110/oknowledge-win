@@ -2,6 +2,7 @@
 
 import datetime as dt
 import json
+import os
 
 import pytest
 
@@ -9,7 +10,7 @@ from oknowledge.config import Config
 from oknowledge.extract import Unreadable
 from oknowledge.model import Extracted
 from oknowledge.pipeline import add, retry
-from oknowledge.queue import Queue
+from oknowledge.queue import Locked, Queue
 from oknowledge.urls import link_id
 from oknowledge.vault import all_notes, index_path, read_note
 
@@ -455,8 +456,6 @@ def test_one_link_that_cannot_be_written_does_not_stop_the_others(cfg, q, monkey
 
 
 def test_a_rename_that_fails_keeps_the_note_and_says_so(cfg, q, monkeypatch):
-    import types
-
     import oknowledge.pipeline as pipeline
 
     extraction(monkeypatch, Unreadable("503"))
@@ -466,12 +465,20 @@ def test_a_rename_that_fails_keeps_the_note_and_says_so(cfg, q, monkeypatch):
     no_cover(monkeypatch)
     cfg.engines["fake"]["replies"] = [ANSWER]
 
-    def refuse(src, dst):
-        raise OSError("cross-device link")
+    class OnlyTheRenameFails:
+        """The real os with one call swapped out. A SimpleNamespace would make
+        the next os.* call anywhere in _save fail with an AttributeError
+        naming neither cause nor fix, and patching os.replace itself would
+        break the atomic write that puts the note on disk."""
 
-    # Only the rename: patching os.replace itself would also break the atomic
-    # write that put the note on disk in the first place.
-    monkeypatch.setattr(pipeline, "os", types.SimpleNamespace(replace=refuse))
+        def __getattr__(self, name):
+            return getattr(os, name)
+
+        @staticmethod
+        def replace(src, dst):
+            raise OSError("cross-device link")
+
+    monkeypatch.setattr(pipeline, "os", OnlyTheRenameFails())
 
     result = retry(cfg, queue=q)[0]
 
@@ -643,3 +650,234 @@ def test_every_branch_reports_one_spelling_of_the_path(tmp_path, q, monkeypatch)
     assert skipped.skipped is True
     assert kept.status == "failed"
     assert written.path == skipped.path == kept.path
+
+
+# --- The queue is bookkeeping; the note is the artifact -----------------------
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="chmod 0o500 does not bite as root")
+def test_an_unwritable_state_tree_still_leaves_a_note(cfg, tmp_path, monkeypatch):
+    # The state tree lives under $XDG_STATE_HOME and the vault is usually on
+    # another filesystem: a full /home, a locks/ left root-owned by one sudo
+    # run or an unmounted state tree must not cost the user a writable vault.
+    extraction(monkeypatch, PAGE)
+    no_cover(monkeypatch)
+    state = tmp_path / "readonly-state"
+    state.mkdir()
+    state.chmod(0o500)
+    try:
+        result = add(cfg, "https://arstechnica.com/vpn", queue=Queue(state))
+    finally:
+        state.chmod(0o700)
+
+    assert result.status == "ok"
+    note = read_note(result.path)
+    assert note.url == "https://arstechnica.com/vpn"
+    assert note.title == "WireGuard vs OpenVPN"
+    assert any("queue" in warning for warning in result.warnings)
+
+
+def test_a_queue_entry_that_cannot_be_written_still_leaves_a_note(cfg, q, monkeypatch):
+    extraction(monkeypatch, PAGE)
+    no_cover(monkeypatch)
+
+    def full_disk(*args, **kwargs):
+        raise OSError("no space left on device")
+
+    monkeypatch.setattr(q, "enqueue", full_disk)
+
+    result = add(cfg, "https://arstechnica.com/vpn", queue=q)
+
+    assert result.status == "ok"
+    assert read_note(result.path).url == "https://arstechnica.com/vpn"
+    assert any("no space left on device" in warning for warning in result.warnings)
+    assert any("retry" in warning for warning in result.warnings)
+
+
+def test_the_duplicate_scan_happens_inside_the_lock(cfg, q, monkeypatch):
+    # From outside the lock the scan can miss a note another process is halfway
+    # through writing, and we would write a second file for the same link.
+    import oknowledge.pipeline as pipeline
+
+    extraction(monkeypatch, PAGE)
+    no_cover(monkeypatch)
+    real = pipeline.find_note
+    seen = {}
+
+    def spy(config, link):
+        with pytest.raises(Locked):             # the lock is ours already
+            with q.lock(link):
+                pass
+        seen["locked"] = True
+        return real(config, link)
+
+    monkeypatch.setattr(pipeline, "find_note", spy)
+
+    assert add(cfg, "https://arstechnica.com/vpn", queue=q).status == "ok"
+    assert seen["locked"]
+
+
+# --- The vault's containment, and the user's own edits ------------------------
+
+
+def test_the_rename_never_leaves_the_vault(cfg, q, tmp_path, monkeypatch):
+    # os.replace follows a symlink at the destination, and a dangling one is
+    # invisible to exists(): the note would be moved out of the vault.
+    extraction(monkeypatch, Unreadable("503"))
+    first = add(cfg, "https://arstechnica.com/vpn", queue=q)
+
+    outside = tmp_path / "outside" / "stolen.md"
+    outside.parent.mkdir()
+    trap = cfg.links_dir / f"{TODAY}-wireguard-vs-openvpn.md"
+    trap.symlink_to(outside)
+    assert not trap.exists() and trap.is_symlink()
+
+    extraction(monkeypatch, PAGE)
+    no_cover(monkeypatch)
+    cfg.engines["fake"]["replies"] = [ANSWER]
+
+    result = retry(cfg, queue=q)[0]
+
+    assert result.status == "ok"
+    assert result.path == first.path                    # the name is kept
+    assert not outside.exists()                         # nothing escaped
+    assert read_note(first.path).title == "WireGuard vs OpenVPN"
+    assert any(trap.name in warning for warning in result.warnings)
+
+
+def test_a_squatter_too_broken_to_read_is_still_a_squatter(cfg, q, monkeypatch):
+    import oknowledge.pipeline as pipeline
+
+    extraction(monkeypatch, Unreadable("503"))
+    first = add(cfg, "https://arstechnica.com/vpn", queue=q)
+
+    taken = cfg.links_dir / f"{TODAY}-wireguard-vs-openvpn.md"
+    taken.write_text("---\noknowledge: 1\n---\n# deep\n", encoding="utf-8")
+    real = pipeline.read_note
+
+    def explode(path):
+        if path.name == taken.name:
+            raise RecursionError("maximum recursion depth exceeded")
+        return real(path)
+
+    monkeypatch.setattr(pipeline, "read_note", explode)
+    extraction(monkeypatch, PAGE)
+    no_cover(monkeypatch)
+    cfg.engines["fake"]["replies"] = [ANSWER]
+
+    result = retry(cfg, queue=q)[0]
+
+    assert result.status == "ok"                        # a Result, not a traceback
+    assert result.path == first.path
+    assert any(taken.name in warning for warning in result.warnings)
+
+
+def test_a_note_the_user_marked_their_own_way_is_protected_too(cfg, q, monkeypatch):
+    # This vault is edited by hand: that is its whole premise.
+    extraction(monkeypatch, PAGE)
+    no_cover(monkeypatch)
+    first = add(cfg, "https://arstechnica.com/vpn", queue=q)
+    first.path.write_text(
+        first.path.read_text(encoding="utf-8").replace("status: ok", "status: done"),
+        encoding="utf-8")
+    good = read_note(first.path)
+    assert good.status == "done"
+
+    cfg.engines["fake"]["replies"] = []
+    result = add(cfg, "https://arstechnica.com/vpn", reprocess=True, queue=q)
+
+    assert result.status == "failed"
+    assert read_note(first.path) == good                # content and name intact
+    assert result.path == first.path
+    assert len(all_notes(cfg)) == 1
+
+
+def test_a_note_too_broken_to_index_is_reported(cfg, q, monkeypatch):
+    # The same hand-broken note that makes find_note() blind also drops out of
+    # every index. We cannot identify it; we can at least say it is there.
+    extraction(monkeypatch, PAGE)
+    no_cover(monkeypatch)
+    broken = cfg.links_dir / "2026-01-01-hand-broken.md"
+    broken.write_text("---\noknowledge: 1\ntitle: [unclosed\n---\n# x\n",
+                      encoding="utf-8")
+
+    result = add(cfg, "https://arstechnica.com/vpn", queue=q)
+
+    assert result.status == "ok"
+    assert any(broken.name in warning for warning in result.warnings)
+    assert broken.read_text(encoding="utf-8").startswith("---")     # never touched
+
+
+# --- The content mode ---------------------------------------------------------
+
+
+def test_the_truncation_notice_does_not_promise_a_body_it_did_not_keep(
+        cfg, q, monkeypatch):
+    from oknowledge.ai.base import DEFAULT_LIMIT
+
+    long_page = Extracted(title="Libro entero", text="x" * (DEFAULT_LIMIT + 1),
+                          type="article", source="e.com")
+    extraction(monkeypatch, long_page)
+    no_cover(monkeypatch)
+
+    note = read_note(add(cfg, "https://e.com/libro", content="summary", queue=q).path)
+
+    assert note.body is None
+    assert "más larga de lo que entra en el modelo" in note.summary
+    assert "más abajo" not in note.summary               # there is nothing below
+
+
+def test_a_hand_edited_content_mode_is_not_taken_at_face_value(cfg, q, monkeypatch):
+    # The queue's JSON is read by the QML widget, so it gets hand-edited, and
+    # anything other than "full" silently means "keep no body".
+    extraction(monkeypatch, PAGE)
+    no_cover(monkeypatch)
+    url = "https://arstechnica.com/vpn"
+    q.enqueue(link_id(url), url, "fulll")
+
+    result = retry(cfg, queue=q)[0]
+
+    assert result.status == "ok"
+    note = read_note(result.path)
+    assert (note.content, note.body) == ("full", PAGE.text)
+    assert any("content mode" in warning for warning in result.warnings)
+
+
+def test_a_plain_reprocess_keeps_a_saved_body(cfg, q, monkeypatch):
+    extraction(monkeypatch, PAGE)
+    no_cover(monkeypatch)
+    cfg = Config(vault=cfg.vault, chain=("fake",), default_content="summary",
+                 engines={"fake": {"replies": [ANSWER]}})
+    first = add(cfg, "https://arstechnica.com/vpn", content="full", queue=q)
+    assert read_note(first.path).body == PAGE.text
+
+    second = add(cfg, "https://arstechnica.com/vpn", reprocess=True, queue=q)
+
+    note = read_note(second.path)
+    assert (note.content, note.body) == ("full", PAGE.text)      # inherited
+
+
+def test_a_symlink_at_the_ideal_name_is_treated_as_taken(cfg, q, monkeypatch):
+    # A symlink resolving inside the folder passes containment, and a dangling
+    # one is invisible to exists(). The ideal path is resolved before the move,
+    # so without this guard the note lands under the name the symlink chose and
+    # the user's symlink ends up pointing at our note.
+    extraction(monkeypatch, Unreadable("503"))
+    first = add(cfg, "https://arstechnica.com/vpn", queue=q)
+
+    ghost = cfg.links_dir / "ghost.md"
+    trap = cfg.links_dir / f"{TODAY}-wireguard-vs-openvpn.md"
+    trap.symlink_to(ghost)
+    assert not trap.exists() and trap.is_symlink()
+
+    extraction(monkeypatch, PAGE)
+    no_cover(monkeypatch)
+    cfg.engines["fake"]["replies"] = [ANSWER]
+
+    result = retry(cfg, queue=q)[0]
+
+    assert result.status == "ok"
+    assert result.path == first.path                    # the name is kept
+    assert not ghost.exists()                           # nothing landed there
+    assert trap.is_symlink()                            # the user's link intact
+    assert any(trap.name in warning for warning in result.warnings)
