@@ -6,6 +6,10 @@ every engine can be down, the cover can refuse to download, the indexes can
 fail to rebuild: each of those costs the user part of the note's content, and
 never the note itself. What cannot be finished now is left in the queue with a
 status a later `retry` picks up.
+
+The rule has one corollary, and it points the other way: a note that was
+analyzed is already the user's content, so a failed attempt never replaces it
+with a partial one. Saving a link must not be able to destroy one.
 """
 
 from __future__ import annotations
@@ -48,6 +52,8 @@ TRUNCATED = {
 # A cover is only saved if what came back really is an image we know: a default
 # extension would file an HTML error page away as cover.jpg.
 EXTENSIONS = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp"}
+KEPT_NOTE = ("the note already saved was left as it is: a failed re-analysis "
+             "never replaces a finished note")
 COVER_TIMEOUT = 15.0
 COVER_MAX_BYTES = 5 * 1024 * 1024
 
@@ -161,18 +167,13 @@ def add(cfg: Config, url: str, content: str | None = None, engine: str | None = 
     if existing and not reprocess:
         path, note = existing
         return Result(id=link, url=clean, path=path, status=note.status, skipped=True)
-    # Reprocessing rewrites the note already on disk, whatever the new title
-    # would have named it: a second file carrying the same id is the duplicate
-    # link that find_note() exists to prevent.
-    target = existing[0] if existing else None
-
     try:
         # The lock first, the queue only inside it. enqueue() overwrites, so
         # queueing a link another process holds would reset its entry to
         # pending and throw away the title and error it had recorded.
         with q.lock(link):
             q.enqueue(link, clean, mode)
-            return _process(cfg, q, link, clean, mode, engine, target)
+            return _process(cfg, q, link, clean, mode, engine, existing)
     except Locked as error:
         # Expected, not a failure: somebody else has this link. The queue was
         # left exactly as it was, and a later retry will finish it.
@@ -180,7 +181,17 @@ def add(cfg: Config, url: str, content: str | None = None, engine: str | None = 
 
 
 def _process(cfg: Config, q: Queue, link: str, url: str, mode: str,
-             engine: str | None, target: Path | None) -> Result:
+             engine: str | None, existing: tuple[Path, Note] | None) -> Result:
+    # Reprocessing rewrites the note already on disk, whatever the new title
+    # would have named it: a second file carrying the same id is the duplicate
+    # link that find_note() exists to prevent.
+    target = existing[0] if existing else None
+    # An analyzed note is the user's content. Somebody who asks to reprocess is
+    # asking for more, not less, so when there is nothing to put in its place
+    # it is left alone and only the attempt is recorded. The rule is narrow: a
+    # partial note never replaces an ok one.
+    kept = existing[1] if existing and existing[1].status == "ok" else None
+
     try:
         page = extract(url)
     except Exception as error:
@@ -189,8 +200,7 @@ def _process(cfg: Config, q: Queue, link: str, url: str, mode: str,
         # pypdf, yt-dlp or in our own dispatcher would otherwise cost the user
         # the link. _reason() keeps the type name so a real bug stays legible.
         # BaseException -- Ctrl-C, SystemExit -- passes through untouched.
-        note = _partial_note(cfg, link, url, mode, None)
-        return _save(cfg, q, link, url, note, "partial", _reason(error), None, target)
+        return _give_up(cfg, q, link, url, mode, None, _reason(error), kept, target)
 
     try:
         analysis, used = analyze_with_chain(
@@ -200,8 +210,7 @@ def _process(cfg: Config, q: Queue, link: str, url: str, mode: str,
     except AllEnginesFailed as error:
         # The text is already out of the page: keep it, so a retry only has to
         # ask a model again instead of fetching the page again.
-        note = _partial_note(cfg, link, url, mode, page)
-        return _save(cfg, q, link, url, note, "partial", str(error), None, target)
+        return _give_up(cfg, q, link, url, mode, page, str(error), kept, target)
 
     summary = analysis.summary
     if len(page.text) > DEFAULT_LIMIT:
@@ -226,6 +235,26 @@ def _process(cfg: Config, q: Queue, link: str, url: str, mode: str,
         body=page.text if mode == "full" else None,
     )
     return _save(cfg, q, link, url, note, "ok", "", used, target)
+
+
+def _give_up(cfg: Config, q: Queue, link: str, url: str, mode: str,
+             page: Extracted | None, reason: str, kept: Note | None,
+             target: Path | None) -> Result:
+    """Record a failure that produced no analysis.
+
+    With an analyzed note already on disk there is nothing to write that would
+    not be worse than what is there: the note, its name and the indexes are all
+    left untouched and only the queue records the attempt, which is enough to
+    keep the link retryable. Otherwise the partial note is written as usual --
+    partial over partial is idempotent, and partial over nothing is the rule
+    that a link is never lost.
+    """
+    if kept is not None:
+        q.set_status(link, "failed", error=reason, title=kept.title)
+        return Result(id=link, url=url, path=target, status="failed", error=reason,
+                      warnings=[KEPT_NOTE])
+    note = _partial_note(cfg, link, url, mode, page)
+    return _save(cfg, q, link, url, note, "partial", reason, None, target)
 
 
 def _save(cfg: Config, q: Queue, link: str, url: str, note: Note, status: str,
@@ -272,8 +301,10 @@ def _rename_to_title(cfg: Config, note: Note, path: Path) -> tuple[Path, str | N
         taken = read_note(ideal)
         if taken is None or taken.id != note.id:
             # A file of the user's, or one of ours we cannot read. Our own name
-            # is already correct and unique: leave both alone.
-            return path, None
+            # is already correct and unique, so leave both alone -- but say so,
+            # or the user is left with an oddly named note and no explanation.
+            return path, (f"the note kept the name {path.name}: another file "
+                          f"already holds {ideal.name}")
     try:
         os.replace(path, ideal)
     except OSError as error:

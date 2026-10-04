@@ -417,6 +417,9 @@ def test_a_retried_note_keeps_its_name_when_the_new_one_is_taken(cfg, q, monkeyp
     assert squatter.read_text(encoding="utf-8") == "# My own file, no marker\n"
     assert read_note(result.path).title == "WireGuard vs OpenVPN"
     assert len(all_notes(cfg)) == 1
+    # Nothing failed, but the user is otherwise left with one oddly named note
+    # and no way to find out why.
+    assert any(squatter.name in warning for warning in result.warnings)
 
 
 def test_one_link_that_cannot_be_written_does_not_stop_the_others(cfg, q, monkeypatch):
@@ -513,3 +516,70 @@ def test_reporting_a_failed_link_cannot_take_down_the_run(cfg, q, monkeypatch):
     # The entry it could not even mark stays pending, which keeps it retryable.
     assert q.get(broken).status == "pending"
     assert [e.id for e in q.orphaned()] == [broken]
+
+
+# --- A partial note never replaces an analyzed one ----------------------------
+
+
+def test_a_failed_reanalysis_never_downgrades_a_finished_note(cfg, q, monkeypatch):
+    # Overwriting an analyzed note with a partial one throws away the summary,
+    # the points, the category and the tags: that is the user's content.
+    extraction(monkeypatch, PAGE)
+    no_cover(monkeypatch)
+    first = add(cfg, "https://arstechnica.com/vpn", queue=q)
+    good = read_note(first.path)
+
+    cfg.engines["fake"]["replies"] = []                 # every engine is down now
+    result = add(cfg, "https://arstechnica.com/vpn", reprocess=True, queue=q)
+
+    assert result.status == "failed"                    # the Result reports it
+    assert "fake" in result.error
+    assert any("left as it is" in warning for warning in result.warnings)
+
+    kept = read_note(first.path)
+    assert (kept.summary, kept.points, kept.category, kept.tags) == (
+        good.summary, good.points, good.category, good.tags)
+    assert kept.status == "ok"
+    assert result.path.name == first.path.name          # not renamed either
+    assert first.path.exists()
+    assert len(all_notes(cfg)) == 1
+    # Not reindexed, because nothing changed: the index still names the note.
+    assert f"[[{first.path.stem}|" in index_path(cfg, "Redes").read_text(encoding="utf-8")
+    # And still retryable, with the reason recorded.
+    assert q.get(result.id).status == "failed"
+    assert "fake" in q.get(result.id).error
+
+
+def test_a_failed_extraction_never_downgrades_a_finished_note(cfg, q, monkeypatch):
+    extraction(monkeypatch, PAGE)
+    no_cover(monkeypatch)
+    first = add(cfg, "https://arstechnica.com/vpn", queue=q)
+    good = read_note(first.path)
+
+    extraction(monkeypatch, Unreadable("403 from the site"))
+    result = add(cfg, "https://arstechnica.com/vpn", reprocess=True, queue=q)
+
+    assert result.status == "failed"
+    assert "403" in result.error
+    assert read_note(first.path) == good                # byte for byte the same note
+    assert result.path.name == first.path.name
+    assert len(all_notes(cfg)) == 1
+    assert q.get(result.id).status == "failed"
+
+
+def test_a_reprocess_over_a_partial_note_still_rewrites_it(cfg, q, monkeypatch):
+    # Partial over partial is idempotent and harmless: only an analyzed note is
+    # protected.
+    extraction(monkeypatch, Unreadable("503"))
+    first = add(cfg, "https://arstechnica.com/vpn", queue=q)
+    assert read_note(first.path).content == "full"
+
+    extraction(monkeypatch, Unreadable("still 503"))
+    again = add(cfg, "https://arstechnica.com/vpn", content="summary",
+                reprocess=True, queue=q)
+
+    assert again.status == "partial"
+    assert not any("left as it is" in warning for warning in again.warnings)
+    assert read_note(again.path).content == "summary"   # really rewritten
+    assert q.get(again.id).error == "still 503"
+    assert len(all_notes(cfg)) == 1
