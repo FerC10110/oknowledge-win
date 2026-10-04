@@ -28,7 +28,7 @@ class OpenCodeEngine:
                     argv, cwd=cwd, capture_output=True, text=True, timeout=self.timeout,
                 )
         except FileNotFoundError as error:
-            raise EngineError(f"opencode is not installed: {error}") from error
+            raise EngineError(f"opencode is not installed (no '{self.binary}' on PATH): {error}") from error
         except subprocess.TimeoutExpired as error:
             raise EngineError(f"opencode timed out after {self.timeout}s") from error
         if proc.returncode != 0:

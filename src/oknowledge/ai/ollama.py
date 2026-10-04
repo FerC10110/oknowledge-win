@@ -11,26 +11,56 @@ import httpx
 from .base import EngineError
 
 
-def ensure_running(url: str, timeout: float = 15.0) -> None:
-    """If ollama is installed but stopped, start it instead of failing."""
+UNIT = "ollama.service"
+
+
+def _answers(url: str) -> bool:
     try:
         httpx.get(f"{url}/api/tags", timeout=2.0).raise_for_status()
-        return
+        return True
     except Exception:
-        pass
-    if not shutil.which("ollama"):
-        raise EngineError("ollama is not installed")
-    subprocess.Popen(
-        ["ollama", "serve"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-    )
+        return False
+
+
+def _systemctl(*args: str):
+    """Run `systemctl --user`; None when systemctl itself is not available."""
+    try:
+        return subprocess.run(
+            ["systemctl", "--user", *args], capture_output=True, text=True, timeout=15,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return None
+
+
+def ensure_running(url: str, timeout: float = 15.0) -> None:
+    """Make sure ollama answers, starting it in a managed way if it is down.
+
+    Never starts anything when the server is already up. Prefers the user's
+    systemd unit so systemd owns the process; only without a unit does it spawn
+    a detached `ollama serve`.
+    """
+    if _answers(url):
+        return
+    by_hand = "start it with `systemctl --user start ollama` or `ollama serve`"
+    unit = _systemctl("cat", UNIT)
+    if unit is not None and unit.returncode == 0:
+        started = _systemctl("start", UNIT)
+        if started is None or started.returncode != 0:
+            detail = started.stderr.strip()[:200] if started else "systemctl unavailable"
+            raise EngineError(f"ollama could not be started via systemd ({detail}); {by_hand}")
+    else:
+        if not shutil.which("ollama"):
+            raise EngineError("ollama is not installed")
+        subprocess.Popen(
+            ["ollama", "serve"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        try:
-            httpx.get(f"{url}/api/tags", timeout=2.0).raise_for_status()
+        if _answers(url):
             return
-        except Exception:
-            time.sleep(0.5)
-    raise EngineError("ollama did not come up")
+        time.sleep(0.5)
+    raise EngineError(f"ollama could not be started: it is not answering at {url}; {by_hand}")
 
 
 def _server_message(response) -> str:
@@ -63,6 +93,8 @@ class OllamaEngine:
             response = httpx.post(f"{self.url}/api/chat", json=body, timeout=self.timeout)
             if response.status_code >= 400:
                 detail = _server_message(response) or f"HTTP {response.status_code}"
+                if response.status_code == 404 or "not found" in detail.lower():
+                    detail += f" (pull it with: ollama pull {self.model})"
                 raise EngineError(f"ollama failed: {detail}")
             content = response.json()["message"]["content"]
         except EngineError:

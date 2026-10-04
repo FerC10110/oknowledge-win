@@ -55,7 +55,7 @@ def test_opencode_not_installed_is_an_engine_error(monkeypatch):
         raise FileNotFoundError(2, "No such file or directory", "opencode")
 
     monkeypatch.setattr("subprocess.run", missing)
-    with pytest.raises(EngineError, match="opencode is not installed"):
+    with pytest.raises(EngineError, match="opencode is not installed.*'opencode'"):
         OpenCodeEngine(model="m").complete("hola")
 
 
@@ -144,7 +144,7 @@ def test_ollama_model_not_found_surfaces_the_server_message(monkeypatch):
         lambda url, json=None, timeout=None: Response(
             {"error": "model 'qwen2.5:7b' not found"}, status=404),
     )
-    with pytest.raises(EngineError, match="ollama.*model 'qwen2.5:7b' not found"):
+    with pytest.raises(EngineError, match="ollama.*model 'qwen2.5:7b' not found.*ollama pull qwen2.5:7b"):
         ollama().complete("hola")
 
 
@@ -329,14 +329,86 @@ def test_build_engine_reads_each_engines_settings(tmp_path):
     assert (api.provider, api.key_env) == ("openai", "K")
 
 
-def test_ensure_running_without_ollama_installed_is_an_engine_error(monkeypatch):
+class Host:
+    """Fakes everything ensure_running touches: probe, systemctl, which, Popen, clock."""
+
+    def __init__(self, monkeypatch, up_after=None, unit=True, start_rc=0, ollama_bin=True):
+        self.calls = []
+        self.spawned = []
+        self.up = up_after == 0
+        self.up_after = up_after
+        self.probes = 0
+        self.unit, self.start_rc = unit, start_rc
+
+        def get(url, timeout=None):
+            self.probes += 1
+            if self.up_after is not None and self.probes > self.up_after:
+                self.up = True
+            if not self.up:
+                raise httpx.ConnectError("refused")
+            return Response({})
+
+        def run(argv, **kw):
+            self.calls.append(argv)
+            rc = (0 if self.unit else 1) if argv[2] == "cat" else self.start_rc
+            return type("P", (), {"returncode": rc, "stdout": "", "stderr": "denied"})()
+
+        monkeypatch.setattr("httpx.get", get)
+        monkeypatch.setattr("subprocess.run", run)
+        monkeypatch.setattr("shutil.which", lambda n: "/usr/bin/ollama" if ollama_bin else None)
+        monkeypatch.setattr("subprocess.Popen",
+                            lambda argv, **kw: self.spawned.append((argv, kw)))
+        monkeypatch.setattr("time.sleep", lambda s: None)
+
+
+def test_ensure_running_starts_nothing_when_ollama_is_up(monkeypatch):
     from oknowledge.ai.ollama import ensure_running
 
-    def down(url, timeout=None):
-        raise httpx.ConnectError("refused")
+    host = Host(monkeypatch, up_after=0)
+    ensure_running("http://localhost:11434")
+    assert host.calls == [] and host.spawned == []
 
-    monkeypatch.setattr("httpx.get", down)
-    monkeypatch.setattr("shutil.which", lambda name: None)
-    monkeypatch.setattr("subprocess.Popen", lambda *a, **k: pytest.fail("must not spawn"))
+
+def test_ensure_running_starts_the_systemd_unit_when_there_is_one(monkeypatch):
+    from oknowledge.ai.ollama import ensure_running
+
+    host = Host(monkeypatch, up_after=2, unit=True)
+    ensure_running("http://localhost:11434")
+    assert ["systemctl", "--user", "start", "ollama.service"] in host.calls
+    assert host.spawned == []
+
+
+def test_ensure_running_spawns_detached_when_there_is_no_unit(monkeypatch):
+    from oknowledge.ai.ollama import ensure_running
+
+    host = Host(monkeypatch, up_after=2, unit=False)
+    ensure_running("http://localhost:11434")
+    assert not any(c[2] == "start" for c in host.calls)
+    (argv, kw), = host.spawned
+    assert argv == ["ollama", "serve"] and kw["start_new_session"] is True
+
+
+def test_ensure_running_gives_up_with_a_how_to_when_it_never_answers(monkeypatch):
+    from oknowledge.ai.ollama import ensure_running
+
+    Host(monkeypatch, up_after=None, unit=True)
+    with pytest.raises(EngineError, match="could not be started.*systemctl --user start ollama"):
+        ensure_running("http://localhost:11434", timeout=0.01)
+
+
+def test_ensure_running_reports_a_unit_that_fails_to_start(monkeypatch):
+    from oknowledge.ai.ollama import ensure_running
+
+    host = Host(monkeypatch, unit=True, start_rc=1)
+    with pytest.raises(EngineError, match="via systemd.*denied"):
+        ensure_running("http://localhost:11434")
+    assert host.spawned == []
+
+
+def test_ensure_running_without_unit_or_binary_is_an_engine_error(monkeypatch):
+    from oknowledge.ai.ollama import ensure_running
+
+    host = Host(monkeypatch, unit=False, ollama_bin=False)
     with pytest.raises(EngineError, match="ollama is not installed"):
         ensure_running("http://localhost:11434")
+    assert host.spawned == []
