@@ -383,3 +383,25 @@ def test_retry_survives_an_unreadable_queue_listing(cfg, monkeypatch, capsys):
     results = retry(cfg, queue=q)
     assert [r.status for r in results] == ["failed", "ok"]
     assert "could not list the queue" in results[0].error
+
+
+def test_an_unprobeable_lock_costs_one_link_not_the_whole_list(cfg, monkeypatch):
+    from oknowledge.pipeline import retry
+    from oknowledge.urls import link_id, normalize
+    q = Queue()
+    urls = {name: f"https://e.com/{name}" for name in ("a", "b", "c")}
+    ids = {name: link_id(normalize(url)) for name, url in urls.items()}
+    for name, url in urls.items():
+        q.enqueue(ids[name], url, "full")                   # abandoned: pending, unlocked
+    bad = q._lock_path(ids["b"])
+    bad.parent.mkdir(parents=True, exist_ok=True)
+    bad.write_text("")
+    bad.chmod(0)                                            # os.open(O_RDONLY) now fails
+    try:
+        assert sorted(e.id for e in q.orphaned()) == sorted([ids["a"], ids["c"]])
+        monkeypatch.setattr("oknowledge.pipeline.extract", lambda u: PAGE)
+        results = retry(cfg, queue=q)
+    finally:
+        bad.chmod(0o600)
+    assert sorted(r.id for r in results) == sorted([ids["a"], ids["c"]])
+    assert q.get(ids["b"]).status == "pending"

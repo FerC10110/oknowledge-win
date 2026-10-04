@@ -144,8 +144,21 @@ class Queue:
         entry pending forever; unfinished() would never retry it. A link that
         was enqueued a moment ago and not yet locked also shows up here.
         """
-        return [e for e in self.entries()
-                if e.status == "pending" and not self._held(e.id)]
+        orphans = []
+        for entry in self.entries():
+            if entry.status != "pending":
+                continue
+            try:
+                held = self._held(entry.id)
+            except OSError:
+                # A lock file we cannot probe (root-owned after a sudo run, say)
+                # leaves us not knowing whether a process holds it. Calling it
+                # free risks two processes writing one note; calling it held
+                # costs this one link a retry cycle. So: held, and carry on.
+                held = True
+            if not held:
+                orphans.append(entry)
+        return orphans
 
     def _lock_path(self, link_id: str) -> Path:
         return self.root / "locks" / f"{_check_id(link_id)}.lock"
