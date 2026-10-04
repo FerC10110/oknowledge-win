@@ -163,7 +163,11 @@ def add(cfg: Config, url: str, content: str | None = None, engine: str | None = 
     link = link_id(clean)
     mode = content or cfg.default_content
 
-    existing = find_note(cfg, link)
+    found = find_note(cfg, link)
+    # One shape for every path a Result can carry: find_note() reports the path
+    # it globbed and write_note() the resolved one, so a vault reached through a
+    # symlink would otherwise give two spellings for one note.
+    existing = (found[0].resolve(), found[1]) if found else None
     if existing and not reprocess:
         path, note = existing
         return Result(id=link, url=clean, path=path, status=note.status, skipped=True)
@@ -244,13 +248,22 @@ def _give_up(cfg: Config, q: Queue, link: str, url: str, mode: str,
 
     With an analyzed note already on disk there is nothing to write that would
     not be worse than what is there: the note, its name and the indexes are all
-    left untouched and only the queue records the attempt, which is enough to
-    keep the link retryable. Otherwise the partial note is written as usual --
-    partial over partial is idempotent, and partial over nothing is the rule
-    that a link is never lost.
+    left untouched and only the queue records the attempt. The Result still
+    reports the failure, since that is what this call did; the entry describes
+    the link, which is finished either way.
+
+    Otherwise the partial note is written as usual: partial over partial is
+    idempotent, and partial over nothing is the rule that a link is never lost.
     """
     if kept is not None:
-        q.set_status(link, "failed", error=reason, title=kept.title)
+        # The durable truth is that this link is saved and analyzed and there is
+        # no unfinished work left, so the entry is ok and the reason the last
+        # attempt failed stays in `error` for anyone who looks. Anything in
+        # UNFINISHED would have every retry() re-attempt it forever and leave
+        # the user a row they can never clear. It has to be set explicitly:
+        # add() enqueued inside the lock, which reset the entry to pending, and
+        # pending would feed it to orphaned() -- worse churn still.
+        q.set_status(link, "ok", error=reason, title=kept.title)
         return Result(id=link, url=url, path=target, status="failed", error=reason,
                       warnings=[KEPT_NOTE])
     note = _partial_note(cfg, link, url, mode, page)

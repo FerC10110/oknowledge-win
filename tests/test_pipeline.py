@@ -540,13 +540,14 @@ def test_a_failed_reanalysis_never_downgrades_a_finished_note(cfg, q, monkeypatc
     assert (kept.summary, kept.points, kept.category, kept.tags) == (
         good.summary, good.points, good.category, good.tags)
     assert kept.status == "ok"
-    assert result.path.name == first.path.name          # not renamed either
+    assert result.path == first.path                    # not renamed either
     assert first.path.exists()
     assert len(all_notes(cfg)) == 1
     # Not reindexed, because nothing changed: the index still names the note.
     assert f"[[{first.path.stem}|" in index_path(cfg, "Redes").read_text(encoding="utf-8")
-    # And still retryable, with the reason recorded.
-    assert q.get(result.id).status == "failed"
+    # The link is saved and analyzed, so nothing is left to finish -- but the
+    # reason the last attempt failed is still on disk.
+    assert q.get(result.id).status == "ok"
     assert "fake" in q.get(result.id).error
 
 
@@ -562,9 +563,9 @@ def test_a_failed_extraction_never_downgrades_a_finished_note(cfg, q, monkeypatc
     assert result.status == "failed"
     assert "403" in result.error
     assert read_note(first.path) == good                # byte for byte the same note
-    assert result.path.name == first.path.name
+    assert result.path == first.path
     assert len(all_notes(cfg)) == 1
-    assert q.get(result.id).status == "failed"
+    assert q.get(result.id).status == "ok"
 
 
 def test_a_reprocess_over_a_partial_note_still_rewrites_it(cfg, q, monkeypatch):
@@ -583,3 +584,62 @@ def test_a_reprocess_over_a_partial_note_still_rewrites_it(cfg, q, monkeypatch):
     assert read_note(again.path).content == "summary"   # really rewritten
     assert q.get(again.id).error == "still 503"
     assert len(all_notes(cfg)) == 1
+
+
+def test_a_protected_note_leaves_no_unfinished_work(cfg, q, monkeypatch):
+    # A failed re-analysis of a link that is already saved and analyzed must not
+    # leave a row the user can never clear.
+    extraction(monkeypatch, PAGE)
+    no_cover(monkeypatch)
+    first = add(cfg, "https://arstechnica.com/vpn", queue=q)
+
+    cfg.engines["fake"]["replies"] = []
+    result = add(cfg, "https://arstechnica.com/vpn", reprocess=True, queue=q)
+
+    assert result.status == "failed"                # this attempt did fail
+    entry = q.get(first.id)
+    assert entry.status == "ok"                     # nothing is left to finish
+    assert "fake" in entry.error                    # the reason is still there
+    assert q.unfinished() == []
+    assert q.orphaned() == []                       # and not pending either
+
+
+def test_retry_does_no_work_after_a_protected_failure(cfg, q, monkeypatch):
+    extraction(monkeypatch, PAGE)
+    no_cover(monkeypatch)
+    first = add(cfg, "https://arstechnica.com/vpn", queue=q)
+    good = read_note(first.path)
+
+    cfg.engines["fake"]["replies"] = []
+    add(cfg, "https://arstechnica.com/vpn", reprocess=True, queue=q)
+
+    def never(url):
+        pytest.fail("retry re-attempted a link with nothing left to finish")
+
+    monkeypatch.setattr("oknowledge.pipeline.extract", never)
+
+    assert retry(cfg, queue=q) == []                # re-analysis stays the
+    assert retry(cfg, queue=q) == []                # user's own act
+    assert read_note(first.path) == good
+
+
+def test_every_branch_reports_one_spelling_of_the_path(tmp_path, q, monkeypatch):
+    # find_note() globs the configured path and write_note() resolves it, so a
+    # vault reached through a symlink could give two paths for one note.
+    real = tmp_path / "real"
+    (real / "oknowledge" / "links").mkdir(parents=True)
+    through = tmp_path / "vault"
+    through.symlink_to(real, target_is_directory=True)
+    cfg = Config(vault=through, chain=("fake",),
+                 engines={"fake": {"replies": [ANSWER]}})
+    extraction(monkeypatch, PAGE)
+    no_cover(monkeypatch)
+
+    written = add(cfg, "https://arstechnica.com/vpn", queue=q)
+    skipped = add(cfg, "https://arstechnica.com/vpn", queue=q)
+    cfg.engines["fake"]["replies"] = []
+    kept = add(cfg, "https://arstechnica.com/vpn", reprocess=True, queue=q)
+
+    assert skipped.skipped is True
+    assert kept.status == "failed"
+    assert written.path == skipped.path == kept.path
