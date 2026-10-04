@@ -11,6 +11,7 @@ status a later `retry` picks up.
 from __future__ import annotations
 
 import datetime as dt
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -23,7 +24,14 @@ from .model import Extracted, Note, QueueEntry
 from .net import fetch
 from .queue import Locked, Queue
 from .urls import link_id, normalize
-from .vault import categories, find_note, rebuild_indexes, write_note
+from .vault import (
+    categories,
+    find_note,
+    note_stem,
+    read_note,
+    rebuild_indexes,
+    write_note,
+)
 
 PARTIAL_SUMMARY = {
     "es": "Guardado sin analizar: la página no se pudo leer o el análisis falló. "
@@ -69,6 +77,13 @@ def _uncategorized(cfg: Config) -> str:
     return UNCATEGORIZED.get(cfg.language, UNCATEGORIZED["en"])
 
 
+def _typed(error: BaseException) -> str:
+    """The failure with its class name in front, for anything that is not
+    already prose written for the user."""
+    detail = str(error)
+    return f"{type(error).__name__}: {detail}" if detail else type(error).__name__
+
+
 def _reason(error: BaseException) -> str:
     """The failure as the queue records it.
 
@@ -77,10 +92,9 @@ def _reason(error: BaseException) -> str:
     in us -- and keeps its type name, so it is not passed off to the user as
     "the page could not be read".
     """
-    detail = str(error)
     if isinstance(error, Unreadable):
-        return detail or type(error).__name__
-    return f"{type(error).__name__}: {detail}" if detail else type(error).__name__
+        return str(error) or type(error).__name__
+    return _typed(error)
 
 
 def _host(url: str) -> str:
@@ -216,16 +230,57 @@ def _process(cfg: Config, q: Queue, link: str, url: str, mode: str,
 
 def _save(cfg: Config, q: Queue, link: str, url: str, note: Note, status: str,
           error: str, engine: str | None, target: Path | None) -> Result:
-    """Write the note, record its status, then rebuild the indexes.
+    """Write the note, record its status, fix its name, rebuild the indexes.
 
     The order is the point. The queue is what a retry reads and the indexes are
     derived data, so reindexing before the status would let a full disk leave a
-    finished note on disk with its entry still saying pending.
+    finished note on disk with its entry still saying pending. The rename comes
+    before the reindex so the wikilinks name the file that actually exists.
     """
     path = write_note(cfg, note, cfg.language, path=target)
     q.set_status(link, status, error=error, title=note.title)
+    warnings: list[str] = []
+    if target is not None:
+        path, trouble = _rename_to_title(cfg, note, path)
+        if trouble:
+            warnings.append(trouble)
+    warnings += _reindex(cfg)
     return Result(id=link, url=url, path=path, status=status, engine=engine,
-                  error=error or None, warnings=_reindex(cfg))
+                  error=error or None, warnings=warnings)
+
+
+def _rename_to_title(cfg: Config, note: Note, path: Path) -> tuple[Path, str | None]:
+    """Move a reprocessed note onto the name its title now earns.
+
+    Returns where the note ended up, and a warning if it could not be moved.
+
+    A note saved while the site or the AI was down is named after its URL, and
+    that is the name Obsidian's file explorer, quick switcher and graph all
+    show -- the indexes render `[[stem|title]]` and read fine, the vault does
+    not. Those are exactly the notes retry() finishes, so this is the common
+    case and not the rare one.
+
+    The note is rewritten in place first and only then renamed, never written
+    under the new name and unlinked from the old: os.replace is atomic, so
+    there is no instant at which two files carry the same id, which is the
+    thing all of this exists to prevent.
+    """
+    ideal = (cfg.links_dir / f"{note_stem(note)}.md").resolve()
+    if ideal == path:
+        return path, None
+    if ideal.exists():
+        taken = read_note(ideal)
+        if taken is None or taken.id != note.id:
+            # A file of the user's, or one of ours we cannot read. Our own name
+            # is already correct and unique: leave both alone.
+            return path, None
+    try:
+        os.replace(path, ideal)
+    except OSError as error:
+        # The note is written and its status recorded; only the name is wrong.
+        return path, (f"the note stayed as {path.name}: it could not be renamed "
+                      f"to {ideal.name} ({_typed(error)})")
+    return ideal, None
 
 
 def _reindex(cfg: Config) -> list[str]:
@@ -257,5 +312,29 @@ def retry(cfg: Config, queue: Queue | None = None) -> list[Result]:
     owed: dict[str, QueueEntry] = {}
     for entry in (*q.unfinished(), *q.orphaned()):
         owed.setdefault(entry.id, entry)
-    return [add(cfg, entry.url, content=entry.content, reprocess=True, queue=q)
-            for entry in owed.values()]
+
+    results: list[Result] = []
+    for entry in owed.values():
+        try:
+            results.append(add(cfg, entry.url, content=entry.content,
+                               reprocess=True, queue=q))
+        except Exception as error:
+            # One link that cannot be written -- a full disk, or a note file the
+            # user replaced with one of their own -- must not take the rest of
+            # the run down with it. add() leaves the entry behind either way, so
+            # nothing is lost whichever way this goes.
+            results.append(_failed(q, entry, error))
+    return results
+
+
+def _failed(q: Queue, entry: QueueEntry, error: BaseException) -> Result:
+    """Report a link add() could not finish at all, and keep it retryable."""
+    reason = _typed(error)
+    try:
+        q.set_status(entry.id, "failed", error=reason)
+    except Exception:
+        # Whatever broke the note's write breaks this one too. The entry keeps
+        # the status it had, and pending is the right outcome: orphaned() will
+        # offer it to the next retry.
+        pass
+    return Result(id=entry.id, url=entry.url, path=None, status="failed", error=reason)

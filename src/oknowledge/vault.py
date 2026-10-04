@@ -190,8 +190,14 @@ def read_note(path: Path) -> Note | None:
     )
 
 
+def note_stem(note: Note) -> str:
+    """The file name a note earns from its date and title, before note_path()
+    disambiguates it against what is already on disk."""
+    return f"{_safe(note.saved) or 'undated'}-{slug(note.title, note.id)}"
+
+
 def note_path(cfg: Config, note: Note) -> Path:
-    stem = f"{_safe(note.saved) or 'undated'}-{slug(note.title, note.id)}"
+    stem = note_stem(note)
     candidate = cfg.links_dir / f"{stem}.md"
     n = 2
     while candidate.exists():

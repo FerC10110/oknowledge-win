@@ -1,5 +1,6 @@
 """The pipeline: a URL in, a note out, and never a lost link."""
 
+import datetime as dt
 import json
 
 import pytest
@@ -19,6 +20,8 @@ ANSWER = json.dumps({
     "category": "Redes",
     "tags": ["vpn"],
 })
+
+TODAY = dt.datetime.now(dt.timezone.utc).date().isoformat()
 
 PAGE = Extracted(
     title="WireGuard vs OpenVPN | Ars",
@@ -370,3 +373,143 @@ def test_a_locked_link_leaves_the_queue_alone(cfg, q, monkeypatch):
     assert (entry.status, entry.error, entry.title, entry.content) == (
         "failed", "the site was down", "An old title", "summary")
     assert all_notes(cfg) == []
+
+
+# --- The retried note's name, and one bad link among many ---------------------
+
+
+def test_a_retried_note_is_renamed_after_its_new_title(cfg, q, monkeypatch):
+    # A partial note is named after its URL, and that is the name Obsidian's
+    # explorer and quick switcher show. Finishing it has to fix the name too.
+    extraction(monkeypatch, Unreadable("503"))
+    first = add(cfg, "https://arstechnica.com/vpn", queue=q)
+    assert first.path.name == f"{TODAY}-https-arstechnica-com-vpn.md"
+
+    extraction(monkeypatch, PAGE)
+    no_cover(monkeypatch)
+    cfg.engines["fake"]["replies"] = [ANSWER]
+
+    renamed = retry(cfg, queue=q)[0].path
+
+    assert renamed.name == f"{TODAY}-wireguard-vs-openvpn.md"
+    assert not first.path.exists()                  # moved, not copied
+    notes = all_notes(cfg)
+    assert [note.id for note in notes] == [first.id]
+    # Renamed before the reindex, so the wikilink names the file that exists.
+    assert f"[[{renamed.stem}|" in index_path(cfg, "Redes").read_text(encoding="utf-8")
+
+
+def test_a_retried_note_keeps_its_name_when_the_new_one_is_taken(cfg, q, monkeypatch):
+    extraction(monkeypatch, Unreadable("503"))
+    first = add(cfg, "https://arstechnica.com/vpn", queue=q)
+
+    squatter = cfg.links_dir / f"{TODAY}-wireguard-vs-openvpn.md"
+    squatter.write_text("# My own file, no marker\n", encoding="utf-8")
+
+    extraction(monkeypatch, PAGE)
+    no_cover(monkeypatch)
+    cfg.engines["fake"]["replies"] = [ANSWER]
+
+    result = retry(cfg, queue=q)[0]
+
+    assert result.status == "ok"
+    assert result.path == first.path                # the name is left alone
+    assert squatter.read_text(encoding="utf-8") == "# My own file, no marker\n"
+    assert read_note(result.path).title == "WireGuard vs OpenVPN"
+    assert len(all_notes(cfg)) == 1
+
+
+def test_one_link_that_cannot_be_written_does_not_stop_the_others(cfg, q, monkeypatch):
+    import oknowledge.pipeline as pipeline
+
+    extraction(monkeypatch, PAGE)
+    no_cover(monkeypatch)
+    urls = [f"https://arstechnica.com/{name}" for name in ("a", "b", "c")]
+    for url in urls:
+        q.enqueue(link_id(url), url, "full")
+    broken = link_id(urls[1])
+
+    real = pipeline.write_note
+
+    def picky(config, note, language, path=None):
+        if note.id == broken:
+            raise OSError("no space left on device")
+        return real(config, note, language, path=path)
+
+    monkeypatch.setattr(pipeline, "write_note", picky)
+
+    results = retry(cfg, queue=q)
+
+    assert len(results) == 3
+    done = {result.id: result for result in results}
+    assert [done[link_id(url)].status for url in urls] == ["ok", "failed", "ok"]
+    failed = done[broken]
+    assert failed.path is None
+    assert "OSError" in failed.error
+    assert "no space left on device" in failed.error
+    assert q.get(broken).status == "failed"         # reported, and still retryable
+    assert len(all_notes(cfg)) == 2                 # the other two landed
+
+
+def test_a_rename_that_fails_keeps_the_note_and_says_so(cfg, q, monkeypatch):
+    import types
+
+    import oknowledge.pipeline as pipeline
+
+    extraction(monkeypatch, Unreadable("503"))
+    first = add(cfg, "https://arstechnica.com/vpn", queue=q)
+
+    extraction(monkeypatch, PAGE)
+    no_cover(monkeypatch)
+    cfg.engines["fake"]["replies"] = [ANSWER]
+
+    def refuse(src, dst):
+        raise OSError("cross-device link")
+
+    # Only the rename: patching os.replace itself would also break the atomic
+    # write that put the note on disk in the first place.
+    monkeypatch.setattr(pipeline, "os", types.SimpleNamespace(replace=refuse))
+
+    result = retry(cfg, queue=q)[0]
+
+    assert result.status == "ok"                    # only the name is wrong
+    assert result.path == first.path
+    assert read_note(first.path).title == "WireGuard vs OpenVPN"
+    assert q.get(first.id).status == "ok"
+    assert any("could not be renamed" in warning for warning in result.warnings)
+    assert len(all_notes(cfg)) == 1
+
+
+def test_reporting_a_failed_link_cannot_take_down_the_run(cfg, q, monkeypatch):
+    import oknowledge.pipeline as pipeline
+
+    extraction(monkeypatch, PAGE)
+    no_cover(monkeypatch)
+    urls = ["https://arstechnica.com/a", "https://arstechnica.com/b"]
+    for url in urls:
+        q.enqueue(link_id(url), url, "full")
+    broken = link_id(urls[0])
+
+    real_write, real_status = pipeline.write_note, q.set_status
+
+    def picky(config, note, language, path=None):
+        if note.id == broken:
+            raise OSError("no space left on device")
+        return real_write(config, note, language, path=path)
+
+    def full_disk(link, status, error=None, title=None):
+        if status == "failed":
+            raise OSError("no space left on device")
+        return real_status(link, status, error=error, title=title)
+
+    monkeypatch.setattr(pipeline, "write_note", picky)
+    monkeypatch.setattr(q, "set_status", full_disk)
+
+    results = retry(cfg, queue=q)
+
+    done = {result.id: result for result in results}
+    assert done[broken].status == "failed"
+    assert done[link_id(urls[1])].status == "ok"    # the run carried on
+    # The entry it could not even mark stays pending, which keeps it retryable.
+    assert q.get(broken).status == "pending"
+    assert [e.id for e in q.orphaned()] == [broken]
