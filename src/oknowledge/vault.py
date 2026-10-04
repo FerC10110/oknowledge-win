@@ -10,7 +10,6 @@ Two rules, and both live here for a reason: the vault belongs to the user.
 
 from __future__ import annotations
 
-import os  # noqa: F401  (tests patch os.replace through this module)
 import re
 import unicodedata
 from dataclasses import dataclass, field

@@ -166,7 +166,7 @@ def test_a_failed_write_cleans_up_and_keeps_the_old_note(tmp_path, monkeypatch):
     def boom(src, dst):
         raise OSError("disk full")
 
-    monkeypatch.setattr("oknowledge.vault.os.replace", boom)
+    monkeypatch.setattr("oknowledge.atomic.os.replace", boom)
     with pytest.raises(OSError):
         write_note(cfg, make_note(summary="Nuevo."), "es")
     monkeypatch.undo()
