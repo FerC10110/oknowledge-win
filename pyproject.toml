@@ -1,0 +1,30 @@
+[project]
+name = "oknowledge"
+version = "0.1.0"
+description = "Save a link, get a summarized note in your Obsidian vault"
+requires-python = ">=3.13"
+dependencies = [
+  "trafilatura>=2.0",
+  "pypdf>=5.1",
+  "httpx>=0.28",
+  "fastapi>=0.115",
+  "uvicorn>=0.34",
+  "jinja2>=3.1",
+  "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.3"]
+
+[project.scripts]
+oknowledge = "oknowledge.cli:main"
+
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
