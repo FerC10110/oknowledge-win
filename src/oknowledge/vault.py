@@ -14,6 +14,7 @@ import os
 import re
 import secrets
 import unicodedata
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import yaml
@@ -245,3 +246,119 @@ def write_note(cfg: Config, note: Note, language: str, path: Path | None = None)
     resolved.parent.mkdir(parents=True, exist_ok=True)
     _atomic_write(resolved, render(note, language))
     return resolved
+
+
+INDEX_NOTICE = "<!-- Generado por oknowledge. Los cambios a mano se pierden. -->"
+
+_CLAIMS_MARKER = re.compile(rf"^{MARKER}:", re.MULTILINE)
+
+
+@dataclass(frozen=True)
+class RebuildResult:
+    """What a reindex did: the indexes it wrote and the files it could not read."""
+
+    written: list[Path] = field(default_factory=list)
+    skipped: list[Path] = field(default_factory=list)
+
+
+def _claims_marker(path: Path) -> bool:
+    """True if the file's frontmatter text carries an `oknowledge:` key, even if
+    the rest is too broken to parse. Lets a reindex tell a note of ours that the
+    user hand-broke from a file that was never ours."""
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return False
+    if not text.startswith("---\n"):
+        return False
+    end = text.find("\n---", 4)
+    return end != -1 and _CLAIMS_MARKER.search(text[4:end]) is not None
+
+
+def _scan(cfg: Config) -> tuple[list[tuple[Path, Note]], list[Path]]:
+    """Every readable note under links_dir, plus the files of ours it could not read."""
+    if not cfg.links_dir.is_dir():
+        return [], []
+    found: list[tuple[Path, Note]] = []
+    skipped: list[Path] = []
+    for path in sorted(cfg.links_dir.glob("*.md")):
+        note = read_note(path)
+        if note is not None:
+            found.append((path, note))
+            continue
+        front = read_front(path)
+        is_index = front is not None and front.get("kind") == "index"
+        if not is_index and _claims_marker(path):
+            skipped.append(path)
+    return found, skipped
+
+
+def all_notes(cfg: Config) -> list[Note]:
+    return [note for _, note in _scan(cfg)[0]]
+
+
+def find_note(cfg: Config, link_id: str) -> tuple[Path, Note] | None:
+    for path, note in _scan(cfg)[0]:
+        if note.id == link_id:
+            return path, note
+    return None
+
+
+def categories(cfg: Config) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for note in all_notes(cfg):
+        counts[note.category] = counts.get(note.category, 0) + 1
+    return dict(sorted(counts.items()))
+
+
+def index_path(cfg: Config, category: str) -> Path:
+    # The category name is written by a model: it can never leave our folder
+    # or invent subdirectories.
+    name = re.sub(r"[\\/:*?\"<>|]+", "-", category).strip(" .") or "Sin categoria"
+    return cfg.root / f"{name}.md"
+
+
+def write_index(cfg: Config, category: str, notes: list[Note]) -> Path:
+    ordered = sorted(notes, key=lambda n: (n.saved, n.title), reverse=True)
+
+    front = yaml.safe_dump(
+        {MARKER: MARKER_VERSION, "kind": "index", "category": category},
+        sort_keys=False, allow_unicode=True,
+    ).strip()
+
+    lines = [f"---\n{front}\n---\n", f"# {category} · {len(ordered)} links\n", f"{INDEX_NOTICE}\n"]
+    for note in ordered:
+        stem = note_path(cfg, note).stem
+        tags = " ".join(f"#{t}" for t in note.tags)
+        head = note.summary.strip().splitlines()[0] if note.summary.strip() else ""
+        lines.append(f"- [[{stem}|{note.title}]]\n  `{tags}` — {head}")
+
+    target = index_path(cfg, category)
+    resolved = _ensure_inside_root(cfg, target)
+    if resolved.exists() and read_front(resolved) is None:
+        raise ProtectedNote(f"refusing to overwrite a file without the marker: {target}")
+    resolved.parent.mkdir(parents=True, exist_ok=True)
+    _atomic_write(resolved, "\n".join(lines) + "\n")
+    return resolved
+
+
+def rebuild_indexes(cfg: Config) -> RebuildResult:
+    """Rewrite one index per category and delete the ones left without notes.
+
+    Only reads notes; never rewrites them. Files of ours it could not read
+    (hand-broken) are left alone and listed in `skipped`.
+    """
+    found, skipped = _scan(cfg)
+    grouped: dict[str, list[Note]] = {}
+    for _, note in found:
+        grouped.setdefault(note.category, []).append(note)
+
+    written = [write_index(cfg, category, notes) for category, notes in sorted(grouped.items())]
+
+    keep = {p.name for p in written}
+    if cfg.root.is_dir():
+        for path in cfg.root.glob("*.md"):
+            front = read_front(path)
+            if front is not None and front.get("kind") == "index" and path.name not in keep:
+                path.unlink()
+    return RebuildResult(written=written, skipped=skipped)
