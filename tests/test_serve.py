@@ -388,6 +388,19 @@ def test_serve_announces_through_a_helper_thread_that_cannot_hold_the_process(va
     assert helper.daemon is True
 
 
+def test_when_serve_returns_the_helper_threads_are_told_to_stop(vault_cfg, stub_uvicorn):
+    """A taken port never sets should_exit itself; the announce thread would
+    poll forever (and a watchdog would outlive the server in-process)."""
+    def refuse(server):
+        server.started = False
+        raise SystemExit(1)
+
+    stub_uvicorn.behaviour = staticmethod(refuse)
+    with pytest.raises(runner.PortUnavailable):
+        runner.serve(vault_cfg)
+    assert stub_uvicorn.instances[0].should_exit is True
+
+
 def test_ctrl_c_ends_serve_quietly(vault_cfg, stub_uvicorn):
     def interrupt(server):
         raise KeyboardInterrupt
