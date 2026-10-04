@@ -334,6 +334,16 @@ def test_degenerate_categories_fall_back(bad):
     assert canonical_category(bad, []) == "Sin clasificar"
 
 
+def test_a_listed_category_keeps_only_its_first_segment():
+    assert canonical_category("Redes, Seguridad", []) == "Redes"
+    assert canonical_category("Redes; Seguridad", []) == "Redes"
+    assert canonical_category("Redes, Seguridad", ["Redes"]) == "Redes"
+
+
+def test_a_known_category_containing_a_comma_still_matches_itself():
+    assert canonical_category("Redes, Seguridad", ["Redes, Seguridad"]) == "Redes, Seguridad"
+
+
 def test_a_very_long_category_is_capped():
     assert len(canonical_category("a" * 500, [])) <= 80
 

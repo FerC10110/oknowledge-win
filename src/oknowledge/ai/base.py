@@ -121,15 +121,29 @@ def _clean_category(category: str) -> str:
     return " ".join(spaced.split()).lstrip(". ")[:MAX_CATEGORY_LENGTH].strip()
 
 
+def _first_segment(category: str) -> str:
+    """Asked for one category, a model sometimes lists several: keep the first."""
+    for part in re.split(r"[,;]", category):
+        if part.strip():
+            return part.strip()
+    return ""
+
+
 def canonical_category(category: str, known, language: str = "es") -> str:
     clean = _clean_category(str(category or ""))
     if not clean:
         return UNCATEGORIZED.get(language, UNCATEGORIZED["en"])
-    wanted = _fold(clean)
-    for existing in known or []:
-        if _fold(_clean_category(existing)) == wanted:
-            return existing
-    return clean
+    first = _first_segment(clean)
+    # The whole string is tried first, so a known category that really does
+    # contain a comma still matches itself before the list rule applies.
+    for candidate in (clean, first):
+        if not candidate:
+            continue
+        wanted = _fold(candidate)
+        for existing in known or []:
+            if _fold(_clean_category(existing)) == wanted:
+                return existing
+    return first or clean
 
 
 def render_prompt(text: str, meta: dict, known, language: str, limit: int = DEFAULT_LIMIT) -> str:
