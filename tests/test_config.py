@@ -1,6 +1,8 @@
+import dataclasses
+
 import pytest
 
-from oknowledge.config import ConfigError, load
+from oknowledge.config import Config, ConfigError, load, save
 
 
 def write_config(tmp_path, body):
@@ -89,3 +91,62 @@ def test_an_unknown_content_mode_is_an_error(tmp_path):
     path = write_config(tmp_path, f'vault = "{vault}"\ndefault_content = "half"\n')
     with pytest.raises(ConfigError, match="half"):
         load(path)
+
+
+# --- saving the config back -------------------------------------------------
+
+def test_save_round_trips_through_load(tmp_path):
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    path = write_config(tmp_path, f'''
+vault = "{vault}"
+folder = "notes"
+default_content = "summary"
+
+[ai]
+chain = ["ollama", "opencode"]
+language = "en"
+
+[ai.ollama]
+model = "qwen2.5:7b"
+url = "http://localhost:11434"
+
+[web]
+port = 9000
+idle_timeout = 60
+''')
+    cfg = load(path)
+    save(cfg, path)
+    assert load(path) == cfg
+
+
+def test_save_keeps_the_previous_file_as_a_backup(tmp_path):
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    path = write_config(tmp_path, f'# my comments\nvault = "{vault}"\n')
+    cfg = load(path)
+
+    save(dataclasses.replace(cfg, language="en"), path)
+
+    backup = tmp_path / "config.toml.bak"
+    assert backup.read_text(encoding="utf-8") == f'# my comments\nvault = "{vault}"\n'
+    assert "# my comments" not in path.read_text(encoding="utf-8")
+    assert load(path).language == "en"
+
+
+def test_saving_over_nothing_needs_no_backup(tmp_path):
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    path = tmp_path / "deep" / "config.toml"
+    save(Config(vault=vault), path)
+    assert not (tmp_path / "deep" / "config.toml.bak").exists()
+    assert load(path).vault == vault
+
+
+def test_a_saved_config_is_only_readable_by_you(tmp_path):
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    path = write_config(tmp_path, f'vault = "{vault}"\n')
+    save(load(path), path)
+    assert path.stat().st_mode & 0o777 == 0o600
+    assert (tmp_path / "config.toml.bak").stat().st_mode & 0o777 == 0o600

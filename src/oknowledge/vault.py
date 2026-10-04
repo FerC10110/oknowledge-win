@@ -1,28 +1,35 @@
 """The only module that writes Markdown.
 
-Two rules, and both live here for a reason: the vault belongs to the user.
+Three rules, and they all live here for a reason: the vault belongs to the user.
 
 1. Only write inside <vault>/<folder>/.
 2. Only touch files whose frontmatter has `oknowledge: 1`. A file without that
    marker is never modified or deleted, even if it sits in our folder and is
    named exactly like the one we were about to write.
+3. Nothing is destroyed. A note is written in place, never unlinked and
+   rewritten; a deleted note is moved to <vault>/<folder>/trash/, where
+   Obsidian can still open it and the user can drag it back.
 """
 
 from __future__ import annotations
 
+import os
 import re
+import secrets
 import unicodedata
 from dataclasses import dataclass, field
 from pathlib import Path
 
 import yaml
 
+from .ai.base import MAX_CATEGORY_LENGTH, normalize_tags
 from .atomic import atomic_write
 from .config import Config
 from .model import Note
 
 MARKER = "oknowledge"
 MARKER_VERSION = 1
+TRASH = "trash"
 
 HEADINGS = {
     "es": ("Puntos clave", "Contenido original"),
@@ -37,6 +44,10 @@ FRONTMATTER_ORDER = (
 
 class ProtectedNote(Exception):
     """Refusing to write: the target is outside our folder or is not ours."""
+
+
+class BadCategory(ValueError):
+    """A category name we refuse to store, because it would not stay a name."""
 
 
 def _safe(text: str) -> str:
@@ -410,3 +421,148 @@ def rebuild_indexes(cfg: Config, language: str) -> RebuildResult:
             if front is not None and front.get("kind") == "index" and path.name not in keep:
                 path.unlink()
     return RebuildResult(written=written, skipped=skipped, blocked=blocked)
+
+
+# --- editing what is already saved -------------------------------------------
+#
+# Everything below changes or removes a file the user already has. Two habits
+# make that safe, and both are deliberate:
+#
+# * a note is rewritten in place with write_note(..., path=path), which is an
+#   atomic replace underneath. The file name comes from the saved date and the
+#   title, and nothing here edits either, so the name never has to change. A
+#   failed write costs the edit and leaves the note exactly as it was.
+# * nothing is unlinked. Deleting moves the file into trash/, a sibling of
+#   links/, which every scan already ignores because _scan() globs
+#   links_dir/*.md and never recurses.
+
+
+def clean_category(name) -> str | None:
+    """The category as it will be stored, or None if we refuse it.
+
+    Category names arrive from a browser form and end up in frontmatter and in
+    an index file name, so they are refused rather than sanitized: a user who
+    types `../../etc` gets told no, instead of silently getting a category
+    named something else. The test is simply that the name survives
+    _index_name() unchanged and carries no control characters, which rules out
+    path separators, leading dots and the characters a file name cannot hold.
+    """
+    text = str(name).strip()
+    if not text or len(text) > MAX_CATEGORY_LENGTH:
+        return None
+    if any(unicodedata.category(char).startswith("C") for char in text):
+        return None
+    return text if _index_name(text) == text else None
+
+
+def _checked_category(name) -> str:
+    clean = clean_category(name)
+    if clean is None:
+        raise BadCategory(f"not a usable category name: {name!r}")
+    return clean
+
+
+def update_note(cfg: Config, link_id: str, language: str,
+                category: str | None = None, tags=None) -> Path | None:
+    """Change one of our notes' classification and rebuild the indexes.
+
+    Returns the path written, or None if no note of ours has that id. Raises
+    BadCategory for a category we refuse, before touching anything.
+    """
+    found = find_note(cfg, link_id)
+    if found is None:
+        return None
+    path, note = found
+    if category is not None:
+        note.category = _checked_category(category)
+    if tags is not None:
+        note.tags = normalize_tags(tags)
+    # In place: the name is a function of saved + title, which this never
+    # changes, and an unlink here would be a note destroyed by a failed write.
+    written = write_note(cfg, note, language, path=path)
+    rebuild_indexes(cfg, language)
+    return written
+
+
+def trash_dir(cfg: Config) -> Path:
+    """Where deleted notes go: a sibling of links/, so no scan ever sees them."""
+    return cfg.root / TRASH
+
+
+def _free_name(folder: Path, name: str) -> Path:
+    """Claim an unused name in `folder`, creating the file to reserve it.
+
+    Two notes deleted on the same day with the same title have the same file
+    name; the second must not overwrite the first.
+    """
+    stem, suffix = (name[:-3], ".md") if name.endswith(".md") else (name, "")
+    for attempt in range(1, 100):
+        candidate = folder / (name if attempt == 1 else f"{stem}-{attempt}{suffix}")
+        try:
+            os.close(os.open(candidate, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o666))
+        except FileExistsError:
+            continue
+        return candidate
+    return folder / f"{stem}-{secrets.token_hex(4)}{suffix}"
+
+
+def delete_note(cfg: Config, link_id: str, language: str) -> Path | None:
+    """Move one of our notes to trash/ and rebuild the indexes.
+
+    Returns the new path, or None if no note of ours has that id. Deleting
+    fires from a POST in a browser, so it has to be undoable: the file keeps
+    its name and content and can be dragged back from Obsidian.
+    """
+    found = find_note(cfg, link_id)
+    if found is None:
+        return None
+    path, _ = found
+    # Location first, before anything is created: a trash/ symlinked out of
+    # the vault has to be refused, not followed.
+    folder = ensure_inside_root(cfg, trash_dir(cfg) / "note.md").parent
+    folder.mkdir(parents=True, exist_ok=True)
+    target = _free_name(folder, path.name)
+    try:
+        os.replace(path, target)                 # same filesystem: atomic
+    except OSError:
+        target.unlink(missing_ok=True)           # no empty placeholder left behind
+        raise
+    rebuild_indexes(cfg, language)
+    return target
+
+
+@dataclass(frozen=True)
+class RenameResult:
+    """What a rename did.
+
+    moved: notes rewritten under the new category.
+    failed: (path, why) for each note that could not be written. A rename
+        touches many files, so one bad note must neither abort the rest nor
+        pass unreported: a half-renamed vault with no word to the user is the
+        worst outcome of the three.
+    """
+
+    moved: int = 0
+    failed: list[tuple[Path, str]] = field(default_factory=list)
+
+
+def rename_category(cfg: Config, old: str, new: str, language: str) -> RenameResult:
+    """Rename a category; if `new` already exists, the two merge.
+
+    Only touches notes of ours: _scan() already discards everything else.
+    """
+    target = _checked_category(new)
+    moved = 0
+    failed: list[tuple[Path, str]] = []
+    for path, note in _scan(cfg)[0]:
+        if note.category != old:
+            continue
+        note.category = target
+        try:
+            write_note(cfg, note, language, path=path)
+        except (ProtectedNote, OSError) as error:
+            failed.append((path, str(error)))
+            continue
+        moved += 1
+    rebuild_indexes(cfg, language)
+    return RenameResult(moved=moved, failed=failed)

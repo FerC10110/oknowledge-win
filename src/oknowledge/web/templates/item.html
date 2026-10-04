@@ -22,5 +22,37 @@
         <pre>{{ note.body }}</pre>
       </details>
     {% endif %}
+    <div class="actions">
+      <form action="/item/{{ note.id|slug }}/category" method="post" class="row">
+        <input name="category" value="{{ note.category }}" list="known"
+               aria-label="{{ t('Move to category') }}">
+        <button type="submit">{{ t('Save') }}</button>
+      </form>
+      <form action="/item/{{ note.id|slug }}/tags" method="post" class="row">
+        <input name="tags" value="{{ note.tags|join(', ') }}"
+               aria-label="{{ t('Edit tags') }}">
+        <button type="submit">{{ t('Save') }}</button>
+      </form>
+      <form action="/item/{{ note.id|slug }}/reprocess" method="post" class="row">
+        <select name="engine" aria-label="{{ t('Reprocess') }}">
+          <option value="">—</option>
+          <option value="opencode">opencode</option>
+          <option value="ollama">ollama</option>
+          <option value="api">api</option>
+        </select>
+        <button type="submit">{{ t('Reprocess') }}</button>
+      </form>
+      <form action="/item/{{ note.id|slug }}/delete" method="post" class="row"
+            data-ask="{{ t('Move this note to the trash folder?') }}">
+        {# The question is read from the attribute, so no quoting of a
+           translated string ever lands inside the script. Without JS the
+           button still works: the note goes to trash/ either way. #}
+        <button type="submit"
+                onclick="return confirm(this.form.dataset.ask)">{{ t('Delete') }}</button>
+      </form>
+    </div>
+    <datalist id="known">
+      {% for name in categories %}<option value="{{ name }}">{% endfor %}
+    </datalist>
   </article>
 {% endblock %}

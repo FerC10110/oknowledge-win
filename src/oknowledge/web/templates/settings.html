@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}{{ t('Settings') }} - oknowledge{% endblock %}
+{% block main %}
+  <h1>{{ t('Settings') }}</h1>
+  <p class="warn-block">{{ t('Saving rewrites %1 and drops every comment in it. The file it replaces is kept next to it as config.toml.bak.', config_path) }}</p>
+  <form action="/settings" method="post">
+    <h2>{{ t('Engines') }}</h2>
+    <p class="meta">{{ t('Priority runs top to bottom. An engine that is not checked is not used. To change the order, edit the file by hand.') }}</p>
+    {% for name in engines %}
+      <p class="row">
+        <label><input type="checkbox" name="chain" value="{{ name }}"
+                      {% if name in cfg.chain %}checked{% endif %}> {{ name }}</label>
+        <input name="{{ name }}_model" placeholder="model"
+               aria-label="{{ name }} model"
+               value="{{ cfg.engines.get(name, {}).get('model', '') }}">
+      </p>
+    {% endfor %}
+    <p class="meta">{{ t('The API key is not written here: it goes in config.toml as key_env, or in the environment variable that field names.') }}</p>
+
+    <h2>{{ t('Summary language') }}</h2>
+    <label><input type="radio" name="language" value="es"
+                  {% if cfg.language == 'es' %}checked{% endif %}> Español</label>
+    <label><input type="radio" name="language" value="en"
+                  {% if cfg.language == 'en' %}checked{% endif %}> English</label>
+
+    <h2>{{ t('Interface language') }}</h2>
+    <label><input type="radio" name="ui_language" value="en"
+                  {% if ui == 'en' %}checked{% endif %}> English</label>
+    <label><input type="radio" name="ui_language" value="es"
+                  {% if ui == 'es' %}checked{% endif %}> Español</label>
+    <p class="meta">{{ t('Shared with my other Omarchy plugins, so this changes all of them at once.') }}</p>
+
+    <h2>{{ t('Keep by default') }}</h2>
+    <label><input type="radio" name="default_content" value="full"
+                  {% if cfg.default_content == 'full' %}checked{% endif %}> {{ t('Full') }}</label>
+    <label><input type="radio" name="default_content" value="summary"
+                  {% if cfg.default_content == 'summary' %}checked{% endif %}> {{ t('Summary') }}</label>
+
+    <p><button type="submit" class="button">{{ t('Save') }}</button></p>
+  </form>
+{% endblock %}

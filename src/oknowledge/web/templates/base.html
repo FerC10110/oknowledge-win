@@ -21,6 +21,7 @@
   {% if unreadable %}
     <p class="quiet">{% if unreadable == 1 %}{{ t('1 note could not be read and is not shown (%1)', links_dir) }}{% else %}{{ t('%1 notes could not be read and are not shown (%2)', unreadable, links_dir) }}{% endif %}</p>
   {% endif %}
+  {% if notice %}<p class="notice">{{ notice }}</p>{% endif %}
   <main>{% block main %}{% endblock %}</main>
 </body>
 </html>

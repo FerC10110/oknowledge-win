@@ -6,9 +6,12 @@ compartida con los demás plugins, y la lee i18n.py.
 
 from __future__ import annotations
 
+import shutil
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
+
+from .atomic import atomic_write
 
 CONFIG_PATH = Path.home() / ".config" / "oknowledge" / "config.toml"
 ENGINE_NAMES = ("opencode", "ollama", "api", "fake")
@@ -126,3 +129,37 @@ def load(path: Path = CONFIG_PATH) -> Config:
         port=_integer(web, "port", 8787, "web.port"),
         idle_timeout=_integer(web, "idle_timeout", 900, "web.idle_timeout"),
     )
+
+
+def save(cfg: Config, path: Path = CONFIG_PATH) -> Path:
+    """Rewrite the config file from a Config, and say where it went.
+
+    This is the file we tell the user to hand-write, so rewriting it loses
+    every comment and every bit of formatting in it. The old file is copied to
+    <name>.bak first, which is the only thing that makes losing them
+    recoverable, and the settings page says so in as many words.
+
+    Only values `load()` accepts are written, so a file saved here always
+    loads again.
+    """
+    import tomli_w            # only this one function needs it: keep startup light
+
+    path = Path(path)
+    data = {
+        "vault": str(cfg.vault),
+        "folder": cfg.folder,
+        "default_content": cfg.default_content,
+        "ai": {"chain": list(cfg.chain), "language": cfg.language,
+               **{name: dict(options) for name, options in cfg.engines.items()}},
+        "web": {"port": cfg.port, "idle_timeout": cfg.idle_timeout},
+    }
+    text = tomli_w.dumps(data)          # before the backup: a bad value changes nothing
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if path.exists():
+        backup = path.with_name(path.name + ".bak")
+        shutil.copy2(path, backup)
+        backup.chmod(0o600)
+    atomic_write(path, text)
+    path.chmod(0o600)
+    return path

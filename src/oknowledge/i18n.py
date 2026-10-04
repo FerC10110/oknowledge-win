@@ -11,6 +11,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from .atomic import atomic_write
+
 SHARED_FILE = Path.home() / ".config" / "omarchy" / "plugin-language.json"
 LANGUAGES = ("en", "es")
 
@@ -57,6 +59,42 @@ STRINGS = {
         "The vault could not be read": "No se pudo leer el vault",
         "Check that the folder exists, is mounted and is readable.":
             "Revisá que la carpeta exista, esté montada y se pueda leer.",
+        "Full": "Todo",
+        "Summary": "Resumen",
+        "Saved.": "Guardado.",
+        "The note was moved to the trash folder inside your vault. "
+        "You can restore it from Obsidian.":
+            "La nota se movió a la carpeta trash de tu vault. "
+            "La podés recuperar desde Obsidian.",
+        "Re-running the analysis. The note stays pending until it finishes.":
+            "Reprocesando. La nota queda pendiente hasta que termine.",
+        "That name cannot be used as a category: no slashes, no dots "
+        "at the start, no control characters.":
+            "Ese nombre no sirve como categoría: sin barras, sin puntos "
+            "al principio, sin caracteres de control.",
+        "%1 notes moved.": "Se movieron %1 notas.",
+        "%1 notes moved, %2 could not be written. "
+        "Check the folder and try again.":
+            "Se movieron %1 notas; %2 no se pudieron escribir. "
+            "Revisá la carpeta y probá de nuevo.",
+        "Renaming into a category that already exists merges the two.":
+            "Si el nombre nuevo ya existe, las dos categorías se fusionan.",
+        "Move this note to the trash folder?":
+            "¿Mover esta nota a la carpeta trash?",
+        "Saving rewrites %1 and drops every comment in it. "
+        "The file it replaces is kept next to it as config.toml.bak.":
+            "Guardar reescribe %1 y pierde todos los comentarios que tenga. "
+            "El archivo anterior queda al lado como config.toml.bak.",
+        "Priority runs top to bottom. An engine that is not checked is not used. "
+        "To change the order, edit the file by hand.":
+            "La prioridad va de arriba hacia abajo. El motor que no esté tildado "
+            "no se usa. Para cambiar el orden, editá el archivo a mano.",
+        "The API key is not written here: it goes in config.toml as key_env, "
+        "or in the environment variable that field names.":
+            "La API key no se escribe acá: va en config.toml como key_env, "
+            "o en la variable de entorno que ese campo nombre.",
+        "Shared with my other Omarchy plugins, so this changes all of them at once.":
+            "Es compartido con mis otros plugins de Omarchy: los cambia a todos juntos.",
     },
 }
 
@@ -71,6 +109,30 @@ def ui_language(path: Path | None = None) -> str:
         return "en"
     primary = value.strip().lower().replace("_", "-").split("-")[0]   # "es-AR" -> "es"
     return primary if primary in LANGUAGES else "en"
+
+
+def set_ui_language(language: str, path: Path | None = None) -> Path:
+    """Write the shared preference, and say where it went.
+
+    The file is not ours: every Omarchy plugin of mine reads and writes it, so
+    this reads what is there, changes the one key we own and writes the whole
+    object back. Writing {"language": ...} wholesale would quietly destroy
+    whatever another plugin keeps there. A file that is missing, unreadable or
+    not a JSON object starts from an empty object rather than failing: the
+    preference is worth more than whatever could not be parsed.
+    """
+    if language not in LANGUAGES:
+        raise ValueError(f"unsupported language: {language!r}")
+    target = Path(path) if path else SHARED_FILE
+    try:
+        existing = json.loads(target.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, ValueError, RecursionError):
+        existing = None
+    data = dict(existing) if isinstance(existing, dict) else {}
+    data["language"] = language
+    target.parent.mkdir(parents=True, exist_ok=True)
+    atomic_write(target, json.dumps(data, ensure_ascii=False, indent=2) + "\n")
+    return target
 
 
 def translator(language: str):

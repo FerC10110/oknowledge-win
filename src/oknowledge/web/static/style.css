@@ -78,3 +78,20 @@ details pre { white-space: pre-wrap; font: inherit; color: var(--dim); }
 .pager { display: flex; gap: 1rem; justify-content: center; align-items: center;
          margin-top: 2rem; color: var(--dim); font-size: 0.9rem; }
 .pager a { color: var(--accent); text-decoration: none; }
+
+/* Writing: forms, rows and the one-line answer a redirect leaves behind. */
+.row { display: flex; align-items: center; gap: 0.6rem; padding: 0.9rem 0; }
+.row .actions { margin-left: auto; display: flex; gap: 0.4rem; }
+.hits .row { border: 0; }
+form h2 { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.08em;
+          color: var(--dim); margin-top: 2rem; }
+form label { display: inline-flex; align-items: center; gap: 0.4rem; margin-right: 1.2rem; }
+input[type=text], input:not([type]), select, button { padding: 0.4rem 0.7rem; font: inherit;
+  border: 1px solid var(--line); border-radius: 8px; background: var(--card); color: inherit; }
+button { cursor: pointer; }
+.item .actions { display: flex; flex-wrap: wrap; gap: 0.6rem 1.2rem; margin-top: 2.5rem;
+                 border-top: 1px solid var(--line); }
+.notice { max-width: var(--measure); margin: 0 auto 1rem; padding: 0.6rem 1rem;
+          color: var(--fg); font-size: 0.9rem; border-left: 2px solid var(--accent); }
+.warn-block { color: var(--dim); font-size: 0.85rem; border: 1px solid var(--line);
+              border-radius: 9px; padding: 0.6rem 0.9rem; }

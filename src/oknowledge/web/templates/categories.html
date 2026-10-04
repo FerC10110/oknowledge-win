@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}{{ t('Categories') }} - oknowledge{% endblock %}
+{% block main %}
+  <h1>{{ t('Categories') }}</h1>
+  {% if categories %}
+    <ul class="hits">
+      {% for name, count in categories.items() %}
+        <li>
+          <form class="row" action="/categories/rename" method="post">
+            <input type="hidden" name="old" value="{{ name }}">
+            <a class="cat" href="/?category={{ name|urlencode }}">{{ name }}</a>
+            <span class="meta">{{ count }}</span>
+            <span class="actions">
+              <input name="new" list="known" required
+                     placeholder="{{ t('Rename') }} / {{ t('Merge into') }}"
+                     aria-label="{{ t('Rename') }} / {{ t('Merge into') }}">
+              <button type="submit">{{ t('Save') }}</button>
+            </span>
+          </form>
+        </li>
+      {% endfor %}
+    </ul>
+    <p class="meta">{{ t('Renaming into a category that already exists merges the two.') }}</p>
+    <datalist id="known">
+      {% for name in categories %}<option value="{{ name }}">{% endfor %}
+    </datalist>
+  {% else %}
+    <p class="empty">{{ t('Nothing saved yet') }}</p>
+  {% endif %}
+{% endblock %}
