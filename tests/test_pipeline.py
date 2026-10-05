@@ -1507,16 +1507,29 @@ def test_a_second_failed_retry_keeps_what_the_first_one_left(cfg, q, monkeypatch
 
 def test_an_imported_link_with_no_comment_still_gets_the_boilerplate(cfg, q,
                                                                      monkeypatch):
-    """The other half: with nothing of the user's to keep, say what happened."""
-    import_links(cfg, [_imported("https://e.com/x")], queue=q)
+    """The other half: with nothing of the user's to keep, say what happened.
+
+    Two links in one batch, because one alone cannot tell the cases apart: the
+    boilerplate and an empty body are what a rebuild-from-scratch writes too.
+    What this pins is that `keep` goes to the note it belongs to -- the bare
+    link gets the boilerplate and the commented one still has its comment.
+    """
+    # The commented one is the newer, so retry() reaches it first: a `keep`
+    # that outlived its note would be handed on to the bare one after it.
+    import_links(cfg, [_imported("https://e.com/with", sent="2019-07-19",
+                                 comment="mirá esto para el gym"),
+                       _imported("https://e.com/bare", sent="2019-07-18")], queue=q)
     extraction(monkeypatch, Unreadable("503"))
     no_pictures(monkeypatch)
 
     retry(cfg, queue=q)
 
-    note = read_note(next(cfg.links_dir.glob("*.md")))
-    assert "retry" in note.summary
-    assert note.body is None
+    notes = {read_note(p).url: read_note(p) for p in cfg.links_dir.glob("*.md")}
+    bare, commented = notes["https://e.com/bare"], notes["https://e.com/with"]
+    assert "retry" in bare.summary
+    assert bare.body is None
+    assert commented.summary == "mirá esto para el gym"
+    assert commented.body == "mirá esto para el gym"
 
 
 # --- analysing in batches ----------------------------------------------------
