@@ -202,7 +202,7 @@ def test_reindex_leaves_no_index_behind_when_the_last_note_is_deleted(cfg, monke
 
 
 def test_retry_shows_why_a_link_failed(cfg, monkeypatch, capsys):
-    monkeypatch.setattr("oknowledge.cli.retry", lambda config: [
+    monkeypatch.setattr("oknowledge.cli.retry", lambda config, limit=None: [
         Result(id="a1", url="https://e.com/a", path=None, status="ok"),
         Result(id="b2", url="https://e.com/b", path=None, status="failed", error="timeout"),
     ])
@@ -213,7 +213,7 @@ def test_retry_shows_why_a_link_failed(cfg, monkeypatch, capsys):
 
 
 def test_retry_json_is_one_array(cfg, monkeypatch, capsys):
-    monkeypatch.setattr("oknowledge.cli.retry", lambda config: [
+    monkeypatch.setattr("oknowledge.cli.retry", lambda config, limit=None: [
         Result(id="a1", url="u", path=None, status="ok"),
         Result(id="b2", url="v", path=None, status="failed", error="x"),
     ])
@@ -716,3 +716,22 @@ def test_an_index_that_could_not_be_rebuilt_is_reported(cfg, tmp_path, capsys,
     assert main(["import", str(export)]) == 0
 
     assert "warning:" in capsys.readouterr().err
+
+
+def test_retry_limit_is_passed_through(cfg, monkeypatch, capsys):
+    seen = {}
+
+    def fake(config, queue=None, limit=None):
+        seen["limit"] = limit
+        return []
+
+    monkeypatch.setattr("oknowledge.cli.retry", fake)
+
+    assert main(["retry", "--limit", "50"]) == 0
+
+    assert seen["limit"] == 50
+
+
+def test_retry_refuses_a_negative_limit(cfg, capsys):
+    assert main(["retry", "--limit", "-1"]) == 2
+    assert "limit" in capsys.readouterr().err

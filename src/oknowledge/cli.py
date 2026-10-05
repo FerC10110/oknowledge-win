@@ -101,6 +101,8 @@ def _parser() -> argparse.ArgumentParser:
     import_cmd.add_argument("--json", action="store_true")
 
     retry_cmd = subs.add_parser("retry", help="finish the links left half done")
+    retry_cmd.add_argument("--limit", type=int, metavar="N",
+                           help="finish at most N links and stop")
     retry_cmd.add_argument("--json", action="store_true")
 
     serve_cmd = subs.add_parser("serve", help="open the library in the browser")
@@ -309,7 +311,10 @@ def _dry_run(scan, reading: str) -> None:
 
 
 def _retry(cfg, args) -> int:
-    results = retry(cfg)
+    if args.limit is not None and args.limit < 0:
+        print("oknowledge: --limit cannot be negative", file=sys.stderr)
+        return 2
+    results = retry(cfg, limit=args.limit)
     if args.json:
         print(json.dumps([_result_dict(r) for r in results], ensure_ascii=False))
     else:

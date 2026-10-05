@@ -1432,3 +1432,120 @@ def test_a_note_whose_engines_all_fail_on_reprocess_keeps_its_date(cfg, q, monke
 
     assert again.status == "partial"
     assert read_note(again.path).saved == "2019-07-18"
+
+
+# --- analysing in batches ----------------------------------------------------
+
+
+def _backdate(cfg, marker, when):
+    """Date the one note whose URL carries `marker`, as an imported one would be.
+
+    write_note() quotes the field, so the replacement quotes it too. The asserts
+    are here because a replacement that matches nothing leaves the note dated
+    today, and the test then passes or fails for the wrong reason.
+    """
+    paths = [p for p in cfg.links_dir.glob("*.md") if marker in read_note(p).url]
+    assert len(paths) == 1, f"expected one note for {marker}, found {len(paths)}"
+    original = paths[0].read_text(encoding="utf-8")
+    assert f"saved: '{TODAY}'" in original, f"no date to replace in {paths[0].name}"
+    paths[0].write_text(original.replace(f"saved: '{TODAY}'", f"saved: '{when}'"),
+                        encoding="utf-8")
+
+
+def _three_partials(cfg, q, monkeypatch, dates):
+    """Three unfinished links, dated as asked. Touches only its own notes."""
+    extraction(monkeypatch, Unreadable("503"))
+    no_pictures(monkeypatch)
+    for n in range(len(dates)):
+        add(cfg, f"https://e{n}.com/x", queue=q)
+    for n, when in enumerate(dates):
+        _backdate(cfg, f"e{n}.com", when)
+
+
+def test_retry_with_a_limit_stops_after_that_many(cfg, q, monkeypatch):
+    _three_partials(cfg, q, monkeypatch, ["2019-01-01", "2021-01-01", "2025-01-01"])
+    extraction(monkeypatch, PAGE)
+    cfg.engines["fake"]["replies"] = [ANSWER, ANSWER, ANSWER]
+
+    results = retry(cfg, queue=q, limit=2)
+
+    assert len(results) == 2
+    assert len(q.unfinished()) == 1
+
+
+def test_retry_with_a_limit_takes_the_newest_first(cfg, q, monkeypatch):
+    """The newest links are the likeliest to still be alive."""
+    _three_partials(cfg, q, monkeypatch, ["2019-01-01", "2021-01-01", "2025-01-01"])
+    extraction(monkeypatch, PAGE)
+    cfg.engines["fake"]["replies"] = [ANSWER, ANSWER, ANSWER]
+
+    results = retry(cfg, queue=q, limit=1)
+
+    assert results[0].url == "https://e2.com/x"
+
+
+def test_a_link_with_no_note_at_all_goes_before_the_dated_ones(cfg, q, monkeypatch):
+    """An entry with no note is the never-lose-a-link rule, still owed."""
+    _three_partials(cfg, q, monkeypatch, ["2019-01-01", "2021-01-01", "2025-01-01"])
+    q.enqueue("abcdef123456", "https://orphan.com/x", "full")
+    extraction(monkeypatch, PAGE)
+    cfg.engines["fake"]["replies"] = [ANSWER] * 4
+
+    results = retry(cfg, queue=q, limit=1)
+
+    assert results[0].url == "https://orphan.com/x"
+
+
+def test_an_entry_already_settled_does_not_use_up_the_quota(cfg, q, monkeypatch):
+    """The quota counts work done, not attempts.
+
+    The settled entry has to be the NEWEST one, so that retry reaches it before
+    the quota is spent. Dated oldest it would sort last, never be visited, and
+    the test would pass just as well against a quota that counts attempts.
+    """
+    extraction(monkeypatch, PAGE)
+    no_pictures(monkeypatch)
+    done = add(cfg, "https://settled.com/x", queue=q)
+    assert done.status == "ok"
+    _backdate(cfg, "settled.com", "2030-01-01")
+    q.set_status(done.id, "partial")          # the queue lies, the note is fine
+    _three_partials(cfg, q, monkeypatch, ["2019-01-01", "2021-01-01", "2025-01-01"])
+    extraction(monkeypatch, PAGE)
+    cfg.engines["fake"]["replies"] = [ANSWER] * 4
+
+    results = retry(cfg, queue=q, limit=1)
+
+    analysed = [r for r in results if r.engine]
+    assert [r.url for r in analysed] == ["https://e2.com/x"]
+
+
+def test_a_link_that_fails_still_uses_up_the_quota(cfg, q, monkeypatch):
+    """Trying and failing is work: a run of 50 dead links has to end.
+
+    _three_partials leaves the extraction broken, so every attempt here gives
+    up the way a dead link does.
+    """
+    _three_partials(cfg, q, monkeypatch, ["2019-01-01", "2021-01-01", "2025-01-01"])
+
+    results = retry(cfg, queue=q, limit=1)
+
+    assert len(results) == 1
+    assert len(q.unfinished()) == 3
+
+
+def test_retry_without_a_limit_behaves_exactly_as_before(cfg, q, monkeypatch):
+    _three_partials(cfg, q, monkeypatch, ["2019-01-01", "2021-01-01", "2025-01-01"])
+    extraction(monkeypatch, PAGE)
+    cfg.engines["fake"]["replies"] = [ANSWER] * 3
+
+    results = retry(cfg, queue=q)
+
+    assert len(results) == 3
+    assert q.unfinished() == []
+
+
+def test_a_limit_of_zero_does_nothing(cfg, q, monkeypatch):
+    _three_partials(cfg, q, monkeypatch, ["2019-01-01", "2021-01-01", "2025-01-01"])
+
+    assert retry(cfg, queue=q, limit=0) == []
+    assert len(q.unfinished()) == 3

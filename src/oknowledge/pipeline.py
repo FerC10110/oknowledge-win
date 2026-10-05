@@ -786,9 +786,15 @@ def import_links(cfg: Config, items: list[Imported],
     return result
 
 
-def retry(cfg: Config, queue: Queue | None = None) -> list[Result]:
-    """Finish every link the queue still owes, and settle the ones only the
-    bookkeeping thinks are owed.
+def retry(cfg: Config, queue: Queue | None = None,
+          limit: int | None = None) -> list[Result]:
+    """Finish every link the queue still owes, newest first, and settle the
+    ones only the bookkeeping thinks are owed.
+
+    `limit` stops the run after that many links finished, not attempted: an
+    entry that turns out to be already settled does not use up the quota,
+    because reconciling bookkeeping is not work. That is what lets an imported
+    batch be analysed 50 a day without a day going to stale entries.
 
     unfinished() is partial and failed only. A process that died between
     enqueue and its final set_status leaves its entry pending, and no retry
@@ -812,20 +818,35 @@ def retry(cfg: Config, queue: Queue | None = None) -> list[Result]:
         except Exception as error:
             results.append(Result(id="queue", url="", path=None, status="failed",
                                   error=f"could not list the queue ({_typed(error)})"))
-    for entry in owed.values():
+    # Newest first. The date is not in the queue -- an imported batch shares one
+    # `updated` -- so it comes from the note's `saved`: one scan per run, not
+    # one per link. An entry with no note goes first: it is a link that has not
+    # reached the vault yet, which is more urgent than any date.
+    try:
+        dates = {note.id: note.saved for note in all_notes(cfg)}
+    except OSError:
+        dates = {}
+    ordered = sorted(owed.values(), key=lambda e: dates.get(e.id, "9999-99-99"),
+                     reverse=True)
+    done = 0
+    for entry in ordered:
+        if limit is not None and done >= limit:
+            break
         try:
             settled = _reconcile(cfg, q, entry)
             if settled is not None:
                 results.append(settled)
-                continue
+                continue                  # bookkeeping, not work: no quota used
             results.append(add(cfg, entry.url, content=entry.content,
                                reprocess=True, queue=q))
+            done += 1
         except Exception as error:
             # One link that cannot be written -- a full disk, or a note file the
             # user replaced with one of their own -- must not take the rest of
             # the run down with it. add() leaves the entry behind either way, so
             # nothing is lost whichever way this goes.
             results.append(_failed(q, entry, error))
+            done += 1                     # trying and failing is work too
     return results
 
 

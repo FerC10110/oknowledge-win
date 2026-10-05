@@ -112,7 +112,7 @@ unfinished, is cleared by `retry` without rewriting the note.
 | `oknowledge add URL [--full\|--summary] [--engine NAME] [--reprocess] [--json]` | process one link end to end |
 | `oknowledge status [--json]` | note count, and every link that is pending, partial or failed |
 | `oknowledge reindex` | rebuild every category index from the notes |
-| `oknowledge retry [--json]` | finish the links left half done (see the note below) |
+| `oknowledge retry [--limit N] [--json]` | finish the links left half done, newest first (see the note below) |
 | `oknowledge icons` | fetch the favicon of every site in the library, once per site |
 | `oknowledge import FILE [--dry-run] [--json]` | import the links out of a WhatsApp export, dated when you sent them |
 | `oknowledge serve [--open]` | start the web UI |
@@ -120,7 +120,8 @@ unfinished, is cleared by `retry` without rewriting the note.
 **`import` reads a WhatsApp chat export** (`Export chat` → `Without media`,
 which gives a `_chat.txt`) and saves every link in it as an unfinished note
 dated the day you sent it. Phone numbers, notes to self and anything else
-without a link are skipped. Nothing is analysed: that is `retry`'s job.
+without a link are skipped. Nothing is analysed: that is `retry`'s job, and
+`retry --limit 50` does it in batches.
 
 Run it with `--dry-run` first. It lists what it would capture in three
 groups — the links written with `https://`, the ones written as a bare
@@ -164,6 +165,12 @@ one thing that does replace a note's content.
 `retry` never touches a note that has no queue entry, and never touches a file
 without the `oknowledge: 1` marker. Exit 1 means some links are still
 unfinished; `--json` prints one object per link with what happened to it.
+
+`--limit N` finishes at most N links and stops, newest first. That is how a
+large import gets analysed: 1215 links are 10 to 20 hours of fetching and
+model time, so `oknowledge retry --limit 50` once a day works through them
+without a run that never ends. The quota counts links it actually worked on,
+so an entry that turned out to be already saved does not use one up.
 
 ### Exit codes
 
@@ -340,8 +347,9 @@ No test touches the network. Layout:
 
 ```
 src/oknowledge/
-  cli.py         add, status, reindex, retry, serve
+  cli.py         add, import, status, reindex, retry, serve
   pipeline.py    one link end to end; queue.py the state files
+  whatsapp.py    an export to dated links; no disk, no network
   extract/       article, youtube, github, pdf, social
   ai/            opencode, ollama, api, fake; prompts/analyze.txt
   vault.py       the only layer that writes Markdown
