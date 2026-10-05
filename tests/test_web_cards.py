@@ -170,3 +170,49 @@ def test_the_library_goes_full_width(client):
 def test_everything_that_is_read_rather_than_scanned_keeps_its_measure(client, path):
     """A line of text 2000 pixels wide is unreadable; a grid of cards is not."""
     assert 'class="wide"' not in client.get(path).text
+
+
+# --- how much summary a card is worth ----------------------------------------
+
+LONG = ("ani-py es una CLI independiente en Python para buscar, elegir, "
+        "reproducir y descargar anime desde la terminal. " * 12)
+
+# Nine characters a word, so a cut at the 280-character limit lands one letter
+# into the 32nd word. A test that only used prose would pass whether the cut
+# respects words or not -- this one cannot.
+CUTTABLE = "abcdefgh " * 40
+
+
+def summary_of(client):
+    card = client.get("/").text.split('class="sum"')[1].split("</p>")[0]
+    return card.split('dir="auto">')[1].strip()
+
+
+def test_a_card_sends_only_the_summary_it_can_show(tmp_path):
+    """Three lines are visible, so a whole 2 kB summary is 2 kB of nothing.
+
+    The clamp is in CSS and stays there -- this is about what crosses the
+    wire, which on a full-width grid is a hundred summaries at once.
+    """
+    _, client = build(tmp_path, note("a1", summary=LONG))
+
+    shown = summary_of(client)
+
+    assert len(shown) < 300
+    assert shown.endswith("…")
+    assert LONG.startswith(shown[:40])
+
+
+def test_a_summary_is_cut_between_words(tmp_path):
+    _, client = build(tmp_path, note("a1", summary=CUTTABLE))
+
+    shown = summary_of(client)
+
+    assert shown.endswith("…")
+    assert set(shown[:-1].split()) == {"abcdefgh"}      # no half word at the end
+
+
+def test_a_short_summary_is_left_exactly_as_it_is(tmp_path):
+    _, client = build(tmp_path, note("a1", summary="Un shell para Hyprland."))
+
+    assert summary_of(client) == "Un shell para Hyprland."

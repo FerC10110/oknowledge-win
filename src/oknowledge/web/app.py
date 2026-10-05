@@ -157,13 +157,24 @@ def letter_icon(name: str) -> Response:
                              "X-Content-Type-Options": "nosniff"})
 
 
-def plain(text: str) -> str:
+# Three lines of a card, with room to spare for a narrow column. The clamp
+# itself is in CSS; this is only about how much text crosses the wire, which
+# on a full-width grid is a hundred summaries at once instead of one.
+CARD_SUMMARY = 280
+
+
+def plain(text: str, limit: int = CARD_SUMMARY) -> str:
     """The first line of a summary without markdown decoration, for a card."""
     line = next((ln for ln in text.splitlines() if ln.strip()), "")
     line = re.sub(r"!?\[([^\]]*)\]\([^)]*\)", r"\1", line)     # links and images
     line = re.sub(r"^\s*(#+|>|[-*+]|\d+\.)\s+", "", line)        # heading, quote, list
     line = re.sub(r"[*_`~]+", "", line)
-    return line.strip()
+    line = line.strip()
+    if len(line) <= limit:
+        return line
+    # On a word, so the ellipsis never lands mid-word. A single token longer
+    # than the limit has no better cut, and rsplit then returns it whole.
+    return line[:limit].rsplit(" ", 1)[0].rstrip(" ,;:.…") + "…"
 
 
 def is_web_url(url: str) -> bool:
