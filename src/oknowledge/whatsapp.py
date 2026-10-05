@@ -16,9 +16,12 @@ from dataclasses import dataclass
 # What WhatsApp puts into an export that you don't see when you open it:
 # directional marks and spaces that are not regular spaces. Without removing
 # them, the regex below matches zero lines from the real file.
+# What WhatsApp puts into an export that you don't see when you open it:
+# directional marks and spaces that are not regular spaces. Without removing
+# them, the regex below matches zero lines from the real file.
 INVISIBLE = str.maketrans({
-    "‎": "", "‏": "", "‪": "", "‫": "", "‬": "",
-    "﻿": "", "\xa0": " ", " ": " ", " ": " ",
+    "\u200e": "", "\u200f": "", "\u202a": "", "\u202b": "", "\u202c": "",
+    "\ufeff": "", "\u00a0": " ", "\u202f": " ", "\u2009": " ",
 })
 
 LINE = re.compile(

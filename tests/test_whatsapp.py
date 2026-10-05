@@ -56,8 +56,8 @@ def test_the_invisible_marks_whatsapp_puts_in_do_not_hide_every_message():
     The sender split breaks if NBSP or NNBSP replace the space after ":".
     """
     found, _, _ = messages(
-        "‎18/7/2019, 11:36 - Fer:\xa0https://e.com/x\n"
-        "18/7/2019, 11:36 - Foo: bar\n")
+        "\u200e18/7/2019, 11:36 - Fer:\xa0https://e.com/x\n"
+        "18/7/2019, 11:36 - Foo:\u202fbar\n")
 
     assert len(found) == 2
     assert found[0].sent == "2019-07-18"
@@ -68,7 +68,7 @@ def test_the_invisible_marks_whatsapp_puts_in_do_not_hide_every_message():
 
 
 def test_windows_line_endings_and_a_bom_are_read():
-    found, _, _ = messages("﻿18/7/2019, 11:36 - Fer: hola\r\n")
+    found, _, _ = messages("\ufeff18/7/2019, 11:36 - Fer: hola\r\n")
 
     assert len(found) == 1
     assert found[0].text == "hola"
