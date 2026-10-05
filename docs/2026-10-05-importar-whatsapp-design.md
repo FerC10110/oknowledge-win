@@ -236,8 +236,17 @@ El `_partial_note()` que ya existe, con tres diferencias:
 | `category` | `Sin clasificar`, igual que cualquier nota parcial |
 
 El comentario va a los dos lugares a propósito: en `summary` para que la
-tarjeta diga algo ahora, y en `body` para que el análisis posterior —que
-reescribe `summary`— no se lo lleve.
+tarjeta diga algo ahora, y en `body` para que esté completo en la nota y no
+recortado por la tarjeta.
+
+**Hasta que se analice, y no más.** `_process()` arma la nota analizada con
+`body=page.text`, así que el análisis reescribe los dos campos y el comentario
+de WhatsApp se pierde: lo reemplazan el resumen del modelo y el texto de la
+página. Eso es lo que "provisorio" quiere decir acá, y es a propósito —
+conservarlo para siempre pediría una clave nueva en el frontmatter, que es
+justo lo que este proyecto evita (la misma razón por la que los favicons se
+guardan por dominio y no en la nota). Si después resulta que vale conservar
+las palabras del usuario, es un cambio chico y aparte.
 
 ## El arreglo de la fecha
 
