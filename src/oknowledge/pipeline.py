@@ -268,12 +268,22 @@ def download_icon(cfg: Config, source: str | None) -> None:
 
 
 def _partial_note(cfg: Config, link: str, url: str, content: str,
-                  page: Extracted | None, saved: str | None = None) -> Note:
+                  page: Extracted | None, keep: Note | None = None) -> Note:
     """The note that can always be written: the URL, plus whatever did arrive.
 
-    `saved` is passed by whoever already knows when this link is from: a
-    reprocess, which reads the date off the note on disk, or an import, which
-    reads it from the chat.
+    `keep` is the partial note already on disk, when there is one. It answers
+    one question -- what did that note already have that this attempt cannot
+    better? -- for every field that has no other source: the date the link was
+    saved, and the summary and body, which an import fills with the chat
+    message the user wrote around the link. Rebuilding those from scratch
+    replaces the user's own words with the boilerplate below, and nothing
+    inside the system can undo it: the note exists, so a re-import counts the
+    link `already` and never writes it again.
+
+    A finished note never reaches here -- _give_up() writes nothing at all in
+    that case -- so `keep` is ours and unfinished or it is None. Over a partial
+    note this is idempotent, which may mean keeping the boilerplate a previous
+    attempt left, and that is the right outcome.
     """
     return Note(
         id=link,
@@ -283,14 +293,16 @@ def _partial_note(cfg: Config, link: str, url: str, content: str,
         tags=[],
         type=(page.type if page else detect_type(url)),
         source=(page.source if page else _host(url)),
-        saved=(saved or _today()),
-        summary=PARTIAL_SUMMARY.get(cfg.language, PARTIAL_SUMMARY["en"]),
+        saved=(keep.saved if keep else _today()),
+        summary=(keep.summary if keep else PARTIAL_SUMMARY.get(cfg.language,
+                                                               PARTIAL_SUMMARY["en"])),
         points=[],
         status="partial",
         content=content,
         author=(page.author if page else None),
         published=(page.published if page else None),
-        body=(page.text if page and content == "full" else None),
+        body=(page.text if page and content == "full"
+              else (keep.body if keep else None)),
     )
 
 
@@ -383,11 +395,16 @@ def _process(cfg: Config, q: Queue, link: str, url: str, mode: str,
     # write ourselves to mean "unfinished", and this vault is edited by hand, so
     # a `status: done` or `status: reviewed` of the user's -- or a deleted status
     # line, which reads back as ok -- has to fall on the protected side.
-    kept = existing[1] if existing and existing[1].status != "partial" else None
+    finished = existing[1] if existing and existing[1].status != "partial" else None
+    # The mirror of that test: our own unfinished note, which a failed attempt
+    # does rewrite -- so everything it already holds and this attempt cannot
+    # better has to be carried over rather than rebuilt. See _partial_note().
+    keep = existing[1] if existing and existing[1].status == "partial" else None
     # A note was saved when it was saved: reanalysing it does not save it
     # again. Without this, a batch imported with its real dates would all pile
     # onto the day of the analysis. Taken from any existing note, partial or
-    # not, so every branch below keeps it.
+    # not, so every branch below keeps it: the analyzed note below reads it
+    # here, and the partial one through `keep`.
     kept_date = existing[1].saved if existing else None
 
     try:
@@ -398,8 +415,8 @@ def _process(cfg: Config, q: Queue, link: str, url: str, mode: str,
         # pypdf, yt-dlp or in our own dispatcher would otherwise cost the user
         # the link. _reason() keeps the type name so a real bug stays legible.
         # BaseException -- Ctrl-C, SystemExit -- passes through untouched.
-        return _give_up(cfg, q, link, url, mode, None, _reason(error), kept, target,
-                        saved=kept_date)
+        return _give_up(cfg, q, link, url, mode, None, _reason(error), finished,
+                        target, keep=keep)
 
     try:
         analysis, used = analyze_with_chain(
@@ -409,8 +426,8 @@ def _process(cfg: Config, q: Queue, link: str, url: str, mode: str,
     except AllEnginesFailed as error:
         # The text is already out of the page: keep it, so a retry only has to
         # ask a model again instead of fetching the page again.
-        return _give_up(cfg, q, link, url, mode, page, str(error), kept, target,
-                        saved=kept_date)
+        return _give_up(cfg, q, link, url, mode, page, str(error), finished,
+                        target, keep=keep)
 
     summary = analysis.summary
     if len(page.text) > DEFAULT_LIMIT:
@@ -440,8 +457,8 @@ def _process(cfg: Config, q: Queue, link: str, url: str, mode: str,
 
 
 def _give_up(cfg: Config, q: Queue, link: str, url: str, mode: str,
-             page: Extracted | None, reason: str, kept: Note | None,
-             target: Path | None, saved: str | None = None) -> Result:
+             page: Extracted | None, reason: str, finished: Note | None,
+             target: Path | None, keep: Note | None = None) -> Result:
     """Record a failure that produced no analysis.
 
     With an analyzed note already on disk there is nothing to write that would
@@ -453,7 +470,7 @@ def _give_up(cfg: Config, q: Queue, link: str, url: str, mode: str,
     Otherwise the partial note is written as usual: partial over partial is
     idempotent, and partial over nothing is the rule that a link is never lost.
     """
-    if kept is not None:
+    if finished is not None:
         # The durable truth is that this link is saved and analyzed and there is
         # no unfinished work left, so the entry is ok and the reason the last
         # attempt failed stays in `error` for anyone who looks. Anything in
@@ -461,10 +478,10 @@ def _give_up(cfg: Config, q: Queue, link: str, url: str, mode: str,
         # the user a row they can never clear. It has to be set explicitly:
         # add() enqueued inside the lock, which reset the entry to pending, and
         # pending would feed it to orphaned() -- worse churn still.
-        trouble = _record(q, link, "ok", reason, kept.title)
+        trouble = _record(q, link, "ok", reason, finished.title)
         return Result(id=link, url=url, path=target, status="failed", error=reason,
                       warnings=[KEPT_NOTE, *trouble])
-    note = _partial_note(cfg, link, url, mode, page, saved=saved)
+    note = _partial_note(cfg, link, url, mode, page, keep=keep)
     return _save(cfg, q, link, url, note, "partial", reason, None, target)
 
 
@@ -760,8 +777,14 @@ def import_links(cfg: Config, items: list[Imported],
                 if entry is not None and entry.updated >= started:
                     result.already += 1
                     continue
-                note = _partial_note(cfg, link, one.url, mode, None, saved=one.sent)
+                note = _partial_note(cfg, link, one.url, mode, None)
+                # A link was saved when it was sent, not when it was imported.
+                note.saved = one.sent
                 if one.comment:
+                    # The message the link came with, as the provisional
+                    # summary and body. An analysis replaces both -- that is
+                    # the trade the spec makes -- and a failed attempt keeps
+                    # them, through _partial_note()'s `keep`.
                     note.summary = one.comment
                     note.body = one.comment
                 # The entry goes in before the note, the order add() uses. A

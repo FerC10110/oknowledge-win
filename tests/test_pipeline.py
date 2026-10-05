@@ -9,10 +9,11 @@ import pytest
 from oknowledge.config import Config
 from oknowledge.extract import Unreadable
 from oknowledge.model import Extracted
-from oknowledge.pipeline import add, retry
+from oknowledge.pipeline import add, import_links, retry
 from oknowledge.queue import Locked, Queue, state_dir
 from oknowledge.urls import link_id, normalize
 from oknowledge.vault import all_notes, index_path, read_note
+from oknowledge.whatsapp import Imported
 
 ANSWER = json.dumps({
     "title": "WireGuard vs OpenVPN",
@@ -1432,6 +1433,90 @@ def test_a_note_whose_engines_all_fail_on_reprocess_keeps_its_date(cfg, q, monke
 
     assert again.status == "partial"
     assert read_note(again.path).saved == "2019-07-18"
+
+
+# --- what an unfinished note already holds -----------------------------------
+
+
+def _imported(url, sent="2019-07-18", comment=""):
+    return Imported(url=url, sent=sent, comment=comment, sender="Fer",
+                    raw=url, bare=False)
+
+
+def test_a_failed_retry_keeps_the_comment_the_chat_message_carried(cfg, q, monkeypatch):
+    """The user's own note to self is not replaced by our boilerplate.
+
+    An import saves the chat message as the note's provisional summary and
+    body. A link whose page cannot be read is the common case for a six-year-old
+    link, and rebuilding the partial note from scratch would overwrite those
+    words with "saved without analysis" -- unrecoverably, since the note exists
+    and a re-import counts the link `already`.
+    """
+    import_links(cfg, [_imported("https://e.com/x", comment="mirá esto para el gym")],
+                 queue=q)
+    extraction(monkeypatch, Unreadable("503"))
+    no_pictures(monkeypatch)
+
+    results = retry(cfg, queue=q)
+
+    assert [r.status for r in results] == ["partial"]
+    note = read_note(next(cfg.links_dir.glob("*.md")))
+    assert note.summary == "mirá esto para el gym"
+    assert note.body == "mirá esto para el gym"
+    assert note.saved == "2019-07-18"
+
+
+def test_a_failed_retry_keeps_the_comment_when_only_the_analysis_is_down(cfg, q,
+                                                                         monkeypatch):
+    """The other failure branch: the page arrived, no engine answered.
+
+    The body becomes the page text, which is the trade the spec allows, and the
+    summary still has nothing better than the user's own words to show.
+    """
+    import_links(cfg, [_imported("https://e.com/x", comment="mirá esto para el gym")],
+                 queue=q)
+    extraction(monkeypatch, PAGE)
+    no_pictures(monkeypatch)
+    cfg.engines["fake"]["replies"] = []
+
+    results = retry(cfg, queue=q)
+
+    assert [r.status for r in results] == ["partial"]
+    note = read_note(next(cfg.links_dir.glob("*.md")))
+    assert note.summary == "mirá esto para el gym"
+    assert note.saved == "2019-07-18"
+
+
+def test_a_second_failed_retry_keeps_what_the_first_one_left(cfg, q, monkeypatch):
+    """Idempotent: partial over partial changes nothing it does not improve."""
+    import_links(cfg, [_imported("https://e.com/x", comment="mirá esto para el gym")],
+                 queue=q)
+    extraction(monkeypatch, Unreadable("503"))
+    no_pictures(monkeypatch)
+    retry(cfg, queue=q)
+
+    extraction(monkeypatch, Unreadable("still 503"))
+    results = retry(cfg, queue=q)
+
+    assert [r.status for r in results] == ["partial"]
+    note = read_note(next(cfg.links_dir.glob("*.md")))
+    assert note.summary == "mirá esto para el gym"
+    assert note.body == "mirá esto para el gym"
+    assert note.saved == "2019-07-18"
+
+
+def test_an_imported_link_with_no_comment_still_gets_the_boilerplate(cfg, q,
+                                                                     monkeypatch):
+    """The other half: with nothing of the user's to keep, say what happened."""
+    import_links(cfg, [_imported("https://e.com/x")], queue=q)
+    extraction(monkeypatch, Unreadable("503"))
+    no_pictures(monkeypatch)
+
+    retry(cfg, queue=q)
+
+    note = read_note(next(cfg.links_dir.glob("*.md")))
+    assert "retry" in note.summary
+    assert note.body is None
 
 
 # --- analysing in batches ----------------------------------------------------
