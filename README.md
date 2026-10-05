@@ -114,7 +114,19 @@ unfinished, is cleared by `retry` without rewriting the note.
 | `oknowledge reindex` | rebuild every category index from the notes |
 | `oknowledge retry [--json]` | finish the links left half done (see the note below) |
 | `oknowledge icons` | fetch the favicon of every site in the library, once per site |
+| `oknowledge import FILE [--dry-run] [--json]` | import the links out of a WhatsApp export, dated when you sent them |
 | `oknowledge serve [--open]` | start the web UI |
+
+**`import` reads a WhatsApp chat export** (`Export chat` → `Without media`,
+which gives a `_chat.txt`) and saves every link in it as an unfinished note
+dated the day you sent it. Phone numbers, notes to self and anything else
+without a link are skipped. Nothing is analysed: that is `retry`'s job.
+
+Run it with `--dry-run` first. It lists what it would capture in three
+groups — the links written with `https://`, the ones written as a bare
+domain, and the messages that looked like they had a link and did not match.
+The second group is where a false positive would be; the third is where a
+missed link would be.
 
 Saving the same link twice gives one note (`already saved`). Pasting a link
 whose note is `partial` finishes it instead.

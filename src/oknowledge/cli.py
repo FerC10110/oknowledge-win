@@ -34,10 +34,11 @@ from pathlib import Path
 
 from .config import CONFIG_PATH, ENGINE_NAMES, ConfigError, PortUnavailable
 from .config import load as load_config
-from .pipeline import Result, add, backfill_icons, retry
+from .pipeline import Result, add, backfill_icons, import_links, retry
 from .queue import Queue
 from .urls import link_id, normalize
 from .vault import ProtectedNote, all_notes, rebuild_indexes
+from .whatsapp import BadExport, parse
 
 NO_CONFIG = """\
 no config file at {path}
@@ -92,6 +93,12 @@ def _parser() -> argparse.ArgumentParser:
     subs.add_parser("reindex", help="rebuild the category indexes")
 
     subs.add_parser("icons", help="fetch the icon of every site in the library")
+
+    import_cmd = subs.add_parser("import", help="import the links out of a WhatsApp export")
+    import_cmd.add_argument("file", type=Path)
+    import_cmd.add_argument("--dry-run", action="store_true",
+                            help="list what it would capture and write nothing")
+    import_cmd.add_argument("--json", action="store_true")
 
     retry_cmd = subs.add_parser("retry", help="finish the links left half done")
     retry_cmd.add_argument("--json", action="store_true")
@@ -203,6 +210,89 @@ def _icons(cfg) -> int:
     return 0
 
 
+def _import(cfg, args) -> int:
+    """Import the links out of a WhatsApp export.
+
+    The numbers come from both sides: `messages`, the suspicious messages and
+    the date order from the parser's Scan; `saved`, `already` and `failed`
+    from the ImportResult of the write.
+    """
+    try:
+        # errors="replace": six years of chat can hold a byte that is not
+        # UTF-8, and losing 1215 links over one is the kind of silent loss this
+        # project does not allow.
+        text = args.file.read_text(encoding="utf-8", errors="replace")
+    except OSError as error:
+        print(f"oknowledge: cannot read {_clean(args.file)}: {error}", file=sys.stderr)
+        return 2
+
+    try:
+        scan = parse(text)
+    except BadExport as error:
+        print(f"oknowledge: {error}", file=sys.stderr)
+        return 2
+
+    order = "day/month" if scan.day_first else "month/day"
+    reading = f"dates read as {order}{' (assumed)' if scan.assumed else ''}"
+    bare = sum(1 for one in scan.links if one.bare)
+
+    if args.dry_run:
+        _dry_run(scan, reading)
+        return 0
+
+    result = import_links(cfg, scan.links)
+    if args.json:
+        print(json.dumps({"found": result.found, "saved": result.saved,
+                          "already": result.already,
+                          "duplicated": result.duplicated,
+                          "failed": [list(row) for row in result.failed],
+                          "warnings": result.warnings,
+                          "messages": scan.messages,
+                          "suspicious": scan.suspicious,
+                          "day_first": scan.day_first, "assumed": scan.assumed},
+                         ensure_ascii=False))
+    else:
+        print(f"{_count(result.found, 'link', 'links')} in "
+              f"{_count(scan.messages, 'message', 'messages')} ({reading})")
+        print(f"{result.saved} saved, {result.already} already there, "
+              f"{result.duplicated} repeated in the chat")
+        if bare:
+            print(f"{_count(bare, 'of them was', 'of them were')} written "
+                  "without a scheme")
+        if scan.suspicious:
+            print(f"{_count(len(scan.suspicious), 'message looks', 'messages look')} "
+                  "like it had a link and did not match (see --dry-run)")
+    for warning in result.warnings:
+        print(f"warning: {_clean(warning)}", file=sys.stderr)
+    for url, why in result.failed:
+        print(f"not saved: {_clean(url)}: {_clean(why)}", file=sys.stderr)
+    return 1 if result.failed and not result.saved else 0
+
+
+def _dry_run(scan, reading: str) -> None:
+    """The three lists that make the parser reviewable.
+
+    The full links are the safe ones; the bare ones are where a false positive
+    can hide; the suspicious messages are where a missed link can hide. The
+    user looks at the last two before anything is written.
+    """
+    print(f"{_count(len(scan.links), 'link', 'links')} in "
+          f"{_count(scan.messages, 'message', 'messages')} ({reading})")
+    full = [one for one in scan.links if not one.bare]
+    bare = [one for one in scan.links if one.bare]
+    for title, group in (("with a scheme", full), ("without a scheme", bare)):
+        if group:
+            print(f"\n{_count(len(group), 'link', 'links')} {title}:")
+            for one in group:
+                print(f"  {one.sent}  {_clean(one.raw)}")
+    if scan.suspicious:
+        print(f"\n{_count(len(scan.suspicious), 'message', 'messages')} "
+              "that looked like a link and did not match:")
+        for text in scan.suspicious:
+            print(f"  {_clean(text)}")
+    print("\nnothing was written")
+
+
 def _retry(cfg, args) -> int:
     results = retry(cfg)
     if args.json:
@@ -243,6 +333,8 @@ def main(argv: list[str] | None = None) -> int:
             return _reindex(cfg)
         if args.command == "icons":
             return _icons(cfg)
+        if args.command == "import":
+            return _import(cfg, args)
         if args.command == "retry":
             return _retry(cfg, args)
         if args.command == "serve":

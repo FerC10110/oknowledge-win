@@ -11,7 +11,7 @@ from oknowledge.extract import Unreadable
 from oknowledge.model import Extracted, Note
 from oknowledge.pipeline import Result
 from oknowledge.queue import Queue, state_dir
-from oknowledge.vault import RebuildResult, write_note
+from oknowledge.vault import RebuildResult, all_notes, write_note
 
 ANSWER = json.dumps({
     "title": "WireGuard",
@@ -531,3 +531,143 @@ def test_icons_says_when_a_site_has_no_favicon(cfg, monkeypatch, capsys):
 def test_icons_over_an_empty_library_is_not_an_error(cfg, capsys):
     assert main(["icons"]) == 0
     assert capsys.readouterr().out == "0 sites, 0 with an icon\n"
+
+
+# --- importing a WhatsApp export ---------------------------------------------
+
+EXPORT = """\
+18/7/2019, 11:36 - Fer: https://scratux.org/#download
+23/7/2019, 11:39 - Fer: sudo chkrootkit
+21/7/2019, 13:50 - Fer: mirá youtu.be/abc
+24/7/2019, 10:00 - Fer: el config.json que te mandé
+"""
+
+
+def test_import_saves_the_links_with_their_dates(cfg, tmp_path, capsys):
+    export = tmp_path / "chat.txt"
+    export.write_text(EXPORT, encoding="utf-8")
+
+    assert main(["import", str(export)]) == 0
+
+    out = capsys.readouterr().out
+    assert "2 links in 4 messages" in out
+    assert "2 saved, 0 already there" in out
+    assert "1 of them was written without a scheme" in out
+    assert "1 message looks like it had a link" in out
+    saved = sorted(n.saved for n in all_notes(cfg))
+    assert saved == ["2019-07-18", "2019-07-21"]
+
+
+def test_import_says_how_the_dates_were_read(cfg, tmp_path, capsys):
+    export = tmp_path / "chat.txt"
+    export.write_text(EXPORT, encoding="utf-8")
+
+    main(["import", str(export)])
+
+    assert "dates read as day/month" in capsys.readouterr().out
+
+
+def test_import_marks_an_assumed_date_order(cfg, tmp_path, capsys):
+    export = tmp_path / "chat.txt"
+    export.write_text("7/8/2019, 11:36 - Fer: https://e.com/x\n", encoding="utf-8")
+
+    main(["import", str(export)])
+
+    assert "(assumed)" in capsys.readouterr().out
+
+
+def test_a_dry_run_writes_nothing_and_lists_the_three_groups(cfg, tmp_path, capsys):
+    export = tmp_path / "chat.txt"
+    export.write_text(EXPORT, encoding="utf-8")
+
+    assert main(["import", str(export), "--dry-run"]) == 0
+
+    out = capsys.readouterr().out
+    assert list(cfg.links_dir.glob("*.md")) == []
+    assert "https://scratux.org/#download" in out
+    assert "youtu.be/abc" in out                 # the original, not the https:// form
+    assert "config.json" in out                  # the suspicious one
+    assert "nothing was written" in out
+
+
+def test_import_json_is_one_object(cfg, tmp_path, capsys):
+    export = tmp_path / "chat.txt"
+    export.write_text(EXPORT, encoding="utf-8")
+
+    main(["import", str(export), "--json"])
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["found"] == 2
+    assert payload["saved"] == 2
+    assert payload["messages"] == 4
+    assert payload["day_first"] is True
+
+
+def test_a_file_that_is_not_there_is_a_config_error(cfg, tmp_path, capsys):
+    assert main(["import", str(tmp_path / "nope.txt")]) == 2
+    assert "nope.txt" in capsys.readouterr().err
+
+
+def test_a_file_that_is_not_an_export_names_the_format(cfg, tmp_path, capsys):
+    export = tmp_path / "chat.txt"
+    export.write_text("esto no es un export\n", encoding="utf-8")
+
+    assert main(["import", str(export)]) == 2
+
+    assert "D/M/YYYY" in capsys.readouterr().err
+
+
+def test_a_file_whose_dates_contradict_each_other_is_refused(cfg, tmp_path, capsys):
+    export = tmp_path / "chat.txt"
+    export.write_text("18/7/2019, 11:36 - Fer: https://e.com/x\n"
+                      "7/18/2019, 11:36 - Fer: https://e.com/y\n", encoding="utf-8")
+
+    assert main(["import", str(export)]) == 2
+
+    error = capsys.readouterr().err
+    assert "18/7/2019" in error and "7/18/2019" in error
+    assert list(cfg.links_dir.glob("*.md")) == []
+
+
+def test_a_byte_that_is_not_utf8_does_not_abort_the_import(cfg, tmp_path, capsys):
+    """Six years of chat can hold one. Losing 1215 links over it is not acceptable."""
+    export = tmp_path / "chat.txt"
+    export.write_bytes(
+        "18/7/2019, 11:36 - Fer: https://e.com/x\n".encode()
+        + b"19/7/2019, 11:36 - Fer: \xff\xfe roto\n"
+        + "20/7/2019, 11:36 - Fer: https://e.com/y\n".encode())
+
+    assert main(["import", str(export)]) == 0
+
+    assert len(all_notes(cfg)) == 2
+
+
+def test_an_import_that_saved_nothing_because_it_failed_exits_one(cfg, tmp_path,
+                                                                  capsys, monkeypatch):
+    export = tmp_path / "chat.txt"
+    export.write_text(EXPORT, encoding="utf-8")
+
+    def boom(config, note, language, path=None):
+        raise OSError("no space left on device")
+
+    monkeypatch.setattr("oknowledge.pipeline.write_note", boom)
+
+    assert main(["import", str(export)]) == 1
+
+    assert "no space left" in capsys.readouterr().err
+
+
+def test_an_index_that_could_not_be_rebuilt_is_reported(cfg, tmp_path, capsys,
+                                                        monkeypatch):
+    """One rebuild covers the whole batch, so its failure hides every note."""
+    export = tmp_path / "chat.txt"
+    export.write_text(EXPORT, encoding="utf-8")
+
+    def boom(config, language):
+        raise OSError("no space left on device")
+
+    monkeypatch.setattr("oknowledge.pipeline.rebuild_indexes", boom)
+
+    assert main(["import", str(export)]) == 0
+
+    assert "warning:" in capsys.readouterr().err
