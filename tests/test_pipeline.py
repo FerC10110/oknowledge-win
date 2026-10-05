@@ -1238,3 +1238,23 @@ def test_a_cover_leaves_no_temporary_file_behind(cfg, q, monkeypatch):
     cover_fetches(monkeypatch)
     add(cfg, "https://arstechnica.com/vpn", queue=q)
     assert [p.name for p in cfg.attachments_dir.iterdir() if p.name.startswith(".")] == []
+
+
+def test_a_cover_replaces_the_old_file_instead_of_writing_into_it(cfg, q, monkeypatch):
+    """A temp file and a rename, like every other write here: a cover the note
+    already points at is never left half overwritten. The inode is how you can
+    tell a replacement from an in-place write."""
+    extraction(monkeypatch, PAGE)
+    cover_fetches(monkeypatch)
+    first = add(cfg, "https://arstechnica.com/vpn", queue=q)
+    cover = cfg.attachments_dir / f"{read_note(first.path).id}.jpg"
+    before = cover.stat().st_ino
+
+    class Bigger(Jpeg):
+        content = b"a different image, longer than the first one"
+
+    monkeypatch.setattr("oknowledge.pipeline.fetch", lambda url, **kw: Bigger())
+    add(cfg, "https://arstechnica.com/vpn", reprocess=True, queue=q)
+
+    assert cover.read_bytes() == Bigger.content
+    assert cover.stat().st_ino != before, "the bytes went into the file in place"
