@@ -51,12 +51,17 @@ body.wide header form { max-width: 34rem; }
    missing cover can change it. */
 .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px;
         overflow: hidden; transition: border-color 0.15s;
-        display: flex; flex-direction: column; height: 22rem; }
+        display: flex; flex-direction: column; height: 21rem; }
 .card:hover { border-color: var(--accent); }
 .card.partial { border-style: dashed; }
 .card .shot { display: block; flex: none; }
-.card img { width: 100%; height: 8.5rem; display: block; object-fit: cover; }
+.card img { width: 100%; height: 7.5rem; display: block; object-fit: cover; }
 .card .pad { display: flex; flex-direction: column; flex: 1; min-height: 0; padding: 1rem; }
+/* Everything but .body refuses to shrink, and .body is the only thing that
+   grows. So the summary is what gives when a cover leaves less room -- two
+   lines instead of three -- and the title, the tags and the site strip can
+   never be the part that falls off the bottom of a fixed-height card. */
+.card h2, .card .tags, .card .site { flex: none; }
 .card h2 { font-size: 1rem; margin: 0 0 0.3rem; line-height: 1.35;
            display: -webkit-box; -webkit-box-orient: vertical;
            -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
@@ -64,15 +69,25 @@ body.wide header form { max-width: 34rem; }
 .card h2 a:hover { color: var(--accent); }
 /* flex: 1 here is what pins the tags and the site strip to the bottom: this
    box takes the slack, so a short summary leaves its gap above them. */
-.card .body { text-decoration: none; color: inherit; display: block;
-              flex: 1; min-height: 0; overflow: hidden; }
+.card .body { text-decoration: none; color: inherit; display: flex;
+              flex-direction: column; flex: 1; min-height: 0; overflow: hidden; }
+.card .meta { flex: none; }
 .meta { color: var(--dim); font-size: 0.8rem; margin: 0 0 0.5rem; }
 .cat { color: var(--accent); }
 .warn { color: var(--dim); border: 1px solid var(--line); border-radius: 999px;
         padding: 0 0.5rem; margin-left: 0.5rem; }
 .sum { margin: 0 0 0.6rem; font-size: 0.9rem; color: var(--fg); }
-.card .sum { display: -webkit-box; -webkit-box-orient: vertical;
-             -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden; }
+/* The whole summary is here and the card never grows, so this box scrolls
+   instead of clamping: the wheel reads the rest. No scrollbar is drawn --
+   the gradient doing the fading is the only hint, and it shows itself only
+   when there is text under it, since on a short summary it falls on blank
+   space. overscroll-behavior keeps the page still while a card is read. */
+.card .sum { flex: 1; min-height: 0; margin: 0; white-space: pre-line;
+             overflow-y: auto; overscroll-behavior: contain;
+             scrollbar-width: none; -ms-overflow-style: none;
+             -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 1.5rem), transparent);
+             mask-image: linear-gradient(to bottom, #000 calc(100% - 1.5rem), transparent); }
+.card .sum::-webkit-scrollbar { width: 0; height: 0; }
 .tags span, .tags a { color: var(--dim); font-size: 0.78rem; margin-right: 0.4rem;
                       text-decoration: none; }
 .card .tags { margin: 0; max-height: 1.6rem; overflow: hidden; }

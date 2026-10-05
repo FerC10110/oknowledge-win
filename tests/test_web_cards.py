@@ -172,15 +172,10 @@ def test_everything_that_is_read_rather_than_scanned_keeps_its_measure(client, p
     assert 'class="wide"' not in client.get(path).text
 
 
-# --- how much summary a card is worth ----------------------------------------
+# --- the whole summary, scrolled inside a card that does not grow -----------
 
 LONG = ("ani-py es una CLI independiente en Python para buscar, elegir, "
         "reproducir y descargar anime desde la terminal. " * 12)
-
-# Nine characters a word, so a cut at the 280-character limit lands one letter
-# into the 32nd word. A test that only used prose would pass whether the cut
-# respects words or not -- this one cannot.
-CUTTABLE = "abcdefgh " * 40
 
 
 def summary_of(client):
@@ -188,31 +183,70 @@ def summary_of(client):
     return card.split('dir="auto">')[1].strip()
 
 
-def test_a_card_sends_only_the_summary_it_can_show(tmp_path):
-    """Three lines are visible, so a whole 2 kB summary is 2 kB of nothing.
+def test_a_card_sends_the_whole_summary(tmp_path):
+    """The card is a fixed size and the text is complete: the box scrolls.
 
-    The clamp is in CSS and stays there -- this is about what crosses the
-    wire, which on a full-width grid is a hundred summaries at once.
+    Nothing is cut server-side, so there is no … and no limit -- what the
+    card cannot show at once is reached with the wheel.
     """
     _, client = build(tmp_path, note("a1", summary=LONG))
 
     shown = summary_of(client)
 
-    assert len(shown) < 300
-    assert shown.endswith("…")
-    assert LONG.startswith(shown[:40])
+    assert shown == LONG.strip()
+    assert "…" not in shown
 
 
-def test_a_summary_is_cut_between_words(tmp_path):
-    _, client = build(tmp_path, note("a1", summary=CUTTABLE))
+def test_a_summary_of_several_paragraphs_arrives_whole(tmp_path):
+    """Only the first line used to be shown, which was the clamp's doing."""
+    _, client = build(tmp_path, note(
+        "a1", summary="Primer parrafo.\n\nSegundo parrafo.\n\nTercero."))
 
     shown = summary_of(client)
 
-    assert shown.endswith("…")
-    assert set(shown[:-1].split()) == {"abcdefgh"}      # no half word at the end
+    assert "Primer parrafo." in shown
+    assert "Segundo parrafo." in shown
+    assert "Tercero." in shown
 
 
 def test_a_short_summary_is_left_exactly_as_it_is(tmp_path):
     _, client = build(tmp_path, note("a1", summary="Un shell para Hyprland."))
 
     assert summary_of(client) == "Un shell para Hyprland."
+
+
+# --- and the scrolling itself, which lives in the stylesheet ----------------
+
+
+def card_css() -> str:
+    from pathlib import Path
+
+    import oknowledge.web
+
+    css = (Path(oknowledge.web.__file__).parent / "static" / "style.css").read_text()
+    start = css.index(".card .sum {")
+    return css[start:css.index("}", start)]
+
+
+def test_the_summary_box_scrolls_rather_than_clamping():
+    block = card_css()
+
+    assert "overflow-y: auto" in block
+    assert "line-clamp" not in block
+
+
+def test_the_scrollbar_is_not_drawn():
+    """Minimal on purpose: the wheel works, the bar is not there."""
+    css = card_css()
+    from pathlib import Path
+
+    import oknowledge.web
+
+    whole = (Path(oknowledge.web.__file__).parent / "static" / "style.css").read_text()
+
+    assert "scrollbar-width: none" in css
+    assert ".card .sum::-webkit-scrollbar" in whole
+
+
+def test_scrolling_a_card_does_not_scroll_the_page_behind_it():
+    assert "overscroll-behavior: contain" in card_css()
