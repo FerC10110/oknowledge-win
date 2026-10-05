@@ -15,7 +15,9 @@ import pytest
 
 from oknowledge.config import Config
 from oknowledge.net import Fetched
-from oknowledge.pipeline import download_icon
+from oknowledge.model import Note
+from oknowledge.pipeline import backfill_icons, download_icon
+from oknowledge.vault import write_note
 
 PNG = b"\x89PNG\r\n\x1a\n" + b"x" * 40
 
@@ -166,3 +168,74 @@ def test_no_half_written_icon_is_left_behind(cfg, monkeypatch):
 
     icons = cfg.attachments_dir / "icons"
     assert list(icons.iterdir()) == []
+
+
+# --- The backfill, for the notes that were saved before icons existed --------
+
+
+def note(id, source):
+    return Note(id=id, url=f"https://{source}/x", title=f"From {source}",
+                category="Redes", tags=["x"], type="article", source=source,
+                saved="2026-10-03", summary="Resumen.", points=[])
+
+
+def test_the_backfill_fetches_one_icon_per_site(cfg, monkeypatch):
+    """Per site, not per note: two GitHub notes are one favicon."""
+    for n in (note("a1", "github.com"), note("a2", "github.com"),
+              note("a3", "wikipedia.org")):
+        write_note(cfg, n, "es")
+    fetch = served()
+    monkeypatch.setattr("oknowledge.pipeline.fetch", fetch)
+
+    sites, with_icon = backfill_icons(cfg)
+
+    assert sorted(fetch.asked) == ["https://github.com/favicon.ico",
+                                   "https://wikipedia.org/favicon.ico"]
+    assert (sites, with_icon) == (2, 2)
+
+
+def test_the_backfill_touches_no_note(cfg, monkeypatch):
+    """The whole reason icons are keyed by domain: no note is ours to rewrite.
+
+    Checked by mtime rather than by content, because a write that produces the
+    same bytes is still a write -- and this vault is the user's.
+    """
+    for n in (note("a1", "github.com"), note("a2", "wikipedia.org")):
+        write_note(cfg, n, "es")
+    before = {p: p.stat().st_mtime_ns for p in cfg.links_dir.rglob("*.md")}
+    assert before
+    monkeypatch.setattr("oknowledge.pipeline.fetch", served())
+
+    backfill_icons(cfg)
+
+    assert {p: p.stat().st_mtime_ns for p in cfg.links_dir.rglob("*.md")} == before
+
+
+def test_the_backfill_leaves_a_site_that_already_has_its_icon(cfg, monkeypatch):
+    write_note(cfg, note("a1", "github.com"), "es")
+    icons = cfg.attachments_dir / "icons"
+    icons.mkdir(parents=True)
+    (icons / "github.com.png").write_bytes(b"already here")
+    fetch = served()
+    monkeypatch.setattr("oknowledge.pipeline.fetch", fetch)
+
+    sites, with_icon = backfill_icons(cfg)
+
+    assert fetch.asked == []
+    assert (icons / "github.com.png").read_bytes() == b"already here"
+    assert (sites, with_icon) == (1, 1)
+
+
+def test_the_backfill_counts_a_site_whose_icon_it_could_not_get(cfg, monkeypatch):
+    """The gap between the two numbers is how the user learns some site has none."""
+    write_note(cfg, note("a1", "github.com"), "es")
+    monkeypatch.setattr("oknowledge.pipeline.fetch",
+                        served(b"<html>no favicon here</html>", "text/html"))
+
+    assert backfill_icons(cfg) == (1, 0)
+
+
+def test_the_backfill_over_an_empty_vault_says_so(cfg, monkeypatch):
+    monkeypatch.setattr("oknowledge.pipeline.fetch", served())
+
+    assert backfill_icons(cfg) == (0, 0)

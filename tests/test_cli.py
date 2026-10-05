@@ -8,10 +8,10 @@ import pytest
 from oknowledge.cli import main
 from oknowledge.config import Config
 from oknowledge.extract import Unreadable
-from oknowledge.model import Extracted
+from oknowledge.model import Extracted, Note
 from oknowledge.pipeline import Result
 from oknowledge.queue import Queue, state_dir
-from oknowledge.vault import RebuildResult
+from oknowledge.vault import RebuildResult, write_note
 
 ANSWER = json.dumps({
     "title": "WireGuard",
@@ -485,3 +485,49 @@ def test_a_folder_that_leaves_the_vault_is_refused(tmp_path, capsys, folder):
     assert main(["--config", str(path), "status"]) == 2
     assert "folder must be" in capsys.readouterr().err
     assert not (tmp_path / "escape").exists()
+
+
+# --- The icon backfill, for the notes saved before icons existed -------------
+
+
+def saved_note(cfg, source):
+    """A note in the vault, written straight in: `add` is not what is under
+    test here, and running it would mean stubbing half the pipeline."""
+    write_note(cfg, Note(id="a1", url=f"https://{source}/x", title="Guardado",
+                         category="Redes", tags=["vpn"], type="article",
+                         source=source, saved="2026-10-03", summary="Resumen.",
+                         points=[]), "es")
+
+
+def icon_reply(monkeypatch, content, content_type):
+    class Fetched:
+        pass
+    Fetched.content = content
+    Fetched.content_type = content_type
+    monkeypatch.setattr("oknowledge.pipeline.fetch", lambda url, **kw: Fetched())
+
+
+def test_icons_backfills_the_sites_already_in_the_library(cfg, monkeypatch, capsys):
+    """The command the user runs once, for the notes saved before icons existed."""
+    saved_note(cfg, "arstechnica.com")
+    icon_reply(monkeypatch, b"\x89PNG icon bytes", "image/png")
+
+    assert main(["icons"]) == 0
+
+    assert capsys.readouterr().out == "1 site, 1 with an icon\n"
+    assert (cfg.attachments_dir / "icons" / "arstechnica.com.png").is_file()
+
+
+def test_icons_says_when_a_site_has_no_favicon(cfg, monkeypatch, capsys):
+    """A site with none answers /favicon.ico with its 404 page, which is HTML."""
+    saved_note(cfg, "arstechnica.com")
+    icon_reply(monkeypatch, b"<html>404</html>", "text/html")
+
+    assert main(["icons"]) == 0
+
+    assert capsys.readouterr().out == "1 site, 0 with an icon\n"
+
+
+def test_icons_over_an_empty_library_is_not_an_error(cfg, capsys):
+    assert main(["icons"]) == 0
+    assert capsys.readouterr().out == "0 sites, 0 with an icon\n"

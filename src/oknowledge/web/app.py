@@ -31,7 +31,7 @@ from ..config import CONFIG_PATH, CONTENT_MODES, ENGINE_NAMES, Config
 from ..config import save as save_config
 from ..i18n import LANGUAGES, set_ui_language, translator, ui_language
 from ..pipeline import add as add_link
-from ..pipeline import is_domain
+from ..pipeline import icon_path, is_domain
 from ..queue import Locked, Queue
 from ..vault import (
     BadCategory, IndexesStale, ProtectedNote, clean_category, delete_note,
@@ -382,7 +382,7 @@ def create_app(cfg: Config) -> FastAPI:
         name = domain.strip().lower()
         if is_domain(name):
             try:
-                found = next((cfg.attachments_dir / "icons").glob(f"{name}.*"), None)
+                found = icon_path(cfg, name)
                 if found is not None:
                     path = found.resolve()
                     inside = cfg.attachments_dir.resolve() in path.parents

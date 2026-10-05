@@ -32,6 +32,7 @@ from .queue import Locked, Queue
 from .urls import link_id, normalize
 from .vault import (
     ProtectedNote,
+    all_notes,
     categories,
     ensure_inside_root,
     find_note,
@@ -186,6 +187,38 @@ def is_domain(name: str) -> bool:
             and ".." not in name and "-." not in name and ".-" not in name)
 
 
+def icon_path(cfg: Config, domain: str) -> Path | None:
+    """The icon file saved for this domain, or None.
+
+    Any suffix counts as "we have this one": fetching once per site is the
+    point, and the route that serves these applies its own rules about which
+    types it is willing to send.
+    """
+    try:
+        return next((cfg.attachments_dir / "icons").glob(f"{domain}.*"), None)
+    except OSError:
+        return None
+
+
+def backfill_icons(cfg: Config) -> tuple[int, int]:
+    """Fetch the icon of every site in the vault, and say how it went.
+
+    Returns how many distinct sites the library holds and how many of them
+    have an icon now. The gap between the two numbers is the answer to "why
+    does that card still show a letter": some sites simply have no favicon.
+
+    No note is read for anything but its `source`, and none is written. That
+    is the whole reason icons are keyed by domain instead of living in
+    frontmatter -- see download_icon().
+    """
+    sites = sorted({note.source.strip().lower()
+                    for note in all_notes(cfg) if note.source})
+    for domain in sites:
+        download_icon(cfg, domain)
+    have = sum(1 for domain in sites if icon_path(cfg, domain) is not None)
+    return len(sites), have
+
+
 def download_icon(cfg: Config, source: str | None) -> None:
     """Save a site's favicon once per domain, or do nothing at all.
 
@@ -204,13 +237,9 @@ def download_icon(cfg: Config, source: str | None) -> None:
     domain = source.strip().lower()     # domains are case-insensitive; one site,
     if not is_domain(domain):          # one file, and never a silent nothing
         return
-    icons = cfg.attachments_dir / "icons"
-    try:
-        # Any suffix counts as "we have this one": fetching once is the point.
-        if next(icons.glob(f"{domain}.*"), None) is not None:
-            return
-    except OSError:
+    if icon_path(cfg, domain) is not None:
         return
+    icons = cfg.attachments_dir / "icons"
     try:
         got = fetch(f"https://{domain}/favicon.ico",
                     timeout=ICON_TIMEOUT, max_bytes=ICON_MAX_BYTES)

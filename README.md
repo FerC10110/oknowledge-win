@@ -113,6 +113,7 @@ unfinished, is cleared by `retry` without rewriting the note.
 | `oknowledge status [--json]` | note count, and every link that is pending, partial or failed |
 | `oknowledge reindex` | rebuild every category index from the notes |
 | `oknowledge retry [--json]` | finish the links left half done (see the note below) |
+| `oknowledge icons` | fetch the favicon of every site in the library, once per site |
 | `oknowledge serve [--open]` | start the web UI |
 
 Saving the same link twice gives one note (`already saved`). Pasting a link

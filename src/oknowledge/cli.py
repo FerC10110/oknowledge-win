@@ -34,7 +34,7 @@ from pathlib import Path
 
 from .config import CONFIG_PATH, ENGINE_NAMES, ConfigError, PortUnavailable
 from .config import load as load_config
-from .pipeline import Result, add, retry
+from .pipeline import Result, add, backfill_icons, retry
 from .queue import Queue
 from .urls import link_id, normalize
 from .vault import ProtectedNote, all_notes, rebuild_indexes
@@ -90,6 +90,8 @@ def _parser() -> argparse.ArgumentParser:
     status.add_argument("--json", action="store_true")
 
     subs.add_parser("reindex", help="rebuild the category indexes")
+
+    subs.add_parser("icons", help="fetch the icon of every site in the library")
 
     retry_cmd = subs.add_parser("retry", help="finish the links left half done")
     retry_cmd.add_argument("--json", action="store_true")
@@ -188,6 +190,19 @@ def _reindex(cfg) -> int:
     return 0
 
 
+def _icons(cfg) -> int:
+    """Fetch what the cards need, for a library saved before they existed.
+
+    Both numbers are printed because the gap between them is the answer the
+    user is looking at: a card still showing a letter means that site has no
+    favicon, not that the command failed. Writes no note, so there is nothing
+    here that can go wrong badly enough to be worth a non-zero exit.
+    """
+    sites, with_icon = backfill_icons(cfg)
+    print(f"{_count(sites, 'site', 'sites')}, {with_icon} with an icon")
+    return 0
+
+
 def _retry(cfg, args) -> int:
     results = retry(cfg)
     if args.json:
@@ -226,6 +241,8 @@ def main(argv: list[str] | None = None) -> int:
             return _status(cfg, args)
         if args.command == "reindex":
             return _reindex(cfg)
+        if args.command == "icons":
+            return _icons(cfg)
         if args.command == "retry":
             return _retry(cfg, args)
         if args.command == "serve":
