@@ -10,6 +10,7 @@ preference file other plugins write to.
 import json
 import os
 import tomllib
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -1088,3 +1089,12 @@ def test_reprocess_sees_a_note_that_appeared_since_the_last_refresh(setup, monke
 
     assert client.post("/item/c3/reprocess", follow_redirects=False).status_code == 303
     assert calls == ["https://e.com/c3"]
+
+
+def test_no_test_in_this_file_can_reach_the_real_config(tmp_path):
+    """Asked of a test that uses no fixture of ours, like its state-tree twin:
+    the pin is module-wide, and it is conftest's, not this file's."""
+    from oknowledge.web import app as webapp
+
+    assert webapp.CONFIG_PATH.is_relative_to(tmp_path)
+    assert webapp.CONFIG_PATH != Path.home() / ".config" / "oknowledge" / "config.toml"

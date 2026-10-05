@@ -1,4 +1,5 @@
 import dataclasses
+from pathlib import Path
 
 import pytest
 
@@ -172,3 +173,40 @@ def test_save_without_a_path_writes_the_file_it_was_loaded_from(tmp_path):
 
     assert save(dataclasses.replace(load(path), language="en")) == path
     assert load(path).language == "en"
+
+
+# --- the real config file is not reachable from here (item 0) ---------------
+# A test wrote the user's own ~/.config/oknowledge/config.toml during a
+# mutation run: save() defaults to `cfg.source or CONFIG_PATH`, this file does
+# not build its Configs through load() in every test, and nothing pinned
+# CONFIG_PATH. The pin now lives in conftest.py for the whole suite; these
+# assert it, because a pin nobody asserts comes loose.
+
+def test_no_test_can_reach_the_real_config_file(tmp_path):
+    from oknowledge import cli, config
+    from oknowledge.web import app
+
+    real = Path.home() / ".config" / "oknowledge" / "config.toml"
+    for module in (config, cli, app):
+        assert module.CONFIG_PATH != real, f"{module.__name__} can write the real config"
+        assert module.CONFIG_PATH.is_relative_to(tmp_path), module.__name__
+
+
+def test_saving_a_config_nobody_loaded_cannot_reach_the_real_file(tmp_path):
+    """The exact shape that leaked: no source, no path, so the default decides.
+    Whatever the default is, it has to be somewhere this test owns."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+
+    written = save(Config(vault=vault))
+
+    assert written.is_relative_to(tmp_path)
+    assert load(written).vault == vault
+
+
+def test_the_isolated_config_path_does_not_exist_until_something_writes_it():
+    """So a load() that falls through to the default fails the ordinary way
+    instead of quietly reading somebody else's config."""
+    from oknowledge import config
+
+    assert not config.CONFIG_PATH.exists()

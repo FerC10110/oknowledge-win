@@ -51,3 +51,27 @@ def isolated_ui_language(tmp_path, monkeypatch):
     path = tmp_path / "omarchy-plugin-language.json"
     monkeypatch.setattr(i18n, "SHARED_FILE", path)
     return path
+
+
+@pytest.fixture(autouse=True)
+def isolated_config_path(tmp_path, monkeypatch):
+    """No test may write the real ~/.config/oknowledge/config.toml.
+
+    Every module that binds the name gets its own copy, so all three are
+    redirected. This is the second pin of its kind for the same reason as the
+    first (the state tree): a test whose writes land in tmp_path only while
+    the code under test is correct is not pinned at all. `config.save()`
+    defaults to `cfg.source or CONFIG_PATH`, so a test that saves a Config it
+    built itself -- or any test at all while that default is broken, as a
+    mutant demonstrated by overwriting the real file -- aims at the user's own
+    config. The path handed out here does not exist, so a `load()` that reaches
+    it fails with the ordinary "no config file at ..." instead of reading the
+    user's.
+    """
+    from oknowledge import cli, config
+    from oknowledge.web import app
+
+    path = tmp_path / "isolated-config" / "config.toml"
+    for module in (config, cli, app):
+        monkeypatch.setattr(module, "CONFIG_PATH", path)
+    return path
