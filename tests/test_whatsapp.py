@@ -292,3 +292,13 @@ def test_percent_encoding_inside_a_real_url_survives_whole(url):
     """The same export carries both of these, and in both the percent signs are
     part of what the user sent. The other half of the rule above."""
     assert find_links(url) == [(url, False)]
+
+
+@pytest.mark.parametrize("text,expected", [
+    ("radio.garden", [("https://radio.garden", True)]),
+    ("real.fun", [("https://real.fun", True)]),
+])
+def test_a_tld_the_curated_list_was_missing(text, expected):
+    """Lines 3267-3268 of the real file, two consecutive messages the user
+    typed by hand. Both are real sites, and both were lost."""
+    assert find_links(text) == expected

@@ -113,7 +113,7 @@ TLDS = frozenset("""
 com org net io dev app me tv co info biz xyz online site tech blog news edu
 gov mil ar es mx cl uy pe br us uk de fr it nl pt ru jp cn in au ca ch se no
 fi dk pl cz gr tr il za kr be at ie nz eu gg to ly am st fm cc tk link page
-cloud space live work wiki art design studio club shop store
+cloud space live work wiki art design studio club shop store garden fun
 """.split())
 
 # Real TLDs that are also file extensions this user types. With no path the
