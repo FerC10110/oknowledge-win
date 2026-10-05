@@ -1640,6 +1640,23 @@ def test_a_never_worked_link_goes_before_one_worked_on_earlier_today(cfg, q,
     assert second[0].url == "https://old.com/x"
 
 
+def test_an_entry_with_no_note_goes_before_links_worked_on_today(cfg, q, monkeypatch):
+    """The never-lose-a-link case outranks the day rotation."""
+    import_links(cfg, [_imported("https://old.com/x", sent="2019-01-01"),
+                       _imported("https://new.com/x", sent="2025-01-01")], queue=q)
+    extraction(monkeypatch, Unreadable("503"))
+    no_pictures(monkeypatch)
+    retry(cfg, queue=q, limit=2)              # both have now been worked on
+    for entry in q.entries():                 # ... earlier than the orphan below
+        entry.updated = "2026-01-01T00:00:00.000+00:00"
+        q._write(entry)
+    q.enqueue("abcdef123456", "https://orphan.com/x", "full")
+
+    results = retry(cfg, queue=q, limit=1)
+
+    assert results[0].url == "https://orphan.com/x"
+
+
 def test_a_link_that_fails_still_uses_up_the_quota(cfg, q, monkeypatch):
     """Trying and failing is work: a run of 50 dead links has to end.
 

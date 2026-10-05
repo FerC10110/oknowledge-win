@@ -892,15 +892,17 @@ def retry(cfg: Config, queue: Queue | None = None,
         except Exception as error:
             results.append(Result(id="queue", url="", path=None, status="failed",
                                   error=f"could not list the queue ({_typed(error)})"))
-    # Newest first, within the day each link was last worked on. The date is
-    # not in the queue -- `updated` is when the entry was written, so an import
-    # runs oldest message first -- and it comes from the note's `saved`: one
-    # scan per run, not one per link. An entry with no note goes first: it is a
-    # link that has not reached the vault yet, which is more urgent than any
-    # date. Over that, the links never worked on go before the ones already
-    # tried, and the tried ones go by the day they were tried, oldest day
-    # first: a dead link keeps its old date and would otherwise sit at the top
-    # and use up every run's quota, forever.
+    # Newest first, within groups. The date is not in the queue -- `updated` is
+    # when the entry was written, so an import runs oldest message first -- and
+    # it comes from the note's `saved`: one scan per run, not one per link. An
+    # entry with no note goes first: it is a link that has not reached the
+    # vault yet, which is more urgent than any date. After it come the links
+    # never worked on, then the ones already tried, by the day they were tried,
+    # oldest day first: a dead link keeps its old date and would otherwise sit
+    # at the top and use up every run's quota, forever. The note's date decides
+    # inside each group. A no-note entry cannot stall the run that way: add()
+    # writes a partial note even when the fetch fails, so after one attempt it
+    # has a note and joins the day rotation.
     try:
         dates = {note.id: note.saved for note in all_notes(cfg)}
     except OSError:
@@ -909,7 +911,7 @@ def retry(cfg: Config, queue: Queue | None = None,
         dates = {}
     ordered = sorted(owed.values(), key=lambda e: dates.get(e.id, "9999-99-99"),
                      reverse=True)
-    ordered.sort(key=_last_worked)        # stable: the date still decides inside
+    ordered.sort(key=lambda e: _last_worked(e, dates))   # stable: date decides inside
     done = 0
     for entry in ordered:
         if limit is not None and done >= limit:
@@ -932,13 +934,13 @@ def retry(cfg: Config, queue: Queue | None = None,
     return results
 
 
-def _last_worked(entry: QueueEntry) -> str:
+def _last_worked(entry: QueueEntry, dates: dict[str, str]) -> str:
     """The calendar day a link was last worked on, or "" if it never was.
 
-    A link still carrying the import's own marker was saved and never analysed,
-    and sorts before every date.
+    A link with no note, or one still carrying the import's own marker, has
+    not been worked on, and sorts before every date.
     """
-    if entry.error == IMPORTED:
+    if entry.id not in dates or entry.error == IMPORTED:
         return ""
     return entry.updated[:10]
 
