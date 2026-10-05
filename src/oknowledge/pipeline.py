@@ -684,6 +684,11 @@ class ImportResult:
     already: int = 0                            # already in the vault, or taken
     duplicated: int = 0                         # repeats within the batch
     failed: list[tuple[str, str]] = field(default_factory=list)   # (url, why)
+    # What went wrong around the notes without costing one: the single index
+    # rebuild this batch gets. Reported, not swallowed -- one failure here
+    # leaves every note of the batch out of every index, and an index nobody
+    # mentions stays stale forever.
+    warnings: list[str] = field(default_factory=list)
 
 
 def import_links(cfg: Config, items: list[Imported],
@@ -769,7 +774,7 @@ def import_links(cfg: Config, items: list[Imported],
             result.failed.append((one.url, _typed(error)))
 
     if result.saved:
-        _reindex(cfg)        # once, for the batch
+        result.warnings = _reindex(cfg)        # once, for the batch
     return result
 
 

@@ -197,3 +197,16 @@ def test_a_url_that_normalizes_to_the_same_link_is_one_note(cfg, q):
     ], queue=q)
 
     assert result.saved == 1
+
+
+def test_an_index_that_could_not_be_rebuilt_is_reported(cfg, q, monkeypatch):
+    """One rebuild covers the whole batch, so its failure hides every note in it."""
+    def boom(config, language):
+        raise OSError("no space left on device")
+
+    monkeypatch.setattr("oknowledge.pipeline.rebuild_indexes", boom)
+
+    result = import_links(cfg, [item("https://a.com/x")], queue=q)
+
+    assert result.saved == 1
+    assert any("could not be rebuilt" in warning for warning in result.warnings)
