@@ -329,7 +329,10 @@ def test_what_follows_a_host_is_only_a_port_when_it_is_digits(text, expected):
 
 @pytest.mark.parametrize("text", ["https://.", "https://", "mirá https://. y chau"])
 def test_a_scheme_with_no_host_left_is_not_a_link(text):
-    """`https://.` trims its dot and leaves `https://`, which is truthy, so it
+    """The bare `"https://"` case guards the regex, not the trim: the FULL
+    pattern already needs a character after `://`, and it must stay that way.
+
+    `https://.` trims its dot and leaves `https://`, which is truthy, so it
     was captured and normalize() turned it into `https:///`: a junk note."""
     assert find_links(text) == []
 
