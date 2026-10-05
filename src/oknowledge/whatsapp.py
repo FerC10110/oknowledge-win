@@ -27,6 +27,11 @@ LINE = re.compile(
 
 WANTED = "D/M/YYYY, HH:MM - Sender: message"
 
+# WhatsApp's own profile names stop at 25 characters, and a number with no
+# saved contact arrives as "+54 9 11 5555-5555". Past that, with a space in
+# it, what sits before the colon is text and not a name.
+SENDER_MAX = 25
+
 
 class BadExport(Exception):
     """The file is not a readable WhatsApp export."""
@@ -37,6 +42,20 @@ class Message:
     sent: str        # YYYY-MM-DD
     sender: str      # "" for a system message
     text: str
+
+
+def _is_sender(name: str) -> bool:
+    """Could what sits before the first ": " be the name the export put there?
+
+    It matters because that part is dropped from the message. On a line whose
+    own text holds the first ": " -- `Fer cambió el asunto a "Links: <url>"`
+    -- the drop takes the user's words with it, and a link inside the dropped
+    part vanishes with no trace: it is not scanned for links, and it is not
+    offered as suspicious either, which the never-lose-a-link rule does not
+    allow. A name cannot be long and have a space in it, so that shape is read
+    as a line with no sender at all and the whole text is kept as the message.
+    """
+    return len(name) <= SENDER_MAX or not any(ch.isspace() for ch in name)
 
 
 def _clean(text: str) -> list[str]:
@@ -99,8 +118,8 @@ def messages(text: str) -> tuple[list[Message], bool, bool]:
             sent = dt.date(year, month, day).isoformat()
         except ValueError:
             continue                      # 31/2: a bad line, not a bad file
-        sender, _, rest = body.partition(": ")
-        if not rest and ": " not in body:
+        sender, mark, rest = body.partition(": ")
+        if not mark or not _is_sender(sender):
             sender, rest = "", body       # a system message has no sender
         out.append(Message(sent=sent, sender=sender, text=rest))
     return out, day_first, assumed

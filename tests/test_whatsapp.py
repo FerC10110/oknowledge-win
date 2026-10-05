@@ -332,3 +332,38 @@ def test_a_scheme_with_no_host_left_is_not_a_link(text):
     """`https://.` trims its dot and leaves `https://`, which is truthy, so it
     was captured and normalize() turned it into `https:///`: a junk note."""
     assert find_links(text) == []
+
+
+def test_a_system_line_whose_own_text_holds_the_first_colon_keeps_that_text():
+    """Everything before the first ": " becomes the sender and is dropped from
+    the message, so this line yielded a sender of `Fer cambió el asunto a
+    "Links` and a comment of `"`. Spec-conformant, and it throws the user's
+    words away."""
+    scan = parse('18/7/2019, 11:36 - Fer cambió el asunto a "Links: '
+                 'https://e.com/x"\n')
+
+    assert [one.url for one in scan.links] == ["https://e.com/x"]
+    assert scan.links[0].sender == ""
+    assert "cambió el asunto" in scan.links[0].comment
+
+
+def test_a_link_inside_a_dropped_sender_prefix_is_not_lost():
+    """The same bug where it costs a link: the dropped part is not scanned for
+    links and not offered as suspicious either, so this one vanished with no
+    trace -- which the never-lose-a-link rule does not allow."""
+    scan = parse('18/7/2019, 11:36 - Fer cambió el asunto a '
+                 '"https://e.com/x, mirá: esto"\n')
+
+    assert [one.url for one in scan.links] == ["https://e.com/x"]
+
+
+@pytest.mark.parametrize("line,sender", [
+    ("18/7/2019, 11:36 - Juan Pérez: mirá https://e.com/x", "Juan Pérez"),
+    ("18/7/2019, 11:36 - +54 9 11 5555-5555: https://e.com/x", "+54 9 11 5555-5555"),
+    ("18/7/2019, 11:36 - Fer: https://e.com/x", "Fer"),
+])
+def test_a_real_sender_is_still_read_as_the_sender(line, sender):
+    """The other half: a saved contact, an unsaved number, a one-word name."""
+    scan = parse(line + "\n")
+
+    assert scan.links[0].sender == sender
