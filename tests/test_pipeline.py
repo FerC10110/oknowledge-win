@@ -1412,3 +1412,23 @@ def test_a_brand_new_note_is_dated_today(cfg, q, monkeypatch):
     result = add(cfg, "https://arstechnica.com/vpn", queue=q)
 
     assert read_note(result.path).saved == TODAY
+
+
+def test_a_note_whose_engines_all_fail_on_reprocess_keeps_its_date(cfg, q, monkeypatch):
+    """The AllEnginesFailed branch rewrites a partial note too, and a link whose
+    engines are down is exactly the kind that gets reprocessed later."""
+    extraction(monkeypatch, Unreadable("503"))
+    no_pictures(monkeypatch)
+    add(cfg, "https://arstechnica.com/vpn", queue=q)
+    path = next(cfg.links_dir.glob("*.md"))
+    text = path.read_text(encoding="utf-8")
+    assert f"saved: '{TODAY}'" in text
+    path.write_text(text.replace(f"saved: '{TODAY}'", "saved: '2019-07-18'"),
+                    encoding="utf-8")
+
+    extraction(monkeypatch, PAGE)                      # the page is fine now...
+    cfg.engines["fake"]["replies"] = []                # ...but every engine is down
+    again = add(cfg, "https://arstechnica.com/vpn", reprocess=True, queue=q)
+
+    assert again.status == "partial"
+    assert read_note(again.path).saved == "2019-07-18"
