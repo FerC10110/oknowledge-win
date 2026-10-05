@@ -121,6 +121,16 @@ def _typed(error: BaseException) -> str:
     return f"{type(error).__name__}: {detail}" if detail else type(error).__name__
 
 
+def _kind(error: BaseException) -> str:
+    """What a failure is, apart from which file it happened to: the class and
+    its errno/strerror when it has them, so that one full disk is one kind
+    however many paths it was reported against. Anything else is its own kind."""
+    code, message = getattr(error, "errno", None), getattr(error, "strerror", None)
+    if code is not None and message:
+        return f"{type(error).__name__}: [Errno {code}] {message}"
+    return _typed(error)
+
+
 def _reason(error: BaseException) -> str:
     """The failure as the queue records it.
 
@@ -723,6 +733,9 @@ class ImportResult:
     # batch and of no one link -- the vault could not be read, so nothing was
     # even attempted -- and the report prints that row without the url.
     failed: list[tuple[str, str]] = field(default_factory=list)
+    # url -> what kind of failure it was, where that differs from the reason
+    # text (which can embed the file name). Only the report's grouping reads it.
+    kinds: dict[str, str] = field(default_factory=dict)
     # What went wrong around the notes without costing one: the single index
     # rebuild this batch gets. Reported, not swallowed -- one failure here
     # leaves every note of the batch out of every index, and an index nobody
@@ -854,6 +867,7 @@ def import_links(cfg: Config, items: list[Imported],
             # A link that could not be written is reported and the run goes
             # on: 1214 saved and one reported beats 1215 unsaved.
             result.failed.append((one.url, _typed(error)))
+            result.kinds[one.url] = _kind(error)
 
     if result.saved:
         result.warnings += _reindex(cfg)       # once, for the batch

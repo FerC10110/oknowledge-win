@@ -301,21 +301,26 @@ def _import(cfg, args) -> int:
                   "like it had a link and did not match (see --dry-run)")
     for warning in result.warnings:
         print(f"warning: {_clean(warning)}", file=sys.stderr)
-    _not_saved(result.failed)
+    _not_saved(result.failed, result.kinds)
     return 1 if result.failed else 0
 
 
-def _not_saved(failed: list[tuple[str, str]]) -> None:
+def _not_saved(failed: list[tuple[str, str]],
+               kinds: dict[str, str] | None = None) -> None:
     """Report what could not be saved: one entry per reason, not per link.
 
     The urls are kept -- they are what the user goes looking for -- but an
     unwritable vault says its one sentence once and lists them underneath,
     instead of repeating it beside every one of them.
     """
-    by_reason: dict[str, list[str]] = {}
+    # Grouped by kind, not by text: str(OSError) embeds the file name, so a
+    # full disk would otherwise be as many groups as links. The first full
+    # message of a group is the one printed.
+    kinds = kinds or {}
+    by_reason: dict[str, tuple[str, list[str]]] = {}
     for url, why in failed:
-        by_reason.setdefault(why, []).append(url)
-    for why, urls in by_reason.items():
+        by_reason.setdefault(kinds.get(url, why), (why, []))[1].append(url)
+    for why, urls in by_reason.values():
         links = [url for url in urls if url]
         if not links:
             # The failure that belongs to the batch and to no one link: with

@@ -1,6 +1,7 @@
 """The command line. Every test points XDG_STATE_HOME at tmp_path, so nothing
 here can touch the real queue, and the config is always passed explicitly."""
 
+import errno
 import json
 
 import pytest
@@ -760,7 +761,9 @@ def test_links_that_fail_for_the_same_reason_are_reported_once(
                       "20/7/2019, 11:36 - Fer: https://e.com/c\n", encoding="utf-8")
 
     def boom(config, note, language, path=None):
-        raise OSError("no space left on device")
+        # A real write failure names the file, so its text differs per link.
+        raise OSError(errno.ENOSPC, "no space left on device",
+                      str(tmp_path / f"{note.id}.md"))
 
     monkeypatch.setattr("oknowledge.pipeline.write_note", boom)
 
