@@ -122,6 +122,18 @@ def _count(n: int, singular: str, plural: str) -> str:
     return f"{n} {singular if n == 1 else plural}"
 
 
+def _span(links) -> tuple[str | None, str | None]:
+    """The first and last date among the links, or two Nones for none at all.
+
+    It is what says a date was mis-parsed: a phone with a wrong clock dates a
+    note 2099, which then sorts first in the index and first in every retry,
+    and the dry run lists the links in message order, so one outlier hides in
+    1215 lines unless the span names it.
+    """
+    dates = sorted(one.sent for one in links)
+    return (dates[0], dates[-1]) if dates else (None, None)
+
+
 def _warn(message: str) -> None:
     print(f"warning: {message}", file=sys.stderr)
 
@@ -238,6 +250,7 @@ def _import(cfg, args) -> int:
     order = "day/month" if scan.day_first else "month/day"
     reading = f"dates read as {order}{' (assumed)' if scan.assumed else ''}"
     bare = sum(1 for one in scan.links if one.bare)
+    earliest, latest = _span(scan.links)
 
     if args.dry_run:
         if args.json:
@@ -247,6 +260,7 @@ def _import(cfg, args) -> int:
                                         for one in scan.links],
                               "messages": scan.messages,
                               "suspicious": scan.suspicious,
+                              "earliest": earliest, "latest": latest,
                               "day_first": scan.day_first,
                               "assumed": scan.assumed, "written": False},
                              ensure_ascii=False))
@@ -263,11 +277,11 @@ def _import(cfg, args) -> int:
                           "warnings": result.warnings,
                           "messages": scan.messages,
                           "suspicious": scan.suspicious,
+                          "earliest": earliest, "latest": latest,
                           "day_first": scan.day_first, "assumed": scan.assumed},
                          ensure_ascii=False))
     else:
-        print(f"{_count(result.found, 'link', 'links')} in "
-              f"{_count(scan.messages, 'message', 'messages')} ({reading})")
+        print(_headline(result.found, scan, reading))
         print(f"{result.saved} saved, {result.already} already there, "
               f"{result.duplicated} repeated in the chat")
         if result.failed:
@@ -313,6 +327,14 @@ def _not_saved(failed: list[tuple[str, str]]) -> None:
             print(f"  ... and {len(urls) - SHOWN} more", file=sys.stderr)
 
 
+def _headline(found: int, scan, reading: str) -> str:
+    """The one line both paths print: what was captured, and over what span."""
+    earliest, latest = _span(scan.links)
+    span = f", {earliest} to {latest}" if earliest else ""
+    return (f"{_count(found, 'link', 'links')} in "
+            f"{_count(scan.messages, 'message', 'messages')}{span} ({reading})")
+
+
 def _dry_run(scan, reading: str) -> None:
     """The three lists that make the parser reviewable.
 
@@ -320,8 +342,7 @@ def _dry_run(scan, reading: str) -> None:
     can hide; the suspicious messages are where a missed link can hide. The
     user looks at the last two before anything is written.
     """
-    print(f"{_count(len(scan.links), 'link', 'links')} in "
-          f"{_count(scan.messages, 'message', 'messages')} ({reading})")
+    print(_headline(len(scan.links), scan, reading))
     full = [one for one in scan.links if not one.bare]
     bare = [one for one in scan.links if one.bare]
     for title, group in (("with a scheme", full), ("without a scheme", bare)):

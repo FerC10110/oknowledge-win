@@ -605,6 +605,49 @@ def test_import_json_is_one_object(cfg, tmp_path, capsys):
     assert payload["day_first"] is True
 
 
+def test_import_says_the_span_of_the_dates_it_read(cfg, tmp_path, capsys):
+    """A phone with a wrong clock dates a note 2099, which then sorts first in
+    the index and first in every retry. The dry run's list is in message
+    order, so one outlier hides in 1215 lines unless the span says so."""
+    export = tmp_path / "chat.txt"
+    export.write_text(EXPORT, encoding="utf-8")
+
+    main(["import", str(export)])
+
+    assert ("2 links in 4 messages, 2019-07-18 to 2019-07-21 "
+            "(dates read as day/month)") in capsys.readouterr().out
+
+
+def test_a_dry_run_says_the_span_too(cfg, tmp_path, capsys):
+    export = tmp_path / "chat.txt"
+    export.write_text(EXPORT, encoding="utf-8")
+
+    main(["import", str(export), "--dry-run"])
+
+    assert "2019-07-18 to 2019-07-21" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("extra", [[], ["--dry-run"]])
+def test_both_json_documents_carry_the_span(cfg, tmp_path, capsys, extra):
+    export = tmp_path / "chat.txt"
+    export.write_text(EXPORT, encoding="utf-8")
+
+    main(["import", str(export), "--json", *extra])
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["earliest"] == "2019-07-18"
+    assert payload["latest"] == "2019-07-21"
+
+
+def test_an_export_with_no_links_has_no_span_to_report(cfg, tmp_path, capsys):
+    export = tmp_path / "chat.txt"
+    export.write_text("18/7/2019, 11:36 - Fer: sudo chkrootkit\n", encoding="utf-8")
+
+    assert main(["import", str(export)]) == 0
+
+    assert "0 links in 1 message (dates read as day/month)" in capsys.readouterr().out
+
+
 def test_a_file_that_is_not_there_is_a_config_error(cfg, tmp_path, capsys):
     assert main(["import", str(tmp_path / "nope.txt")]) == 2
     err = capsys.readouterr().err
