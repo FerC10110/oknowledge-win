@@ -46,6 +46,13 @@ def fake_add(monkeypatch, result, seen=None):
     monkeypatch.setattr("oknowledge.cli.add", add)
 
 
+def no_pictures(monkeypatch):
+    """No cover and no site icon: both reach the network, which conftest
+    refuses, and no test here is about either picture."""
+    monkeypatch.setattr("oknowledge.pipeline.download_cover", lambda cfg, url, link_id: None)
+    monkeypatch.setattr("oknowledge.pipeline.download_icon", lambda cfg, source: None)
+
+
 def ok(cfg, **kw):
     return lambda url: Result(id="a1", url=url, path=cfg.links_dir / "n.md",
                               status="ok", engine="opencode", **kw)
@@ -63,6 +70,7 @@ def test_add_prints_where_the_note_landed(cfg, monkeypatch, capsys):
 
 
 def test_add_end_to_end_through_the_real_pipeline(cfg, monkeypatch, capsys):
+    no_pictures(monkeypatch)
     monkeypatch.setattr("oknowledge.pipeline.extract", lambda url: PAGE)
     assert main(["add", "https://arstechnica.com/vpn", "--summary"]) == 0
     assert "saved:" in capsys.readouterr().out
@@ -149,6 +157,7 @@ def test_reindex_reports_written_blocked_and_skipped(cfg, monkeypatch, capsys):
 
 
 def test_reindex_runs_for_real(cfg, monkeypatch, capsys):
+    no_pictures(monkeypatch)
     monkeypatch.setattr("oknowledge.pipeline.extract", lambda url: PAGE)
     main(["add", "https://arstechnica.com/vpn"])
     indexes = list(cfg.root.glob("*.md"))
@@ -161,6 +170,7 @@ def test_reindex_runs_for_real(cfg, monkeypatch, capsys):
 
 
 def test_reindex_leaves_no_index_behind_when_a_category_empties(cfg, monkeypatch, capsys):
+    no_pictures(monkeypatch)
     """The shape to worry about: the last note of a category moves away by hand,
     so the category no longer exists and its index must not survive the sweep.
     rebuild_indexes is tested for this directly; this is the command."""
@@ -180,6 +190,7 @@ def test_reindex_leaves_no_index_behind_when_a_category_empties(cfg, monkeypatch
 
 def test_reindex_leaves_no_index_behind_when_the_last_note_is_deleted(cfg, monkeypatch,
                                                                      capsys):
+    no_pictures(monkeypatch)
     monkeypatch.setattr("oknowledge.pipeline.extract", lambda url: PAGE)
     main(["add", "https://arstechnica.com/vpn"])
     next(cfg.links_dir.glob("*.md")).unlink()
@@ -240,6 +251,7 @@ def test_no_subcommand_prints_help(capsys):
 
 
 def test_counts_are_singular_when_there_is_one(cfg, monkeypatch, capsys):
+    no_pictures(monkeypatch)
     monkeypatch.setattr("oknowledge.pipeline.extract", lambda url: PAGE)
     main(["add", "https://arstechnica.com/vpn"])
     capsys.readouterr()
@@ -269,6 +281,7 @@ def test_a_directory_where_the_config_should_be_is_a_message(tmp_path, capsys):
 
 
 def test_re_adding_a_partial_link_reprocesses_it(cfg, monkeypatch, capsys):
+    no_pictures(monkeypatch)
     url = "https://arstechnica.com/vpn"
     monkeypatch.setattr("oknowledge.pipeline.extract",
                         lambda u: (_ for _ in ()).throw(Unreadable("down")))
@@ -282,6 +295,7 @@ def test_re_adding_a_partial_link_reprocesses_it(cfg, monkeypatch, capsys):
 
 
 def test_re_adding_an_ok_link_says_already_saved(cfg, monkeypatch, capsys):
+    no_pictures(monkeypatch)
     monkeypatch.setattr("oknowledge.pipeline.extract", lambda u: PAGE)
     main(["add", "https://arstechnica.com/vpn"])
     capsys.readouterr()
@@ -401,6 +415,7 @@ def test_stdout_stays_empty_when_the_answer_goes_to_stderr(cfg, monkeypatch, cap
 
 
 def test_retry_survives_an_unreadable_queue_listing(cfg, monkeypatch, capsys):
+    no_pictures(monkeypatch)
     from oknowledge.pipeline import retry
     q = Queue()
     q.enqueue("a1", "https://e.com/x", "full")
@@ -416,6 +431,7 @@ def test_retry_survives_an_unreadable_queue_listing(cfg, monkeypatch, capsys):
 
 
 def test_an_unprobeable_lock_costs_one_link_not_the_whole_list(cfg, monkeypatch):
+    no_pictures(monkeypatch)
     from oknowledge.pipeline import retry
     from oknowledge.urls import link_id, normalize
     q = Queue()
@@ -438,6 +454,7 @@ def test_an_unprobeable_lock_costs_one_link_not_the_whole_list(cfg, monkeypatch)
 
 
 def test_re_adding_a_note_with_a_hand_typed_status_leaves_it_alone(cfg, monkeypatch, capsys):
+    no_pictures(monkeypatch)
     url = "https://arstechnica.com/vpn"
     monkeypatch.setattr("oknowledge.pipeline.extract", lambda u: PAGE)
     main(["add", url])

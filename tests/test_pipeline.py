@@ -64,13 +64,26 @@ def extraction(monkeypatch, result):
     monkeypatch.setattr("oknowledge.pipeline.extract", fake)
 
 
+def no_pictures(monkeypatch):
+    """Neither the cover nor the site icon, for a test that cares about neither.
+
+    Both reach the network, and conftest refuses the network with
+    pytest.fail -- a BaseException, so download_icon's `except Exception`
+    cannot swallow the alarm. A save-path test therefore has to say which of
+    the two downloads it means to exercise, and most mean neither.
+    """
+    no_cover(monkeypatch)
+    monkeypatch.setattr("oknowledge.pipeline.download_icon", lambda cfg, source: None)
+
+
 def no_cover(monkeypatch):
+    """Only the cover, for a test whose subject is the icon."""
     monkeypatch.setattr("oknowledge.pipeline.download_cover", lambda cfg, url, link_id: None)
 
 
 def test_a_good_link_becomes_a_finished_note(cfg, q, monkeypatch):
     extraction(monkeypatch, PAGE)
-    no_cover(monkeypatch)
+    no_pictures(monkeypatch)
 
     result = add(cfg, "https://arstechnica.com/vpn?utm_source=wa", queue=q)
 
@@ -88,14 +101,14 @@ def test_a_good_link_becomes_a_finished_note(cfg, q, monkeypatch):
 
 def test_the_category_index_is_written_too(cfg, q, monkeypatch):
     extraction(monkeypatch, PAGE)
-    no_cover(monkeypatch)
+    no_pictures(monkeypatch)
     add(cfg, "https://arstechnica.com/vpn", queue=q)
     assert "WireGuard" in index_path(cfg, "Redes").read_text(encoding="utf-8")
 
 
 def test_summary_mode_drops_the_original_text(cfg, q, monkeypatch):
     extraction(monkeypatch, PAGE)
-    no_cover(monkeypatch)
+    no_pictures(monkeypatch)
     result = add(cfg, "https://arstechnica.com/vpn", content="summary", queue=q)
     assert read_note(result.path).body is None
 
@@ -103,6 +116,7 @@ def test_summary_mode_drops_the_original_text(cfg, q, monkeypatch):
 def test_a_page_we_cannot_read_still_leaves_a_note(cfg, q, monkeypatch):
     # The rule that outranks the others: the link is never lost.
     extraction(monkeypatch, Unreadable("403 from the site"))
+    no_pictures(monkeypatch)
 
     result = add(cfg, "https://x.com/user/status/1", queue=q)
 
@@ -118,7 +132,7 @@ def test_a_page_we_cannot_read_still_leaves_a_note(cfg, q, monkeypatch):
 
 def test_when_every_engine_fails_the_text_is_not_thrown_away(cfg, q, monkeypatch):
     extraction(monkeypatch, PAGE)
-    no_cover(monkeypatch)
+    no_pictures(monkeypatch)
     cfg = Config(vault=cfg.vault, chain=("fake",), engines={"fake": {"replies": []}})
 
     result = add(cfg, "https://arstechnica.com/vpn", queue=q)
@@ -131,7 +145,7 @@ def test_when_every_engine_fails_the_text_is_not_thrown_away(cfg, q, monkeypatch
 
 def test_the_same_link_twice_does_not_duplicate(cfg, q, monkeypatch):
     extraction(monkeypatch, PAGE)
-    no_cover(monkeypatch)
+    no_pictures(monkeypatch)
     add(cfg, "https://arstechnica.com/vpn", queue=q)
     again = add(cfg, "https://www.arstechnica.com/vpn/?utm_source=x", queue=q)
 
@@ -141,7 +155,7 @@ def test_the_same_link_twice_does_not_duplicate(cfg, q, monkeypatch):
 
 def test_reprocess_rewrites_the_same_note(cfg, q, monkeypatch):
     extraction(monkeypatch, PAGE)
-    no_cover(monkeypatch)
+    no_pictures(monkeypatch)
     first = add(cfg, "https://arstechnica.com/vpn", queue=q)
 
     cfg.engines["fake"]["replies"] = [json.dumps({
@@ -157,7 +171,7 @@ def test_reprocess_rewrites_the_same_note(cfg, q, monkeypatch):
 
 def test_the_existing_categories_are_offered_to_the_model(cfg, q, monkeypatch):
     extraction(monkeypatch, PAGE)
-    no_cover(monkeypatch)
+    no_pictures(monkeypatch)
     seen = {}
     import oknowledge.pipeline as pipeline
 
@@ -174,11 +188,12 @@ def test_the_existing_categories_are_offered_to_the_model(cfg, q, monkeypatch):
 
 def test_retry_finishes_what_was_left_half_done(cfg, q, monkeypatch):
     extraction(monkeypatch, Unreadable("503"))
+    no_pictures(monkeypatch)
     add(cfg, "https://arstechnica.com/vpn", queue=q)
     assert q.unfinished()
 
     extraction(monkeypatch, PAGE)
-    no_cover(monkeypatch)
+    no_pictures(monkeypatch)
     cfg.engines["fake"]["replies"] = [ANSWER]
 
     results = retry(cfg, queue=q)
@@ -195,7 +210,7 @@ def test_a_page_too_long_for_the_model_says_so_in_the_note(cfg, q, monkeypatch):
     long_page = Extracted(title="Libro entero", text="x" * (DEFAULT_LIMIT + 1),
                           type="article", source="e.com")
     extraction(monkeypatch, long_page)
-    no_cover(monkeypatch)
+    no_pictures(monkeypatch)
 
     result = add(cfg, "https://e.com/libro", queue=q)
     note = read_note(result.path)
@@ -225,7 +240,7 @@ def test_the_cover_lands_in_attachments(cfg, q, monkeypatch):
 
 def test_every_engine_failing_still_records_the_link(cfg, q, monkeypatch):
     extraction(monkeypatch, PAGE)
-    no_cover(monkeypatch)
+    no_pictures(monkeypatch)
     cfg.engines["fake"]["replies"] = []
 
     result = add(cfg, "https://arstechnica.com/vpn", queue=q)
@@ -241,6 +256,7 @@ def test_every_engine_failing_still_records_the_link(cfg, q, monkeypatch):
 def test_an_unreadable_page_in_an_english_vault_is_not_classified_in_spanish(
         cfg, q, monkeypatch):
     extraction(monkeypatch, Unreadable("403 from the site"))
+    no_pictures(monkeypatch)
     english = Config(vault=cfg.vault, chain=("fake",), language="en",
                      engines={"fake": {"replies": []}})
 
@@ -257,6 +273,7 @@ def test_an_extractor_bug_still_leaves_a_note_and_names_the_type(cfg, q, monkeyp
     # extract() promises to raise only Unreadable. The rule must not depend on
     # that promise: a bug in a library would otherwise cost the user the link.
     extraction(monkeypatch, RuntimeError("trafilatura exploded"))
+    no_pictures(monkeypatch)
 
     result = add(cfg, "https://arstechnica.com/vpn", queue=q)
 
@@ -300,7 +317,7 @@ def test_an_error_page_is_not_saved_as_a_cover(cfg, q, monkeypatch):
 
 def test_an_index_another_file_holds_is_reported_not_swallowed(cfg, q, monkeypatch):
     extraction(monkeypatch, PAGE)
-    no_cover(monkeypatch)
+    no_pictures(monkeypatch)
     mine = index_path(cfg, "Redes")
     mine.parent.mkdir(parents=True, exist_ok=True)
     mine.write_text("# My own notes on networks\n", encoding="utf-8")
@@ -314,7 +331,7 @@ def test_an_index_another_file_holds_is_reported_not_swallowed(cfg, q, monkeypat
 
 def test_a_reindex_that_fails_does_not_lose_the_note(cfg, q, monkeypatch):
     extraction(monkeypatch, PAGE)
-    no_cover(monkeypatch)
+    no_pictures(monkeypatch)
 
     def explode(config, language):
         raise OSError("no space left on device")
@@ -334,7 +351,7 @@ def test_the_status_is_recorded_before_the_reindex(cfg, q, monkeypatch):
     # order. Ctrl-C during the rebuild is exactly that, and must still leave a
     # finished note with a finished entry instead of one stranded as pending.
     extraction(monkeypatch, PAGE)
-    no_cover(monkeypatch)
+    no_pictures(monkeypatch)
 
     def interrupted(config, language):
         raise KeyboardInterrupt
@@ -357,7 +374,7 @@ def test_retry_picks_up_an_entry_whose_process_died(cfg, q, monkeypatch):
     assert [e.id for e in q.orphaned()] == [link]
 
     extraction(monkeypatch, PAGE)
-    no_cover(monkeypatch)
+    no_pictures(monkeypatch)
 
     results = retry(cfg, queue=q)
 
@@ -372,7 +389,7 @@ def test_a_locked_link_leaves_the_queue_alone(cfg, q, monkeypatch):
     q.enqueue(link, url, "summary")
     q.set_status(link, "failed", error="the site was down", title="An old title")
     extraction(monkeypatch, PAGE)
-    no_cover(monkeypatch)
+    no_pictures(monkeypatch)
 
     with q.lock(link):
         result = add(cfg, url, queue=q)
@@ -392,11 +409,12 @@ def test_a_retried_note_is_renamed_after_its_new_title(cfg, q, monkeypatch):
     # A partial note is named after its URL, and that is the name Obsidian's
     # explorer and quick switcher show. Finishing it has to fix the name too.
     extraction(monkeypatch, Unreadable("503"))
+    no_pictures(monkeypatch)
     first = add(cfg, "https://arstechnica.com/vpn", queue=q)
     assert first.path.name == f"{TODAY}-https-arstechnica-com-vpn.md"
 
     extraction(monkeypatch, PAGE)
-    no_cover(monkeypatch)
+    no_pictures(monkeypatch)
     cfg.engines["fake"]["replies"] = [ANSWER]
 
     renamed = retry(cfg, queue=q)[0].path
@@ -411,13 +429,14 @@ def test_a_retried_note_is_renamed_after_its_new_title(cfg, q, monkeypatch):
 
 def test_a_retried_note_keeps_its_name_when_the_new_one_is_taken(cfg, q, monkeypatch):
     extraction(monkeypatch, Unreadable("503"))
+    no_pictures(monkeypatch)
     first = add(cfg, "https://arstechnica.com/vpn", queue=q)
 
     squatter = cfg.links_dir / f"{TODAY}-wireguard-vs-openvpn.md"
     squatter.write_text("# My own file, no marker\n", encoding="utf-8")
 
     extraction(monkeypatch, PAGE)
-    no_cover(monkeypatch)
+    no_pictures(monkeypatch)
     cfg.engines["fake"]["replies"] = [ANSWER]
 
     result = retry(cfg, queue=q)[0]
@@ -436,7 +455,7 @@ def test_one_link_that_cannot_be_written_does_not_stop_the_others(cfg, q, monkey
     import oknowledge.pipeline as pipeline
 
     extraction(monkeypatch, PAGE)
-    no_cover(monkeypatch)
+    no_pictures(monkeypatch)
     urls = [f"https://arstechnica.com/{name}" for name in ("a", "b", "c")]
     for url in urls:
         q.enqueue(link_id(url), url, "full")
@@ -468,10 +487,11 @@ def test_a_rename_that_fails_keeps_the_note_and_says_so(cfg, q, monkeypatch):
     import oknowledge.pipeline as pipeline
 
     extraction(monkeypatch, Unreadable("503"))
+    no_pictures(monkeypatch)
     first = add(cfg, "https://arstechnica.com/vpn", queue=q)
 
     extraction(monkeypatch, PAGE)
-    no_cover(monkeypatch)
+    no_pictures(monkeypatch)
     cfg.engines["fake"]["replies"] = [ANSWER]
 
     class OnlyTheRenameFails:
@@ -503,7 +523,7 @@ def test_reporting_a_failed_link_cannot_take_down_the_run(cfg, q, monkeypatch):
     import oknowledge.pipeline as pipeline
 
     extraction(monkeypatch, PAGE)
-    no_cover(monkeypatch)
+    no_pictures(monkeypatch)
     urls = ["https://arstechnica.com/a", "https://arstechnica.com/b"]
     for url in urls:
         q.enqueue(link_id(url), url, "full")
@@ -541,7 +561,7 @@ def test_a_failed_reanalysis_never_downgrades_a_finished_note(cfg, q, monkeypatc
     # Overwriting an analyzed note with a partial one throws away the summary,
     # the points, the category and the tags: that is the user's content.
     extraction(monkeypatch, PAGE)
-    no_cover(monkeypatch)
+    no_pictures(monkeypatch)
     first = add(cfg, "https://arstechnica.com/vpn", queue=q)
     good = read_note(first.path)
 
@@ -569,7 +589,7 @@ def test_a_failed_reanalysis_never_downgrades_a_finished_note(cfg, q, monkeypatc
 
 def test_a_failed_extraction_never_downgrades_a_finished_note(cfg, q, monkeypatch):
     extraction(monkeypatch, PAGE)
-    no_cover(monkeypatch)
+    no_pictures(monkeypatch)
     first = add(cfg, "https://arstechnica.com/vpn", queue=q)
     good = read_note(first.path)
 
@@ -588,6 +608,7 @@ def test_a_reprocess_over_a_partial_note_still_rewrites_it(cfg, q, monkeypatch):
     # Partial over partial is idempotent and harmless: only an analyzed note is
     # protected.
     extraction(monkeypatch, Unreadable("503"))
+    no_pictures(monkeypatch)
     first = add(cfg, "https://arstechnica.com/vpn", queue=q)
     assert read_note(first.path).content == "full"
 
@@ -606,7 +627,7 @@ def test_a_protected_note_leaves_no_unfinished_work(cfg, q, monkeypatch):
     # A failed re-analysis of a link that is already saved and analyzed must not
     # leave a row the user can never clear.
     extraction(monkeypatch, PAGE)
-    no_cover(monkeypatch)
+    no_pictures(monkeypatch)
     first = add(cfg, "https://arstechnica.com/vpn", queue=q)
 
     cfg.engines["fake"]["replies"] = []
@@ -622,7 +643,7 @@ def test_a_protected_note_leaves_no_unfinished_work(cfg, q, monkeypatch):
 
 def test_retry_does_no_work_after_a_protected_failure(cfg, q, monkeypatch):
     extraction(monkeypatch, PAGE)
-    no_cover(monkeypatch)
+    no_pictures(monkeypatch)
     first = add(cfg, "https://arstechnica.com/vpn", queue=q)
     good = read_note(first.path)
 
@@ -649,7 +670,7 @@ def test_every_branch_reports_one_spelling_of_the_path(tmp_path, q, monkeypatch)
     cfg = Config(vault=through, chain=("fake",),
                  engines={"fake": {"replies": [ANSWER]}})
     extraction(monkeypatch, PAGE)
-    no_cover(monkeypatch)
+    no_pictures(monkeypatch)
 
     written = add(cfg, "https://arstechnica.com/vpn", queue=q)
     skipped = add(cfg, "https://arstechnica.com/vpn", queue=q)
@@ -670,7 +691,7 @@ def test_an_unwritable_state_tree_still_leaves_a_note(cfg, tmp_path, monkeypatch
     # another filesystem: a full /home, a locks/ left root-owned by one sudo
     # run or an unmounted state tree must not cost the user a writable vault.
     extraction(monkeypatch, PAGE)
-    no_cover(monkeypatch)
+    no_pictures(monkeypatch)
     state = tmp_path / "readonly-state"
     state.mkdir()
     state.chmod(0o500)
@@ -688,7 +709,7 @@ def test_an_unwritable_state_tree_still_leaves_a_note(cfg, tmp_path, monkeypatch
 
 def test_a_queue_entry_that_cannot_be_written_still_leaves_a_note(cfg, q, monkeypatch):
     extraction(monkeypatch, PAGE)
-    no_cover(monkeypatch)
+    no_pictures(monkeypatch)
 
     def full_disk(*args, **kwargs):
         raise OSError("no space left on device")
@@ -709,7 +730,7 @@ def test_the_duplicate_scan_happens_inside_the_lock(cfg, q, monkeypatch):
     import oknowledge.pipeline as pipeline
 
     extraction(monkeypatch, PAGE)
-    no_cover(monkeypatch)
+    no_pictures(monkeypatch)
     real = pipeline.find_note
     seen = {}
 
@@ -736,6 +757,7 @@ def test_the_rename_never_leaves_the_vault(cfg, q, tmp_path, monkeypatch):
     # symlink: it would replace the link itself, destroying a file of the
     # user's instead. Resolving is what avoids that and what causes this.)
     extraction(monkeypatch, Unreadable("503"))
+    no_pictures(monkeypatch)
     first = add(cfg, "https://arstechnica.com/vpn", queue=q)
 
     outside = tmp_path / "outside" / "stolen.md"
@@ -745,7 +767,7 @@ def test_the_rename_never_leaves_the_vault(cfg, q, tmp_path, monkeypatch):
     assert not trap.exists() and trap.is_symlink()
 
     extraction(monkeypatch, PAGE)
-    no_cover(monkeypatch)
+    no_pictures(monkeypatch)
     cfg.engines["fake"]["replies"] = [ANSWER]
 
     result = retry(cfg, queue=q)[0]
@@ -761,6 +783,7 @@ def test_a_squatter_too_broken_to_read_is_still_a_squatter(cfg, q, monkeypatch):
     import oknowledge.pipeline as pipeline
 
     extraction(monkeypatch, Unreadable("503"))
+    no_pictures(monkeypatch)
     first = add(cfg, "https://arstechnica.com/vpn", queue=q)
 
     taken = cfg.links_dir / f"{TODAY}-wireguard-vs-openvpn.md"
@@ -774,7 +797,7 @@ def test_a_squatter_too_broken_to_read_is_still_a_squatter(cfg, q, monkeypatch):
 
     monkeypatch.setattr(pipeline, "read_note", explode)
     extraction(monkeypatch, PAGE)
-    no_cover(monkeypatch)
+    no_pictures(monkeypatch)
     cfg.engines["fake"]["replies"] = [ANSWER]
 
     result = retry(cfg, queue=q)[0]
@@ -787,7 +810,7 @@ def test_a_squatter_too_broken_to_read_is_still_a_squatter(cfg, q, monkeypatch):
 def test_a_note_the_user_marked_their_own_way_is_protected_too(cfg, q, monkeypatch):
     # This vault is edited by hand: that is its whole premise.
     extraction(monkeypatch, PAGE)
-    no_cover(monkeypatch)
+    no_pictures(monkeypatch)
     first = add(cfg, "https://arstechnica.com/vpn", queue=q)
     first.path.write_text(
         first.path.read_text(encoding="utf-8").replace("status: ok", "status: done"),
@@ -808,7 +831,7 @@ def test_a_note_too_broken_to_index_is_reported(cfg, q, monkeypatch):
     # The same hand-broken note that makes find_note() blind also drops out of
     # every index. We cannot identify it; we can at least say it is there.
     extraction(monkeypatch, PAGE)
-    no_cover(monkeypatch)
+    no_pictures(monkeypatch)
     broken = cfg.links_dir / "2026-01-01-hand-broken.md"
     broken.write_text("---\noknowledge: 1\ntitle: [unclosed\n---\n# x\n",
                       encoding="utf-8")
@@ -830,7 +853,7 @@ def test_the_truncation_notice_does_not_promise_a_body_it_did_not_keep(
     long_page = Extracted(title="Libro entero", text="x" * (DEFAULT_LIMIT + 1),
                           type="article", source="e.com")
     extraction(monkeypatch, long_page)
-    no_cover(monkeypatch)
+    no_pictures(monkeypatch)
 
     note = read_note(add(cfg, "https://e.com/libro", content="summary", queue=q).path)
 
@@ -843,7 +866,7 @@ def test_a_hand_edited_content_mode_is_not_taken_at_face_value(cfg, q, monkeypat
     # The queue's JSON is read by the QML widget, so it gets hand-edited, and
     # anything other than "full" silently means "keep no body".
     extraction(monkeypatch, PAGE)
-    no_cover(monkeypatch)
+    no_pictures(monkeypatch)
     url = "https://arstechnica.com/vpn"
     q.enqueue(link_id(url), url, "fulll")
 
@@ -857,7 +880,7 @@ def test_a_hand_edited_content_mode_is_not_taken_at_face_value(cfg, q, monkeypat
 
 def test_a_plain_reprocess_keeps_a_saved_body(cfg, q, monkeypatch):
     extraction(monkeypatch, PAGE)
-    no_cover(monkeypatch)
+    no_pictures(monkeypatch)
     cfg = Config(vault=cfg.vault, chain=("fake",), default_content="summary",
                  engines={"fake": {"replies": [ANSWER]}})
     first = add(cfg, "https://arstechnica.com/vpn", content="full", queue=q)
@@ -875,6 +898,7 @@ def test_a_symlink_at_the_ideal_name_is_treated_as_taken(cfg, q, monkeypatch):
     # so without this guard the note lands under the name the symlink chose and
     # the user's symlink ends up pointing at our note.
     extraction(monkeypatch, Unreadable("503"))
+    no_pictures(monkeypatch)
     first = add(cfg, "https://arstechnica.com/vpn", queue=q)
 
     ghost = cfg.links_dir / "ghost.md"
@@ -883,7 +907,7 @@ def test_a_symlink_at_the_ideal_name_is_treated_as_taken(cfg, q, monkeypatch):
     assert not trap.exists() and trap.is_symlink()
 
     extraction(monkeypatch, PAGE)
-    no_cover(monkeypatch)
+    no_pictures(monkeypatch)
     cfg.engines["fake"]["replies"] = [ANSWER]
 
     result = retry(cfg, queue=q)[0]
@@ -903,12 +927,13 @@ def test_a_status_that_cannot_be_recorded_still_names_and_indexes_the_note(
     # before the rename and the reindex. This is the interactive path: retry()
     # absorbs it through _failed, a direct add() does not.
     extraction(monkeypatch, Unreadable("503"))
+    no_pictures(monkeypatch)
     q = Queue(tmp_path / "state")
     first = add(cfg, "https://arstechnica.com/vpn", queue=q)
     assert q.get(first.id).status == "partial"
 
     extraction(monkeypatch, PAGE)
-    no_cover(monkeypatch)
+    no_pictures(monkeypatch)
     cfg.engines["fake"]["replies"] = [ANSWER]
     q.dir.chmod(0o500)
     try:
@@ -928,7 +953,7 @@ def test_a_status_that_cannot_be_recorded_still_names_and_indexes_the_note(
 @pytest.mark.skipif(os.geteuid() == 0, reason="chmod 0o500 does not bite as root")
 def test_a_protected_note_survives_a_queue_it_cannot_write(cfg, tmp_path, monkeypatch):
     extraction(monkeypatch, PAGE)
-    no_cover(monkeypatch)
+    no_pictures(monkeypatch)
     q = Queue(tmp_path / "state")
     first = add(cfg, "https://arstechnica.com/vpn", queue=q)
     good = read_note(first.path)
@@ -954,7 +979,7 @@ def test_the_rename_can_never_write_outside_the_links_folder(cfg, q, monkeypatch
     import oknowledge.pipeline as pipeline
 
     extraction(monkeypatch, PAGE)
-    no_cover(monkeypatch)
+    no_pictures(monkeypatch)
     first = add(cfg, "https://arstechnica.com/vpn", queue=q)
 
     for stem in ("../escape", "../../../../escape"):
@@ -1008,7 +1033,7 @@ def died_after_saving(q, link, url, mode="full"):
 def test_retry_over_an_orphaned_entry_keeps_a_finished_note_byte_for_byte(
         cfg, q, monkeypatch):
     extraction(monkeypatch, PAGE)
-    no_cover(monkeypatch)
+    no_pictures(monkeypatch)
     saved = add(cfg, "https://arstechnica.com/vpn", queue=q)
     died_after_saving(q, saved.id, "https://arstechnica.com/vpn")
     mine = hand_edit(saved.path)
@@ -1030,7 +1055,7 @@ def test_retry_over_an_orphaned_entry_keeps_a_finished_note_byte_for_byte(
 def test_retry_over_a_failed_entry_keeps_a_finished_note_byte_for_byte(
         cfg, q, monkeypatch):
     extraction(monkeypatch, PAGE)
-    no_cover(monkeypatch)
+    no_pictures(monkeypatch)
     saved = add(cfg, "https://arstechnica.com/vpn", queue=q)
     q.set_status(saved.id, "failed", error="the site was down")
     mine = hand_edit(saved.path)
@@ -1044,7 +1069,7 @@ def test_retry_over_a_failed_entry_keeps_a_finished_note_byte_for_byte(
 
 def test_reconciling_asks_no_engine_and_fetches_no_page(cfg, q, monkeypatch):
     extraction(monkeypatch, PAGE)
-    no_cover(monkeypatch)
+    no_pictures(monkeypatch)
     saved = add(cfg, "https://arstechnica.com/vpn", queue=q)
     died_after_saving(q, saved.id, "https://arstechnica.com/vpn")
 
@@ -1062,7 +1087,7 @@ def test_any_status_but_partial_is_the_users_content(cfg, q, monkeypatch, status
     """`partial` is the one value we write to mean unfinished. A deleted status
     line reads back as ok, so it has to fall on the protected side too."""
     extraction(monkeypatch, PAGE)
-    no_cover(monkeypatch)
+    no_pictures(monkeypatch)
     saved = add(cfg, "https://arstechnica.com/vpn", queue=q)
     died_after_saving(q, saved.id, "https://arstechnica.com/vpn")
     mine = hand_edit(saved.path, status=status)
@@ -1077,11 +1102,12 @@ def test_retry_still_finishes_a_partial_note(cfg, q, monkeypatch):
     """The other half of the rule: an unfinished note of ours is exactly what
     retry exists for, and it is replaced."""
     extraction(monkeypatch, Unreadable("503"))
+    no_pictures(monkeypatch)
     saved = add(cfg, "https://arstechnica.com/vpn", queue=q)
     assert read_note(saved.path).status == "partial"
 
     extraction(monkeypatch, PAGE)
-    no_cover(monkeypatch)
+    no_pictures(monkeypatch)
     cfg.engines["fake"]["replies"] = [ANSWER]
     results = retry(cfg, queue=q)
 
@@ -1096,7 +1122,7 @@ def test_retry_still_saves_a_link_whose_note_never_landed(cfg, q, monkeypatch):
     url = "https://arstechnica.com/vpn"
     q.enqueue(link_id(url), url, "full")
     extraction(monkeypatch, PAGE)
-    no_cover(monkeypatch)
+    no_pictures(monkeypatch)
 
     results = retry(cfg, queue=q)
 
@@ -1109,7 +1135,7 @@ def test_an_explicit_reprocess_still_replaces_a_finished_note(cfg, q, monkeypatc
     """Asking for a fresh analysis is the one thing that replaces note content,
     and the web's button has carried a confirmation since task 13."""
     extraction(monkeypatch, PAGE)
-    no_cover(monkeypatch)
+    no_pictures(monkeypatch)
     saved = add(cfg, "https://arstechnica.com/vpn", queue=q)
     hand_edit(saved.path)
     assert read_note(saved.path).title == "Mi resumen de WireGuard"
@@ -1125,7 +1151,7 @@ def test_a_note_saved_at_summary_stays_there_until_asked_again(cfg, q, monkeypat
     """The accepted trade-off: the entry asks for `full`, the finished note is
     `summary`, and a hand edit is worth more than an automatic upgrade."""
     extraction(monkeypatch, PAGE)
-    no_cover(monkeypatch)
+    no_pictures(monkeypatch)
     saved = add(cfg, "https://arstechnica.com/vpn", content="summary", queue=q)
     assert read_note(saved.path).body is None
     died_after_saving(q, saved.id, "https://arstechnica.com/vpn", mode="full")
@@ -1144,7 +1170,7 @@ def test_a_note_saved_at_summary_stays_there_until_asked_again(cfg, q, monkeypat
 
 def test_reconciling_says_what_it_did(cfg, q, monkeypatch):
     extraction(monkeypatch, PAGE)
-    no_cover(monkeypatch)
+    no_pictures(monkeypatch)
     saved = add(cfg, "https://arstechnica.com/vpn", queue=q)
     died_after_saving(q, saved.id, "https://arstechnica.com/vpn")
 
@@ -1158,7 +1184,7 @@ def test_a_link_somebody_else_holds_is_left_for_them(cfg, q, monkeypatch):
     """A `failed` entry is offered to retry whoever holds the lock (only
     `pending` is gated on that), so this is the path that has to refuse."""
     extraction(monkeypatch, PAGE)
-    no_cover(monkeypatch)
+    no_pictures(monkeypatch)
     saved = add(cfg, "https://arstechnica.com/vpn", queue=q)
     q.set_status(saved.id, "failed", error="the site was down")
     mine = hand_edit(saved.path)
@@ -1279,3 +1305,53 @@ def test_a_cover_does_not_replace_a_link_the_user_made_inside_the_vault(
     assert (cfg.attachments_dir / f"{link}.jpg").is_symlink()
     assert real.read_bytes() == b"the cover I chose myself"
     assert read_note(result.path).cover is None
+
+
+# --- The site icon, fetched with the note rather than by the browser ----------
+
+
+def test_saving_a_link_downloads_the_site_icon(cfg, q, monkeypatch):
+    """The card shows where a link came from, and the vault holds the picture.
+
+    Fetching it here instead of from the template is the whole privacy point:
+    a full-width library of 100 cards must not ping 100 sites on every view.
+    """
+    extraction(monkeypatch, PAGE)
+    no_cover(monkeypatch)
+    asked = []
+
+    class Fetched:
+        content = b"\x89PNG icon bytes"
+        content_type = "image/png"
+
+    def fake(url, **kw):
+        asked.append(url)
+        return Fetched()
+
+    monkeypatch.setattr("oknowledge.pipeline.fetch", fake)
+
+    add(cfg, "https://arstechnica.com/vpn", queue=q)
+
+    assert asked == ["https://arstechnica.com/favicon.ico"]
+    saved = cfg.attachments_dir / "icons" / "arstechnica.com.png"
+    assert saved.read_bytes() == b"\x89PNG icon bytes"
+
+
+def test_a_partial_note_gets_its_icon_too(cfg, q, monkeypatch):
+    """A link whose analysis failed is still a card in the library.
+
+    The icon comes off the note's own `source`, which is the field the /icon
+    route looks up, so the unreadable page's host is enough.
+    """
+    extraction(monkeypatch, Unreadable("403 from the site"))
+
+    class Fetched:
+        content = b"\x89PNG icon bytes"
+        content_type = "image/png"
+
+    monkeypatch.setattr("oknowledge.pipeline.fetch", lambda url, **kw: Fetched())
+
+    result = add(cfg, "https://arstechnica.com/vpn", queue=q)
+
+    assert result.status == "partial"
+    assert (cfg.attachments_dir / "icons" / "arstechnica.com.png").is_file()

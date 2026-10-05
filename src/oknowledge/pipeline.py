@@ -430,6 +430,13 @@ def _save(cfg: Config, q: Queue, link: str, url: str, note: Note, status: str,
     finished note on disk with its entry still saying pending. The rename comes
     before the reindex so the wikilinks name the file that actually exists.
 
+    The icon comes last, after the note is durable and the queue and indexes
+    agree, because it is the one step whose absence costs nothing: a card with
+    no favicon still shows its site's initial. It is also the only step here
+    that touches the network, so going last means a slow or hanging site
+    cannot delay the note it decorates. download_icon() catches everything by
+    contract (see its docstring), which is why it is called bare.
+
     Only write_note() may raise: see _record() for why the status may not.
     """
     path = write_note(cfg, note, cfg.language, path=target)
@@ -439,6 +446,7 @@ def _save(cfg: Config, q: Queue, link: str, url: str, note: Note, status: str,
         if trouble:
             warnings.append(trouble)
     warnings += _reindex(cfg)
+    download_icon(cfg, note.source)
     return Result(id=link, url=url, path=path, status=status, engine=engine,
                   error=error or None, warnings=warnings)
 
