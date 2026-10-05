@@ -20,7 +20,7 @@ from urllib.parse import quote, urlencode
 from fastapi import BackgroundTasks, FastAPI, Form, HTTPException, Request
 from fastapi.exception_handlers import http_exception_handler
 from fastapi.responses import (
-    FileResponse, HTMLResponse, PlainTextResponse, RedirectResponse,
+    FileResponse, HTMLResponse, PlainTextResponse, RedirectResponse, Response,
 )
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -31,6 +31,7 @@ from ..config import CONFIG_PATH, CONTENT_MODES, ENGINE_NAMES, Config
 from ..config import save as save_config
 from ..i18n import LANGUAGES, set_ui_language, translator, ui_language
 from ..pipeline import add as add_link
+from ..pipeline import is_domain
 from ..queue import Locked, Queue
 from ..vault import (
     BadCategory, IndexesStale, ProtectedNote, clean_category, delete_note,
@@ -123,6 +124,37 @@ class Edited(NamedTuple):
 # an .svg or .html inside attachments/ would otherwise be a same-origin document.
 IMAGE_TYPES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
                ".gif": "image/gif", ".webp": "image/webp", ".avif": "image/avif"}
+
+# Favicons get one more type than covers do, because most sites still answer
+# /favicon.ico with a real .ico. It stays out of IMAGE_TYPES so that widening
+# it here cannot widen what /cover will serve.
+ICON_TYPES = dict(IMAGE_TYPES, **{".ico": "image/vnd.microsoft.icon"})
+
+# Icons never change for a given domain, and a full-width grid asks for one per
+# card, so they are worth a day in the browser's cache.
+ICON_CACHE = "public, max-age=86400"
+
+
+def letter_icon(name: str) -> Response:
+    """The stand-in when a site has no favicon: its initial, on its own colour.
+
+    The route answers with this rather than a 404 so that the card template
+    never has to ask whether a download happened. One page of cards therefore
+    costs no filesystem lookups in the template and shows no broken images.
+    """
+    letter = next((char for char in name if char.isalnum()), "?")
+    hue = sum(name.encode("utf-8", "replace")) * 7 % 360
+    svg = (
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" '
+        'width="32" height="32" role="img">'
+        f'<rect width="32" height="32" rx="7" fill="hsl({hue} 45% 42%)"/>'
+        '<text x="16" y="22" text-anchor="middle" fill="#fff" '
+        'font-family="sans-serif" font-size="18" font-weight="600">'
+        f'{letter}</text></svg>'
+    )
+    return Response(svg, media_type="image/svg+xml",
+                    headers={"Cache-Control": ICON_CACHE,
+                             "X-Content-Type-Options": "nosniff"})
 
 
 def plain(text: str) -> str:
@@ -337,6 +369,32 @@ def create_app(cfg: Config) -> FastAPI:
             raise HTTPException(status_code=404, detail="no cover")
         return FileResponse(path, media_type=IMAGE_TYPES[path.suffix.lower()],
                             headers={"X-Content-Type-Options": "nosniff"})
+
+    @app.get("/icon/{domain}")
+    def icon(domain: str):
+        """A site's favicon, or its initial. Always an image, never a 404.
+
+        The domain arrives from a note's `source`, which is frontmatter the
+        user can edit, so it is validated before it becomes a path and the
+        result is still checked for containment -- the same two steps the
+        download side takes, because neither alone is enough.
+        """
+        name = domain.strip().lower()
+        if is_domain(name):
+            try:
+                found = next((cfg.attachments_dir / "icons").glob(f"{name}.*"), None)
+                if found is not None:
+                    path = found.resolve()
+                    inside = cfg.attachments_dir.resolve() in path.parents
+                    suffix = path.suffix.lower()
+                    if inside and suffix in ICON_TYPES and path.is_file():
+                        return FileResponse(
+                            path, media_type=ICON_TYPES[suffix],
+                            headers={"Cache-Control": ICON_CACHE,
+                                     "X-Content-Type-Options": "nosniff"})
+            except (OSError, ValueError):
+                pass
+        return letter_icon(name)
 
     # --- the routes that write ----------------------------------------------
     #

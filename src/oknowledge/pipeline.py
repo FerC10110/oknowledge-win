@@ -178,7 +178,7 @@ ICON_EXTENSIONS = dict(EXTENSIONS, **{"image/gif": ".gif",
 _DOMAIN_CHARS = frozenset("abcdefghijklmnopqrstuvwxyz0123456789.-")
 
 
-def _is_domain(name: str) -> bool:
+def is_domain(name: str) -> bool:
     """A domain we would write back unchanged as a file name, and no other."""
     return (1 <= len(name) <= 253
             and set(name) <= _DOMAIN_CHARS
@@ -202,7 +202,7 @@ def download_icon(cfg: Config, source: str | None) -> None:
     if not source:
         return
     domain = source.strip().lower()     # domains are case-insensitive; one site,
-    if not _is_domain(domain):          # one file, and never a silent nothing
+    if not is_domain(domain):          # one file, and never a silent nothing
         return
     icons = cfg.attachments_dir / "icons"
     try:
