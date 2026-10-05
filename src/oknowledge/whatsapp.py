@@ -123,10 +123,20 @@ EXTENSIONS = frozenset("sh py md ts js rs go pl so rb cs ai zip mov".split())
 
 FULL = re.compile(r"https?://(?:(?![,;]https?://)[^\s<>\"])+", re.IGNORECASE)
 # Not preceded by @ (an email), nor by another domain character (so a host is
-# not cut in half), nor followed by one (an email's dotted local part, or a
-# TLD that is only the start of a longer label). The path is optional.
+# not cut in half), nor by a percent sign, nor followed by one of those (an
+# email's dotted local part, or a TLD that is only the start of a longer
+# label). The path is optional.
+#
+# The percent sign is there for the percent-encoded urls the real export
+# carries: `https%3A%2F%2Fudemycoupons.me` would otherwise be captured as
+# `2Fudemycoupons.me`, a domain that does not exist -- a link the user did
+# send, saved pointing somewhere else. Decoding the escapes instead would be
+# worse: the same file has a magnet link whose tracker list is three more of
+# these, where the right answer is to capture nothing, and real urls that
+# carry percent-encoding on purpose. Captured wrong is silent; not captured
+# is reported, because MAYBE still matches the message.
 BARE = re.compile(
-    r"(?<![\w@.-])((?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+([a-z]{2,24}))(?![\w@-])"
+    r"(?<![\w@.%-])((?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+([a-z]{2,24}))(?![\w@-])"
     r"(/[^\s<>\"]*)?",
     re.IGNORECASE,
 )

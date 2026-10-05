@@ -250,3 +250,45 @@ def test_the_scan_carries_the_date_order_through():
     scan = parse("7/8/2019, 11:36 - Fer: e.com\n")
 
     assert (scan.day_first, scan.assumed) == (True, True)
+
+
+# --- what the real 3309-line export turned up --------------------------------
+
+
+def test_a_percent_encoded_url_is_not_captured_mangled():
+    """Line 398 of the real file. `%2F` leaves its `2F` glued to the host, and
+    `2Fudemycoupons.me` is a domain that does not exist: not a false positive
+    but a link the user did send, saved pointing somewhere else.
+    """
+    assert find_links("https%3A%2F%2Fudemycoupons.me") == []
+
+
+def test_a_percent_encoded_url_is_reported_instead_of_captured_wrong():
+    """A non-capture the user is told about beats a wrong capture: MAYBE still
+    matches the message, so it shows up and gets pasted back by hand once."""
+    scan = parse("18/7/2019, 11:36 - Fer: https%3A%2F%2Fudemycoupons.me\n")
+
+    assert scan.links == []
+    assert scan.suspicious == ["https%3A%2F%2Fudemycoupons.me"]
+
+
+def test_the_tracker_list_of_a_magnet_link_captures_nothing():
+    """Three of the four mangled captures in the real file came from one magnet
+    link's trackers, and there the right answer is to capture nothing. It is
+    also why the percent-encoding is not decoded instead: decoding would turn
+    these into three junk notes.
+    """
+    assert find_links(
+        "magnet:?xt=urn:btih:abc"
+        "&tr=http%3A%2F%2Ftracker.opentrackr.org%3A1337%2Fannounce"
+        "&tr=udp%3A%2F%2Fexplodie.org%3A6969") == []
+
+
+@pytest.mark.parametrize("url", [
+    "https://www.mites.gob.es/ficheros/Guia%20de%20uso.pdf",
+    "https://link.trustwallet.com/open_url?coin_id=60&url=https%3A%2F%2Fapp.uniswap.org",
+])
+def test_percent_encoding_inside_a_real_url_survives_whole(url):
+    """The same export carries both of these, and in both the percent signs are
+    part of what the user sent. The other half of the rule above."""
+    assert find_links(url) == [(url, False)]
