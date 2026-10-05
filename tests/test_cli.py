@@ -683,6 +683,33 @@ def test_an_import_that_lost_some_links_exits_one_and_says_so_on_stdout(
     assert "no space left" in captured.err
 
 
+def test_links_that_fail_for_the_same_reason_are_reported_once(
+        cfg, tmp_path, capsys, monkeypatch):
+    """A whole batch failing the same way is one thing to say, not 1215.
+
+    The spec's "ninguna nota se pudo escribir -> lo dice" means said once: a
+    wall of near-identical lines buries every other line the run printed.
+    """
+    export = tmp_path / "chat.txt"
+    export.write_text("18/7/2019, 11:36 - Fer: https://e.com/a\n"
+                      "19/7/2019, 11:36 - Fer: https://e.com/b\n"
+                      "20/7/2019, 11:36 - Fer: https://e.com/c\n", encoding="utf-8")
+
+    def boom(config, note, language, path=None):
+        raise OSError("no space left on device")
+
+    monkeypatch.setattr("oknowledge.pipeline.write_note", boom)
+
+    assert main(["import", str(export)]) == 1
+
+    err = capsys.readouterr().err
+    assert err.count("no space left on device") == 1
+    assert "3 links" in err
+    # The urls are still all there: they are what the user looks at.
+    for letter in "abc":
+        assert f"https://e.com/{letter}" in err
+
+
 def test_a_dry_run_with_json_is_one_document_without_senders(cfg, tmp_path, capsys):
     export = tmp_path / "chat.txt"
     export.write_text(EXPORT, encoding="utf-8")

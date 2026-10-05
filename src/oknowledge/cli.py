@@ -281,9 +281,36 @@ def _import(cfg, args) -> int:
                   "like it had a link and did not match (see --dry-run)")
     for warning in result.warnings:
         print(f"warning: {_clean(warning)}", file=sys.stderr)
-    for url, why in result.failed:
-        print(f"not saved: {_clean(url)}: {_clean(why)}", file=sys.stderr)
+    _not_saved(result.failed)
     return 1 if result.failed else 0
+
+
+# How many urls a single reason lists before it stops. A batch can fail 1215
+# times for one reason, and nothing is lost by cutting the list: a link with
+# no note is imported again by the next run of the same command.
+SHOWN = 10
+
+
+def _not_saved(failed: list[tuple[str, str]]) -> None:
+    """Report what could not be saved: one entry per reason, not per link.
+
+    The urls are kept -- they are what the user goes looking for -- but an
+    unwritable vault says its one sentence once and lists them underneath,
+    instead of repeating it beside every one of them.
+    """
+    by_reason: dict[str, list[str]] = {}
+    for url, why in failed:
+        by_reason.setdefault(why, []).append(url)
+    for why, urls in by_reason.items():
+        if len(urls) == 1:
+            print(f"not saved: {_clean(urls[0])}: {_clean(why)}", file=sys.stderr)
+            continue
+        print(f"not saved: {_count(len(urls), 'link', 'links')}: {_clean(why)}",
+              file=sys.stderr)
+        for url in urls[:SHOWN]:
+            print(f"  {_clean(url)}", file=sys.stderr)
+        if len(urls) > SHOWN:
+            print(f"  ... and {len(urls) - SHOWN} more", file=sys.stderr)
 
 
 def _dry_run(scan, reading: str) -> None:

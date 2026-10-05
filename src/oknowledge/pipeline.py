@@ -607,6 +607,21 @@ def _record(q: Queue, link: str, status: str, reason: str,
     return []
 
 
+def _once(warnings: list[str], said: set[str], template: str, reason: str) -> None:
+    """Record a kind of trouble the first time it happens, and not again.
+
+    Everything that can break a link's bookkeeping -- an unwritable locks/ or
+    queue/ -- breaks it for every link of the batch, so one warning describes
+    all 1215 of them and 1215 warnings describe nothing. The key is the
+    template and not the finished sentence, because the reason names the file
+    that failed and that is a different file for every link.
+    """
+    if template in said:
+        return
+    said.add(template)
+    warnings.append(template.format(reason=reason))
+
+
 def _reindex(cfg: Config) -> list[str]:
     """Rebuild every index, reporting what it could not write.
 
@@ -728,6 +743,7 @@ def import_links(cfg: Config, items: list[Imported],
     q = queue or Queue()
     started = _now_iso()
     result = ImportResult(found=len(items))
+    said: set[str] = set()          # the kinds of trouble already reported
 
     # One scan, not one per link. If the vault cannot be read there is no way
     # to deduplicate, and writing without deduplicating is the one thing this
@@ -765,7 +781,21 @@ def import_links(cfg: Config, items: list[Imported],
             result.already += 1
             continue
         try:
-            with q.lock(link):
+            with ExitStack() as stack:
+                try:
+                    stack.enter_context(q.lock(link))
+                except Locked:
+                    # Somebody else holds this link and will finish it.
+                    result.already += 1
+                    continue
+                except OSError as error:
+                    # The call add() makes, for the reason add() gives: the
+                    # state tree can be unwritable while the vault -- usually
+                    # on another filesystem -- is fine, and a duplicated note
+                    # is recoverable where a lost link is not. Said once: an
+                    # unwritable locks/ is unwritable for all 1215 links, and
+                    # 1215 copies of one sentence is not a report.
+                    _once(result.warnings, said, NO_LOCK, _typed(error))
                 # The queue as a cheap second index: it closes the window
                 # between the scan above and now, because add() always
                 # enqueues, and it is one JSON file instead of a second vault
@@ -792,20 +822,25 @@ def import_links(cfg: Config, items: list[Imported],
                 # which orphaned() finds and retry() redoes. The other way
                 # round leaves a partial note that no retry can ever reach,
                 # because retry() walks the queue and not the vault.
-                q.enqueue(link, one.url, mode)
+                try:
+                    q.enqueue(link, one.url, mode)
+                except OSError as error:
+                    # The same trade once more, one step on: with no entry no
+                    # retry will ever reach this link, but the note is on disk
+                    # and the user can see it, which is more than refusing to
+                    # write would leave them.
+                    _once(result.warnings, said, NO_ENTRY, _typed(error))
                 write_note(cfg, note, cfg.language)
                 q.set_status(link, "partial", error="imported, not analysed yet",
                              title=note.title)
                 result.saved += 1
-        except Locked:
-            result.already += 1
         except Exception as error:
             # A link that could not be written is reported and the run goes
             # on: 1214 saved and one reported beats 1215 unsaved.
             result.failed.append((one.url, _typed(error)))
 
     if result.saved:
-        result.warnings = _reindex(cfg)        # once, for the batch
+        result.warnings += _reindex(cfg)       # once, for the batch
     return result
 
 

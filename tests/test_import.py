@@ -7,6 +7,8 @@ oknowledge/, it deduplicates, and it leaves a queue entry so retry can finish
 each one.
 """
 
+import os
+
 import pytest
 
 from oknowledge.config import Config
@@ -250,6 +252,49 @@ def test_a_failed_vault_scan_says_how_many_links_it_took_down(cfg, q, monkeypatc
     assert result.saved == 0
     assert len(result.failed) == 1
     assert "none of 2 links" in result.failed[0][1]
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="a read-only directory does not bite as root")
+def test_an_unlockable_state_tree_does_not_cost_the_batch_its_notes(cfg, q):
+    """add() makes the same call for the same reason, and says why in a comment.
+
+    A locks/ left root-owned by one sudo run, or an unmounted XDG_STATE_HOME,
+    is a state tree that cannot be written while the vault -- usually on
+    another filesystem -- is perfectly fine. Giving up mutual exclusion costs
+    at worst a duplicated note, which is recoverable; refusing to write costs
+    the link, which is not.
+    """
+    locks = q.root / "locks"
+    locks.mkdir(parents=True)
+    locks.chmod(0o500)
+    try:
+        result = import_links(cfg, [item(f"https://a{n}.com/x") for n in range(3)],
+                              queue=q)
+    finally:
+        locks.chmod(0o700)
+
+    assert result.saved == 3
+    assert len(list(cfg.links_dir.glob("*.md"))) == 3
+    assert result.failed == []
+    # Once for the batch: the reason is the same for all 1215 links.
+    assert sum("could not be locked" in warning for warning in result.warnings) == 1
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="a read-only directory does not bite as root")
+def test_an_unwritable_queue_does_not_cost_the_batch_its_notes(cfg, q):
+    """The queue is bookkeeping and the note is the durable artifact."""
+    queue_dir = q.dir
+    queue_dir.mkdir(parents=True)
+    queue_dir.chmod(0o500)
+    try:
+        result = import_links(cfg, [item(f"https://a{n}.com/x") for n in range(3)],
+                              queue=q)
+    finally:
+        queue_dir.chmod(0o700)
+
+    assert len(list(cfg.links_dir.glob("*.md"))) == 3
+    assert sum("queue entry could not be written" in warning
+               for warning in result.warnings) == 1
 
 
 def test_a_link_whose_lock_is_held_is_taken_not_lost(cfg, q):
