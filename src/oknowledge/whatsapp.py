@@ -217,9 +217,11 @@ def _has_host(url: str) -> bool:
 
     `https://.` loses its dot to _trim() and leaves `https://`, which is
     truthy: it was captured, and normalize() made it `https:///` -- a note
-    pointing at nothing.
+    pointing at nothing. A scheme followed straight by `/`, `?` or `#` has no
+    host either: `https://?x`, `https://#`.
     """
-    return bool(url.partition("://")[2])
+    rest = url.partition("://")[2]
+    return bool(rest) and rest[0] not in "/?#"
 
 
 def _spans(text: str) -> list[tuple[int, int, str, bool]]:
