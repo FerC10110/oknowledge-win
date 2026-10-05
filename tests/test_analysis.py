@@ -516,6 +516,18 @@ def test_truncation_does_not_leave_a_name_the_web_refuses():
     assert not out.endswith(".")
 
 
+def test_the_web_refuses_every_character_the_index_name_replaces():
+    """Both sides read UNSAFE_IN_A_NAME. This is what makes that one list
+    load-bearing: drop a character from either reader and the web starts
+    accepting a category whose index file would be called something else."""
+    from oknowledge.ai.base import UNSAFE_IN_A_NAME
+    from oknowledge.vault import clean_category
+
+    for char in UNSAFE_IN_A_NAME:
+        assert clean_category(f"a{char}b") is None, f"{char!r} is accepted as a category"
+        assert char not in canonical_category(f"a{char}b", [])
+
+
 def test_a_category_already_in_the_vault_is_still_returned_as_it_is():
     """Deliberately not cleaned: matching a known category must never rename
     what the user already has. Only invented names are constrained."""

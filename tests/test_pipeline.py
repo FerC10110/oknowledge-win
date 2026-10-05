@@ -1258,3 +1258,24 @@ def test_a_cover_replaces_the_old_file_instead_of_writing_into_it(cfg, q, monkey
 
     assert cover.read_bytes() == Bigger.content
     assert cover.stat().st_ino != before, "the bytes went into the file in place"
+
+
+def test_a_cover_does_not_replace_a_link_the_user_made_inside_the_vault(
+        cfg, q, monkeypatch):
+    """The containment check alone would allow this one: the symlink resolves
+    to somewhere inside the folder, and os.replace would put a real file where
+    the user's link was. Links are theirs; we write nothing through them and
+    nothing over them."""
+    extraction(monkeypatch, PAGE)
+    cover_fetches(monkeypatch)
+    link = link_id(normalize("https://arstechnica.com/vpn"))
+    cfg.attachments_dir.mkdir(parents=True, exist_ok=True)
+    real = cfg.attachments_dir / "mi-portada.jpg"
+    real.write_bytes(b"the cover I chose myself")
+    (cfg.attachments_dir / f"{link}.jpg").symlink_to(real)
+
+    result = add(cfg, "https://arstechnica.com/vpn", queue=q)
+
+    assert (cfg.attachments_dir / f"{link}.jpg").is_symlink()
+    assert real.read_bytes() == b"the cover I chose myself"
+    assert read_note(result.path).cover is None
