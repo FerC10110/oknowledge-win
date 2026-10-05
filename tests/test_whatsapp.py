@@ -137,6 +137,9 @@ def test_an_impossible_date_is_skipped_not_fatal():
     ("config.json", []),
     ("version 3.10", []),
     ("fer@gmail.com", []),
+    ("juan.co@gmail.com", []),
+    ("ana.me@x.org", []),
+    ("v1.io2", []),
     ("sudo chkrootkit", []),
     ("11 5555-5555", []),
 ])
@@ -168,6 +171,18 @@ def test_punctuation_stuck_to_the_end_is_not_part_of_the_link(text, expected):
 def test_two_links_in_one_message_are_both_found():
     assert find_links("foo.com, bar.org/x") == [
         ("https://foo.com", True), ("https://bar.org/x", True)]
+
+
+def test_two_full_urls_with_no_space_between_them_are_both_found():
+    assert find_links("https://a.com,https://b.org") == [
+        ("https://a.com", False), ("https://b.org", False)]
+
+
+def test_a_link_that_is_a_prefix_of_another_does_not_corrupt_the_comment():
+    scan = parse("18/7/2019, 11:36 - Fer: foo.com, foo.com/x\n")
+
+    assert [link.comment for link in scan.links] == [",", ","]
+    assert [link.raw for link in scan.links] == ["foo.com", "foo.com/x"]
 
 
 def test_a_bare_domain_inside_a_full_url_is_not_counted_twice():
