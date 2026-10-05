@@ -387,10 +387,23 @@ def test_the_cover_route_refuses_anything_that_is_not_a_known_image(tmp_path, na
     assert cover_for(tmp_path, name).get("/cover/n1").status_code == 404
 
 
+def inside(markup: str, opening: str, closing: str) -> str:
+    """What one element holds, so a test can ask whether `dir` governs it.
+
+    The library card wraps its title in a link to the original site, so the
+    title is no longer the first thing after the heading tag -- but it is
+    still inside the heading that carries dir="auto", which is what decides
+    the direction, descendants included.
+    """
+    start = markup.index(opening) + len(opening)
+    return markup[start:markup.index(closing, start)]
+
+
 def test_titles_summaries_and_snippets_are_direction_neutral(tmp_path):
     _, client = app_with(tmp_path, note("n1", "שלום", summary="مرحبا"))
     home = client.get("/").text
-    assert '<h2 dir="auto">שלום' in home and '<p class="sum" dir="auto">' in home
+    assert "שלום" in inside(home, '<h2 dir="auto">', "</h2>")
+    assert '<p class="sum" dir="auto">' in home
     item = client.get("/item/n1").text
     assert '<h1 dir="auto">שלום' in item and '<div class="summary" dir="auto">' in item
     found = hits(client, "שלום")

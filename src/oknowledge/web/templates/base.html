@@ -6,7 +6,7 @@
   <title>{% block title %}oknowledge{% endblock %}</title>
   <link rel="stylesheet" href="/static/style.css">
 </head>
-<body>
+<body class="{% block body_class %}{% endblock %}" data-close="{{ t('Close') }}">
   <header>
     <a class="brand" href="/">oknowledge</a>
     <form action="/search" method="get" role="search">
@@ -23,5 +23,6 @@
   {% endif %}
   {% if notice %}<p class="notice">{{ notice }}</p>{% endif %}
   <main>{% block main %}{% endblock %}</main>
+  {% block scripts %}{% endblock %}
 </body>
 </html>

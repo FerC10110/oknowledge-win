@@ -166,6 +166,17 @@ def plain(text: str) -> str:
     return line.strip()
 
 
+def is_web_url(url: str) -> bool:
+    """Whether this is a URL we are willing to put in an href.
+
+    `url` is frontmatter, so it is whatever the user last typed there, and a
+    card is rendered once per note on a page of a hundred. Anything that is
+    not http(s) -- javascript:, data:, file: -- is shown as text instead:
+    refusing to link it must not mean hiding it, because a link is never lost.
+    """
+    return str(url).lower().startswith(("http://", "https://"))
+
+
 def page_number(raw: str, pages: int) -> int:
     try:
         number = int(raw)
@@ -284,6 +295,7 @@ def create_app(cfg: Config) -> FastAPI:
     templates = Jinja2Templates(directory=str(WEB.joinpath("templates")))
     templates.env.filters["plain"] = plain
     templates.env.filters["slug"] = lambda value: quote(str(value), safe="")
+    templates.env.tests["web_url"] = is_web_url
     app.mount("/static", StaticFiles(directory=str(WEB.joinpath("static"))), name="static")
 
     def page(request: Request, name: str, status_code: int = 200, **context) -> HTMLResponse:
@@ -314,7 +326,7 @@ def create_app(cfg: Config) -> FastAPI:
     @app.exception_handler(StarletteHTTPException)
     async def not_found(request: Request, exc: StarletteHTTPException):
         path = request.url.path
-        if exc.status_code == 404 and not path.startswith(("/cover/", "/static/")):
+        if exc.status_code == 404 and not path.startswith(("/cover/", "/static/", "/embed/")):
             return page(request, "notfound.html", status_code=404)
         return await http_exception_handler(request, exc)
 
@@ -351,6 +363,22 @@ def create_app(cfg: Config) -> FastAPI:
             raise HTTPException(status_code=404, detail="no such link")
         # The index holds list views without bodies; this note is read fresh.
         return page(request, "item.html", note=read_full(entry))
+
+    @app.get("/embed/{link_id}", response_class=HTMLResponse)
+    def embed(request: Request, link_id: str):
+        """One note with no page around it: what a card's dialog loads.
+
+        Read-only on purpose. Every write route checks the request's origin,
+        and a form inside a fragment fetched by script is the exact shape
+        that check exists for -- so the dialog reads and the item page writes.
+        """
+        library.refresh()
+        if library.error is not None:
+            return page(request, "embed.html")
+        entry = library.entry(link_id)
+        if entry is None:
+            raise HTTPException(status_code=404, detail="no such link")
+        return page(request, "embed.html", note=read_full(entry))
 
     @app.get("/cover/{link_id}")
     def cover(link_id: str):

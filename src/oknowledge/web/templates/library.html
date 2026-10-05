@@ -1,5 +1,7 @@
 {% extends "base.html" %}
 {% block title %}{% if query %}{{ query }} - oknowledge{% else %}oknowledge{% endif %}{% endblock %}
+{% block body_class %}{% if notes is not none %}wide{% endif %}{% endblock %}
+{% block scripts %}<script src="/static/popup.js" defer></script>{% endblock %}
 {% block main %}
   {% if notes is not none %}
     <div class="chips">
@@ -18,14 +20,45 @@
     {% if not notes %}<p class="empty">{% if filtered %}{{ t('Nothing in this category') if category else t('Nothing matches that filter') }}{% else %}{{ t('Nothing saved yet') }}{% endif %}</p>{% endif %}
     <ul class="grid">
       {% for note in notes %}
+        {# Two destinations, so two kinds of link and no nesting: the body and
+           the cover open the note here, the title and the site strip leave
+           for the original. [data-popup] is picked up by popup.js; the href
+           beside it is what happens without JavaScript. #}
         <li class="card{% if note.status != 'ok' %} partial{% endif %}">
-          <a href="/item/{{ note.id|slug }}">
-            {% if note.cover %}<img src="/cover/{{ note.id|slug }}" alt="" loading="lazy">{% endif %}
-            <h2 dir="auto">{{ note.title }}</h2>
-            <p class="meta"><span class="cat">{{ note.category }}</span> · {{ note.saved }}</p>
-            <p class="sum" dir="auto">{{ note.summary|plain }}</p>
+          {% if note.cover %}
+            <a class="shot" href="/item/{{ note.id|slug }}" data-popup="/embed/{{ note.id|slug }}"
+               tabindex="-1" aria-hidden="true">
+              <img src="/cover/{{ note.id|slug }}" alt="" loading="lazy">
+            </a>
+          {% endif %}
+          <div class="pad">
+            <h2 dir="auto">
+              {% if note.url is web_url %}
+                <a href="{{ note.url }}" target="_blank" rel="noreferrer">{{ note.title }}</a>
+              {% else %}
+                {{ note.title }}
+              {% endif %}
+            </h2>
+            <a class="body" href="/item/{{ note.id|slug }}" data-popup="/embed/{{ note.id|slug }}">
+              <p class="meta"><span class="cat">{{ note.category }}</span> · {{ note.saved }}</p>
+              <p class="sum" dir="auto">{{ note.summary|plain }}</p>
+            </a>
             <p class="tags">{% for tag in note.tags %}<span>#{{ tag }}</span>{% endfor %}</p>
-          </a>
+            {% if note.source %}
+              <p class="site">
+                <img src="/icon/{{ note.source|slug }}" alt="" width="16" height="16" loading="lazy">
+                {% if note.url is web_url %}
+                  <a href="{{ note.url }}" target="_blank" rel="noreferrer">{{ note.source }}</a>
+                {% else %}
+                  <span>{{ note.source }}</span>
+                {% endif %}
+              </p>
+            {% endif %}
+            {% if note.url is not web_url %}
+              {# Refusing to link it must not mean hiding it. #}
+              <p class="meta raw" dir="auto">{{ note.url }}</p>
+            {% endif %}
+          </div>
         </li>
       {% endfor %}
     </ul>

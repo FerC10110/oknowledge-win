@@ -11,7 +11,7 @@
       <h2>{{ t('Key points') }}</h2>
       <ul>{% for point in note.points %}<li>{{ point }}</li>{% endfor %}</ul>
     {% endif %}
-    {% if note.url.lower().startswith(('http://', 'https://')) %}
+    {% if note.url is web_url %}
       <p><a class="button" href="{{ note.url }}" rel="noreferrer">{{ t('Open original') }}</a></p>
     {% else %}
       <p class="meta">{{ note.url }}</p>

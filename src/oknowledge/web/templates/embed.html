@@ -1,0 +1,26 @@
+{# One note, with no page around it: what a card's dialog loads.
+
+   This template does not extend base.html on purpose -- it is a fragment,
+   not a page, and the header, the search box and the nav are already on the
+   page that opened it. Nothing here writes: see the /embed route. #}
+{% if note %}
+  <article class="item embed">
+    <p class="meta"><span class="cat">{{ note.category }}</span> · {{ note.source }} · {{ note.saved }}
+      {% if note.status != 'ok' %}<span class="warn">{{ t('Incomplete') }}</span>{% endif %}</p>
+    <h1 dir="auto">{{ note.title }}</h1>
+    <p class="tags">{% for tag in note.tags %}<span>#{{ tag }}</span>{% endfor %}</p>
+    <div class="summary" dir="auto">{{ note.summary }}</div>
+    {% if note.points %}
+      <h2>{{ t('Key points') }}</h2>
+      <ul>{% for point in note.points %}<li>{{ point }}</li>{% endfor %}</ul>
+    {% endif %}
+    <p class="actions">
+      <a class="button" href="/item/{{ note.id|slug }}">{{ t('Open the note') }}</a>
+      {% if note.url is web_url %}
+        <a class="button" href="{{ note.url }}" target="_blank" rel="noreferrer">{{ t('Open original') }}</a>
+      {% endif %}
+    </p>
+  </article>
+{% else %}
+  <p class="empty">{{ error or t('No results') }}</p>
+{% endif %}

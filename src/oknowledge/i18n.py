@@ -27,6 +27,8 @@ STRINGS = {
         "No results": "Sin resultados",
         "Nothing saved yet": "Todavía no guardaste nada",
         "Open original": "Abrir el original",
+        "Open the note": "Abrir la nota",
+        "Close": "Cerrar",
         "Key points": "Puntos clave",
         "Original content": "Contenido original",
         "Saved": "Guardado",
