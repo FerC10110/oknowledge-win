@@ -672,8 +672,8 @@ def _reconcile(cfg: Config, q: Queue, entry: QueueEntry) -> Result | None:
     stays pending and orphaned() offers it to every retry from then on. Days
     later the user has edited that note by hand. A retry whose extraction and
     analysis both succeed would write a fresh note straight over it: _process()
-    computes `kept` for exactly this, but only _give_up() ever reads it, so the
-    guard covers the failure paths and not the one that writes.
+    computes `finished` for exactly this, but only _give_up() ever reads it, so
+    the guard covers the failure paths and not the one that writes.
 
     So: the queue is bookkeeping and the note is the durable artifact, and when
     they disagree while the note is complete, the bookkeeping is what is wrong.
