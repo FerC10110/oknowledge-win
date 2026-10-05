@@ -77,12 +77,23 @@ class ApiEngine:
                 text = data["content"][0]["text"]
             else:
                 text = data["choices"][0]["message"]["content"]
+        # Every branch below passes its text through _redact, including the
+        # ones whose message looks safe today: the key can arrive in the URL
+        # (a gateway base_url with ?key=), and from an EngineError it reaches
+        # the queue entry, the CLI's stderr and the widget's toast.
         except EngineError:
             raise
         except httpx.TimeoutException as error:
-            raise EngineError(f"{self.provider} timed out after {self.timeout}s") from error
+            detail = self._redact(str(error), secret)
+            raise EngineError(
+                f"{self.provider} timed out after {self.timeout}s"
+                + (f": {detail}" if detail else "")
+            ) from error
         except (KeyError, IndexError, TypeError, ValueError) as error:
-            raise EngineError(f"{self.provider} sent an unexpected reply: {error!r}") from error
+            raise EngineError(
+                f"{self.provider} sent an unexpected reply: "
+                f"{self._redact(repr(error), secret)}"
+            ) from error
         except Exception as error:
             raise EngineError(
                 f"{self.provider} failed: {self._redact(str(error), secret)}"

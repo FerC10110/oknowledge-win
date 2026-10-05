@@ -111,14 +111,32 @@ def normalize_tags(tags) -> list[str]:
     return out[:MAX_TAGS]
 
 
+UNSAFE_IN_A_NAME = '\\/:*?"<>|'
+"""The characters an index file name cannot hold.
+
+vault._index_name() replaces them and vault.clean_category() refuses a name
+that still has any, so a category the model invents has to be free of them
+too -- otherwise the product generates categories the product then refuses to
+let the user edit. One list, read from both sides.
+"""
+
+
 def _clean_category(category: str) -> str:
-    """Path separators and control characters become spaces; whitespace collapses."""
+    """Whatever the model wrote, as a name both the vault and the web accept.
+
+    Control characters and the characters a file name cannot hold become
+    spaces, whitespace collapses, and dots and spaces go from both ends: ".."
+    and "../x" must not survive as a category, and a trailing dot ("Misc.")
+    would be stored happily and then refused on the round-trip.
+    """
     spaced = "".join(
-        " " if char in "/\\" or unicodedata.category(char).startswith("C") else char
+        " " if char in UNSAFE_IN_A_NAME or unicodedata.category(char).startswith("C")
+        else char
         for char in category
     )
-    # Leading dots go too: "..", "../x" must not survive as a category.
-    return " ".join(spaced.split()).lstrip(". ")[:MAX_CATEGORY_LENGTH].strip()
+    # The cut can expose a new trailing dot or space, so the last strip is
+    # after it, not before.
+    return " ".join(spaced.split()).strip(". ")[:MAX_CATEGORY_LENGTH].strip(". ")
 
 
 def _first_segment(category: str) -> str:

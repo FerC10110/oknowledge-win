@@ -116,3 +116,54 @@ def test_without_a_path_it_writes_the_shared_file(tmp_path, monkeypatch):
     monkeypatch.setattr(i18n, "SHARED_FILE", path)
     i18n.set_ui_language("es")
     assert json.loads(path.read_text(encoding="utf-8"))["language"] == "es"
+
+
+# --- one substitution pass, like plugin/I18n.js (F8) ------------------------
+
+def test_a_marker_inside_an_argument_is_not_substituted_again():
+    """plugin/I18n.js:55 documents avoiding exactly this, and the two
+    implementations of the same function must not disagree about a hazard one
+    of them names."""
+    t = i18n.translator("en")
+    assert t("%1 and %2", "%2", "x") == "%2 and x"
+
+
+def test_a_marker_with_no_argument_is_left_alone():
+    t = i18n.translator("en")
+    assert t("%1 of %2", 3) == "3 of %2"
+    assert t("%0 is not a marker", "x") == "%0 is not a marker"
+
+
+def test_the_python_and_the_javascript_substitute_the_same_way():
+    """The cases that tell a one-pass implementation from a loop, asserted
+    against the table in plugin/I18n.js by hand -- node runs the other half."""
+    t = i18n.translator("en")
+    assert t("%1", "100%") == "100%"
+    assert t("%1 %2 %1", "a", "b") == "a b a"
+    assert t("%10 links", 1) == "%10 links"
+
+
+# --- nothing in the table is dead (F10) -------------------------------------
+
+def test_every_translated_string_is_one_the_code_asks_for():
+    """A key nobody passes to t() is a translation that can rot without
+    anybody noticing. The English key is the lookup, so it has to appear
+    somewhere a caller can produce it.
+
+    Whitespace, quotes and backslashes come out of both sides first, so a
+    notice written as four concatenated source lines still matches the one
+    string it builds.
+    """
+    import pathlib
+    import re
+
+    def squeezed(text):
+        return re.sub(r"""[\s"'\\]""", "", text)
+
+    root = pathlib.Path(i18n.__file__).resolve().parent
+    files = [p for p in [*root.rglob("*.py"), *root.rglob("*.html")]
+             if p.name != "i18n.py"]
+    blob = squeezed("\n".join(p.read_text(encoding="utf-8") for p in files))
+
+    unused = [key for key in i18n.STRINGS["es"] if squeezed(key) not in blob]
+    assert unused == [], f"declared and never asked for: {unused}"

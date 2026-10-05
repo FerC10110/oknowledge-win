@@ -9,6 +9,7 @@ language the AI writes summaries in (`[ai] language`).
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 from .atomic import atomic_write
@@ -25,13 +26,11 @@ STRINGS = {
         "Settings": "Ajustes",
         "No results": "Sin resultados",
         "Nothing saved yet": "Todavía no guardaste nada",
-        "%1 links": "%1 links",
         "Open original": "Abrir el original",
         "Key points": "Puntos clave",
         "Original content": "Contenido original",
         "Saved": "Guardado",
         "Incomplete": "Incompleto",
-        "Retry": "Reintentar",
         "Delete": "Borrar",
         "Reprocess": "Reprocesar",
         "Edit tags": "Editar etiquetas",
@@ -39,7 +38,6 @@ STRINGS = {
         "Rename": "Renombrar",
         "Merge into": "Fusionar con",
         "Save": "Guardar",
-        "Cancel": "Cancelar",
         "Engines": "Motores",
         "Interface language": "Idioma de la interfaz",
         "Summary language": "Idioma de los resúmenes",
@@ -188,8 +186,15 @@ def translator(language: str):
 
     def t(text: str, *args) -> str:
         out = table.get(text, text)
-        for n, value in enumerate(args, start=1):
-            out = out.replace(f"%{n}", str(value))
-        return out
+
+        def value(match: re.Match) -> str:
+            n = int(match.group(1))
+            if n == 0 or n > len(args):
+                return match.group(0)        # not a marker we were given
+            return str(args[n - 1])
+
+        # One pass, like plugin/I18n.js: a loop would re-scan its own output
+        # and substitute a marker that arrived inside an argument.
+        return re.sub(r"%(\d+)", value, out)
 
     return t

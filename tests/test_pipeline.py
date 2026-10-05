@@ -11,7 +11,7 @@ from oknowledge.extract import Unreadable
 from oknowledge.model import Extracted
 from oknowledge.pipeline import add, retry
 from oknowledge.queue import Locked, Queue, state_dir
-from oknowledge.urls import link_id
+from oknowledge.urls import link_id, normalize
 from oknowledge.vault import all_notes, index_path, read_note
 
 ANSWER = json.dumps({
@@ -1169,3 +1169,72 @@ def test_a_link_somebody_else_holds_is_left_for_them(cfg, q, monkeypatch):
     assert [r.status for r in results] == ["pending"]
     assert saved.path.read_text(encoding="utf-8") == mine
     assert q.get(saved.id).status == "failed"      # not settled by somebody else
+
+
+# --- the cover is a write into the vault, so it is contained like one (F1) ---
+# download_cover was the one write that did not pass ensure_inside_root, and
+# write_bytes follows symlinks: an attachments/ symlinked out of the vault put
+# the file outside the managed folder, and a symlink named <link_id>.jpg let a
+# downloaded image replace whatever it pointed at.
+
+class Jpeg:
+    content = b"\x89PNG not really"
+    content_type = "image/jpeg"
+
+
+def cover_fetches(monkeypatch):
+    monkeypatch.setattr("oknowledge.pipeline.fetch", lambda url, **kw: Jpeg())
+
+
+def test_a_cover_is_not_written_through_a_symlinked_attachments_folder(
+        cfg, q, monkeypatch, tmp_path):
+    extraction(monkeypatch, PAGE)
+    cover_fetches(monkeypatch)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    cfg.attachments_dir.parent.mkdir(parents=True, exist_ok=True)
+    cfg.attachments_dir.symlink_to(outside, target_is_directory=True)
+
+    result = add(cfg, "https://arstechnica.com/vpn", queue=q)
+
+    assert list(outside.iterdir()) == [], "the cover was written outside the vault"
+    assert read_note(result.path).cover is None
+    assert result.status == "ok"             # a refused cover never costs the note
+
+
+def test_a_cover_does_not_replace_the_file_a_symlink_points_at(
+        cfg, q, monkeypatch, tmp_path):
+    extraction(monkeypatch, PAGE)
+    cover_fetches(monkeypatch)
+    photos = tmp_path / "photos"
+    photos.mkdir()
+    family = photos / "family.jpg"
+    family.write_bytes(b"the picture of my family")
+    link = link_id(normalize("https://arstechnica.com/vpn"))
+    cfg.attachments_dir.mkdir(parents=True, exist_ok=True)
+    (cfg.attachments_dir / f"{link}.jpg").symlink_to(family)
+
+    result = add(cfg, "https://arstechnica.com/vpn", queue=q)
+
+    assert family.read_bytes() == b"the picture of my family"
+    assert read_note(result.path).cover is None
+    assert result.status == "ok"
+
+
+def test_a_cover_still_lands_when_nothing_is_symlinked(cfg, q, monkeypatch):
+    """The guard must not cost the normal case."""
+    extraction(monkeypatch, PAGE)
+    cover_fetches(monkeypatch)
+
+    result = add(cfg, "https://arstechnica.com/vpn", queue=q)
+    note = read_note(result.path)
+
+    assert note.cover == f"../attachments/{note.id}.jpg"
+    assert (cfg.attachments_dir / f"{note.id}.jpg").read_bytes() == Jpeg.content
+
+
+def test_a_cover_leaves_no_temporary_file_behind(cfg, q, monkeypatch):
+    extraction(monkeypatch, PAGE)
+    cover_fetches(monkeypatch)
+    add(cfg, "https://arstechnica.com/vpn", queue=q)
+    assert [p.name for p in cfg.attachments_dir.iterdir() if p.name.startswith(".")] == []

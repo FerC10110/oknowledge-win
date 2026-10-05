@@ -543,3 +543,77 @@ def test_a_failing_spawn_is_an_engine_error(monkeypatch):
     monkeypatch.setattr("subprocess.Popen", denied)
     with pytest.raises(EngineError, match="could not be started.*Permission denied"):
         ensure_running("http://localhost:11434")
+
+
+# --- the key is redacted on every branch, not on two of four (F6) -----------
+# _redact guarded `except Exception` and the server's message. The timeout and
+# unexpected-reply branches did not, and both can carry the URL -- which is
+# where a gateway credential lives when base_url takes a ?key=.
+
+SECRET = "sk-live-9f2a1c4b8e07"
+GATEWAY = f"https://gw.example/v1/chat?key={SECRET}"
+
+
+def api(monkeypatch, raises=None, response=None, **over):
+    monkeypatch.setenv("MY_KEY", SECRET)
+
+    def post(url, headers=None, json=None, timeout=None):
+        if raises is not None:
+            raise raises
+        return response
+
+    monkeypatch.setattr("httpx.post", post)
+    options = dict(provider="openai", model="m", key_env="MY_KEY", base_url=GATEWAY)
+    options.update(over)
+    return ApiEngine(**options)
+
+
+def test_a_timeout_never_echoes_the_key(monkeypatch):
+    engine = api(monkeypatch, raises=httpx.ReadTimeout(f"timed out reading {GATEWAY}"))
+    with pytest.raises(EngineError) as error:
+        engine.complete("hola")
+    assert SECRET not in str(error.value)
+    assert "timed out" in str(error.value)
+
+
+def test_a_timeout_says_what_httpx_said(monkeypatch):
+    """Redacting is only half of it: the message has to be worth reading, or
+    nobody can tell a wrong host from a slow model."""
+    engine = api(monkeypatch, raises=httpx.ConnectTimeout("connection attempt failed"))
+    with pytest.raises(EngineError, match="connection attempt failed"):
+        engine.complete("hola")
+
+
+def test_an_unexpected_reply_never_echoes_the_key(monkeypatch):
+    """httpx raises ValueError subclasses for a URL it cannot parse, and that
+    branch repr()s the error straight into the message."""
+    engine = api(monkeypatch, raises=ValueError(f"Invalid IPv6 URL {GATEWAY}"))
+    with pytest.raises(EngineError) as error:
+        engine.complete("hola")
+    assert SECRET not in str(error.value)
+    assert "unexpected reply" in str(error.value)
+
+
+def test_a_json_reply_in_the_wrong_shape_never_echoes_the_key(monkeypatch):
+    engine = api(monkeypatch, response=Response({"oops": SECRET}))
+    with pytest.raises(EngineError) as error:
+        engine.complete("hola")
+    assert SECRET not in str(error.value)
+
+
+def test_every_error_branch_of_the_api_engine_is_redacted(monkeypatch):
+    """The finding was not one leak, it was a guard applied on some paths. So
+    the property is asserted over all four branches at once: whatever the
+    failure, the key does not come out."""
+    cases = {
+        "server said no": dict(response=Response({"error": f"bad key {SECRET}"}, status=401)),
+        "timed out": dict(raises=httpx.ReadTimeout(GATEWAY)),
+        "bad shape": dict(raises=ValueError(GATEWAY)),
+        "anything else": dict(raises=httpx.ConnectError(GATEWAY)),
+    }
+    for name, how in cases.items():
+        engine = api(monkeypatch, **how)
+        with pytest.raises(EngineError) as error:
+            engine.complete("hola")
+        assert SECRET not in str(error.value), f"the key leaked when {name}"
+        assert "***" in str(error.value), f"nothing was redacted when {name}"

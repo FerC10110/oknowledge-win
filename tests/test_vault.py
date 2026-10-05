@@ -289,3 +289,43 @@ def test_new_notes_honor_the_umask(tmp_path):
     finally:
         os.umask(old)
     assert path.stat().st_mode & 0o777 == 0o600
+
+
+# --- the note is at least as durable as the entry that describes it (F3) -----
+# queue._write passes fsync_dir=True; write_note did not. A power cut between
+# the two could leave a durable `ok` entry for a note whose directory entry
+# never reached the disk -- and an `ok` entry is in neither unfinished() nor
+# orphaned(), so nothing would ever look at that link again.
+
+def _synced_kinds(monkeypatch):
+    import os
+    import stat as stat_module
+
+    synced = []
+    real = os.fsync
+
+    def watched(fd):
+        synced.append(stat_module.S_ISDIR(os.fstat(fd).st_mode))
+        return real(fd)
+
+    monkeypatch.setattr(os, "fsync", watched)
+    return synced
+
+
+def test_a_notes_directory_entry_is_synced(tmp_path, monkeypatch):
+    cfg = make_config(tmp_path)
+    synced = _synced_kinds(monkeypatch)
+
+    write_note(cfg, make_note(), "es")
+
+    assert any(synced), "the note's directory was not synced"
+
+
+def test_a_note_is_flushed_and_so_is_its_directory(tmp_path, monkeypatch):
+    """Both halves: the bytes of the note and the name that points at them."""
+    cfg = make_config(tmp_path)
+    synced = _synced_kinds(monkeypatch)
+
+    write_note(cfg, make_note(), "es")
+
+    assert True in synced and False in synced      # a directory and a file

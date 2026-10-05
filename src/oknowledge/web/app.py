@@ -53,9 +53,10 @@ NOTICES = {
                "You can restore it from Obsidian.",
     "queued": "Re-running the analysis. The note stays pending until it finishes.",
     # The rule is spelled out, characters and all, because the field arrives
-    # pre-filled with the value already saved: a user whose AI-written category
-    # is "Misc." will click Save on it and has to be told the real reason.
-    # It has to say what vault.clean_category() enforces, no less.
+    # pre-filled with the value already saved: a user whose category is "Misc."
+    # -- hand-written, or AI-written before ai.base stopped inventing those --
+    # will click Save on it and has to be told the real reason. It has to say
+    # what vault.clean_category() enforces, no less.
     "bad-category": 'That name cannot be used as a category: at most 80 '
                     'characters, no dots at either end, no control characters, '
                     'and none of \\ / : * ? " < > |',
@@ -423,7 +424,9 @@ def create_app(cfg: Config) -> FastAPI:
 
     @app.post("/item/{link_id}/reprocess")
     def reprocess(background: BackgroundTasks, link_id: str, engine: str = Form("")):
-        note = library.by_id(link_id)
+        library.refresh()                 # a note deleted from Obsidian since the
+        note = library.by_id(link_id)     # page was drawn must not be rewritten
+
         if note is None:
             raise HTTPException(status_code=404, detail="no such link")
         name = engine.strip() or None
@@ -460,7 +463,12 @@ def create_app(cfg: Config) -> FastAPI:
             log.warning("the vault could not be written: %s", error)
             return see_other("/categories", notice="write-failed")
         library.refresh()
-        if stale:
+        if stale and result.failed and not result.moved:
+            # A vault that cannot be written fails every note AND the rebuild.
+            # "Saved, but the indexes..." would be a sentence about a write
+            # that did not happen: say what landed, which is nothing.
+            code = "write-failed"
+        elif stale:
             # The counts lose their notice here. What the user has to know is
             # that the notes moved and the indexes did not follow.
             code = "indexes-stale"

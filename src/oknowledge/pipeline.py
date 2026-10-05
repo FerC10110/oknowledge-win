@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import datetime as dt
 import os
+import secrets
 from contextlib import ExitStack
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -137,6 +138,12 @@ def download_cover(cfg: Config, url: str | None, link: str) -> str | None:
     Catches everything on purpose. The cover is decoration and it is fetched
     *after* the analysis succeeded, so a full disk or a surprise from httpx
     here would otherwise throw away a note that was ready to be written.
+
+    It is still a write into the vault, so it passes the same containment rule
+    as every other one. write_bytes() follows symlinks: an attachments/ that
+    the user symlinked elsewhere -- an ordinary Obsidian habit -- would put the
+    file outside the managed folder, and a symlink named <link_id>.jpg would
+    let the download replace whatever it points at.
     """
     if not url:
         return None
@@ -145,8 +152,19 @@ def download_cover(cfg: Config, url: str | None, link: str) -> str | None:
         suffix = EXTENSIONS.get(got.content_type.split(";")[0].strip().lower())
         if suffix is None:
             return None                      # not an image: an error page, most likely
-        cfg.attachments_dir.mkdir(parents=True, exist_ok=True)
-        (cfg.attachments_dir / f"{link}{suffix}").write_bytes(got.content)
+        wanted = cfg.attachments_dir / f"{link}{suffix}"
+        if wanted.is_symlink():
+            return None                      # never write through somebody's link
+        target = ensure_inside_root(cfg, wanted)        # location first, as everywhere
+        target.parent.mkdir(parents=True, exist_ok=True)
+        # Temp file plus os.replace, like every other write here: a cover the
+        # note already points at is never left half overwritten.
+        tmp = target.parent / f".oknowledge-{secrets.token_hex(8)}.tmp"
+        try:
+            tmp.write_bytes(got.content)
+            os.replace(tmp, target)
+        finally:
+            tmp.unlink(missing_ok=True)
     except Exception:
         return None
     return f"../attachments/{link}{suffix}"

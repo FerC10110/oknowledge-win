@@ -8,6 +8,7 @@ preference file other plugins write to.
 """
 
 import json
+import os
 import tomllib
 
 import pytest
@@ -529,6 +530,7 @@ def test_the_refusal_names_every_character_it_refuses():
 
 # --- a write that cannot happen says so (m3) --------------------------------
 
+@pytest.mark.skipif(os.geteuid() == 0, reason="a folder we cannot write does not bite as root")
 def test_a_vault_that_cannot_be_written_says_so(setup):
     cfg, client = setup
     cfg.links_dir.chmod(0o500)
@@ -548,6 +550,7 @@ def test_a_trash_folder_that_cannot_be_made_says_so(setup):
     assert find_note(cfg, "a1") is not None
 
 
+@pytest.mark.skipif(os.geteuid() == 0, reason="a folder we cannot write does not bite as root")
 def test_settings_that_cannot_be_saved_say_so(setup, config_path):
     _, client = setup
     config_path.parent.mkdir(parents=True, exist_ok=True)
@@ -894,7 +897,12 @@ def test_an_unknown_link_leaves_no_lock_behind(setup, tmp_path, path, data):
     _, client = setup
     assert client.post(path, data=data).status_code == 404
     locks = tmp_path / "state" / "oknowledge" / "locks"
-    assert sorted(p.name for p in locks.glob("*")) == [] if locks.is_dir() else True
+    # Two plain assertions, in this order: the folder is not made, and if some
+    # other caller ever makes it, it still holds nothing. (Written as one
+    # conditional expression this read as `assert True` on the happy path --
+    # it did catch its regression, but only by accident of which came first.)
+    assert not locks.exists()
+    assert [p.name for p in locks.glob("*")] == []
 
 
 # --- the coverage test watches every unsafe method (L3) ---------------------
@@ -1015,3 +1023,65 @@ def test_what_the_web_saves_is_what_the_cli_then_reads(tmp_path, monkeypatch):
     assert reloaded.language == "en"
     assert reloaded.default_content == "summary"
     assert reloaded.source == chosen
+
+
+# --- a rename that moved nothing does not report a save (F2) ----------------
+# `stale` was consulted first and `result.failed` only afterwards, so a vault
+# that cannot be written at all reported "Saved, but the indexes could not be
+# rebuilt" for zero notes moved. This is the Edited(notice, landed) lesson --
+# say what landed, not what the first flag suggests -- carried into rename.
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="a read-only folder does not bite as root")
+def test_a_rename_that_moved_nothing_does_not_say_it_saved(setup, monkeypatch):
+    cfg, client = setup
+    break_reindex(monkeypatch)
+    cfg.links_dir.chmod(0o500)
+    try:
+        body = client.post("/categories/rename",
+                           data={"old": "Networking", "new": "Redes"}).text
+    finally:
+        cfg.links_dir.chmod(0o700)
+
+    assert find_note(cfg, "a1")[1].category == "Networking"   # nothing moved
+    assert "could not be written" in body
+    assert "Saved" not in body
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="a read-only folder does not bite as root")
+def test_a_rename_that_moved_some_notes_still_reports_the_stale_indexes(
+        setup, tmp_path, monkeypatch):
+    """The other side of the same branch: when something did move, the user has
+    to hear that it moved and that the indexes did not follow."""
+    cfg, client = setup
+    break_reindex(monkeypatch)
+
+    body = client.post("/categories/rename",
+                       data={"old": "Networking", "new": "Redes"}).text
+
+    assert find_note(cfg, "a1")[1].category == "Redes"
+    assert "indexes" in body
+
+
+# --- reprocess reads the vault as it is now, not as the page remembers (F4) --
+
+def test_reprocess_of_a_note_deleted_since_the_last_refresh_is_a_404(setup, monkeypatch):
+    cfg, client = setup
+    monkeypatch.setattr("oknowledge.web.app.add_link",
+                        lambda *args, **kwargs: pytest.fail("the note is gone"))
+    client.get("/item/a1")                      # the library is warm
+    find_note(cfg, "a1")[0].unlink()            # deleted from Obsidian
+
+    assert client.post("/item/a1/reprocess").status_code == 404
+
+
+def test_reprocess_sees_a_note_that_appeared_since_the_last_refresh(setup, monkeypatch):
+    """Refreshing has to be a refresh, not a cache reset that loses nothing."""
+    cfg, client = setup
+    calls = []
+    monkeypatch.setattr("oknowledge.web.app.add_link",
+                        lambda config, url, **kwargs: calls.append(url))
+    client.get("/")
+    write_note(cfg, note("c3", "Nextcloud", "Redes"), "es")
+
+    assert client.post("/item/c3/reprocess", follow_redirects=False).status_code == 303
+    assert calls == ["https://e.com/c3"]

@@ -23,7 +23,7 @@ from pathlib import Path
 
 import yaml
 
-from .ai.base import MAX_CATEGORY_LENGTH, normalize_tags
+from .ai.base import MAX_CATEGORY_LENGTH, UNSAFE_IN_A_NAME, normalize_tags
 from .atomic import atomic_write
 from .config import Config
 from .model import Note
@@ -260,7 +260,11 @@ def write_note(cfg: Config, note: Note, language: str, path: Path | None = None)
     if resolved.exists() and read_front(resolved) is None:
         raise ProtectedNote(f"refusing to overwrite a file without the marker: {target}")
     resolved.parent.mkdir(parents=True, exist_ok=True)
-    atomic_write(resolved, render(note, language))
+    # fsync_dir, like the queue entry that describes this note: the entry must
+    # never be the more durable of the two. An `ok` entry whose note did not
+    # survive a power cut is in neither unfinished() nor orphaned(), so nothing
+    # would ever look at that link again.
+    atomic_write(resolved, render(note, language), fsync_dir=True)
     return resolved
 
 
@@ -355,7 +359,9 @@ def categories(cfg: Config) -> dict[str, int]:
 
 
 def _index_name(category: str) -> str:
-    return re.sub(r"[\\/:*?\"<>|]+", "-", category).strip(" .")
+    # The same list ai.base._clean_category() cleans against, so what the
+    # model invents and what an index file can be called cannot drift apart.
+    return re.sub(f"[{re.escape(UNSAFE_IN_A_NAME)}]+", "-", category).strip(" .")
 
 
 def index_path(cfg: Config, category: str) -> Path:

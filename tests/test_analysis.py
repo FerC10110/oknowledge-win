@@ -460,3 +460,64 @@ def test_the_fake_answer_helper_is_valid_and_overridable():
     custom = FakeEngine.answer(category="Redes", tags=["x"])
     assert analyze(FakeEngine([custom]), "t", META, [], "es").tags == ["x"]
     assert json.loads(FakeEngine.answer(points=None))["points"] is None
+
+
+# --- what the model invents, the web can edit (F11) -------------------------
+# _clean_category stripped leading dots but not trailing ones, and left
+# : * ? " < > | alone, so the AI could store "Misc." or "Q&A: tips" -- names
+# vault.clean_category() then refuses, because they are not fixed points of
+# the index file name. The product generated categories you could not edit in
+# the product.
+
+NASTY = [
+    "Misc.",
+    "Varios...",
+    "Q&A: tips",
+    "¿Qué leer?",
+    'Libros "buenos"',
+    "Ciencia ficción*",
+    "a|b",
+    "<html>",
+    "C:\\Users\\fer",
+    "../Redes/VPN",
+    " . ",
+    "a" * 200 + ".",
+    "x" * 79 + " y.",
+    "Notas…",
+    "Redes\ny\x00VPN",
+]
+
+
+def test_a_category_the_model_invents_is_one_the_web_accepts():
+    """The property, over every shape I could think of: canonical_category's
+    answer always survives vault.clean_category() unchanged."""
+    from oknowledge.vault import clean_category
+
+    for raw in NASTY:
+        out = canonical_category(raw, [])
+        assert clean_category(out) == out, f"{raw!r} became {out!r}, which the web refuses"
+
+
+def test_the_trailing_dot_the_review_found():
+    assert canonical_category("Misc.", []) == "Misc"
+    assert canonical_category("Varios...", []) == "Varios"
+
+
+def test_the_characters_a_file_name_cannot_hold_become_spaces():
+    assert canonical_category("Q&A: tips", []) == "Q&A tips"
+    assert canonical_category("¿Qué leer?", []) == "¿Qué leer"
+    assert canonical_category("a|b", []) == "a b"
+
+
+def test_truncation_does_not_leave_a_name_the_web_refuses():
+    """The strip has to come after the cut, not before it."""
+    out = canonical_category("x" * 79 + ".tail", [])
+    assert len(out) <= 80
+    assert not out.endswith(".")
+
+
+def test_a_category_already_in_the_vault_is_still_returned_as_it_is():
+    """Deliberately not cleaned: matching a known category must never rename
+    what the user already has. Only invented names are constrained."""
+    assert canonical_category("Redes", ["Redes "]) == "Redes "
+    assert canonical_category("misc.", ["Misc."]) == "Misc."
