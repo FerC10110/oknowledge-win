@@ -32,6 +32,9 @@ WANTED = "D/M/YYYY, HH:MM - Sender: message"
 # it, what sits before the colon is text and not a name.
 SENDER_MAX = 25
 
+# How many of the contradicting lines the error quotes, per side.
+NAMED = 3
+
 
 class BadExport(Exception):
     """The file is not a readable WhatsApp export."""
@@ -62,14 +65,39 @@ def _clean(text: str) -> list[str]:
     return text.translate(INVISIBLE).replace("\r\n", "\n").replace("\r", "\n").split("\n")
 
 
+def _side(order: str, where: list[int], raw: list[str]) -> str:
+    """One side of the contradiction: how many lines read that way, and which.
+
+    Every line is counted and the first few are quoted. A file can hold
+    thousands on one side, and a wall of them would bury the handful on the
+    other -- which are the lines the user has to go and edit.
+    """
+    shown = ", ".join(repr(raw[n]) for n in where[:NAMED])
+    more = f" and {len(where) - NAMED} more" if len(where) > NAMED else ""
+    reads = "line reads" if len(where) == 1 else "lines read"
+    return f"{len(where)} {reads} as {order}: {shown}{more}"
+
+
 def _order(stamps: list[tuple[int, int]], raw: list[str]) -> tuple[bool, bool]:
-    """(day-first, was_assumed). Evidence before convention."""
-    day_first = [i for i, (a, _) in enumerate(stamps) if a > 12]
-    month_first = [i for i, (_, b) in enumerate(stamps) if b > 12]
+    """(day-first, was_assumed). Evidence before convention.
+
+    A line whose two fields are both over 12 is evidence of nothing: neither
+    reading of it is a date, so messages() skips it as a bad line. Counting it
+    on both sides is what used to name one line as contradicting itself.
+    """
+    day_first = [n for n, (a, b) in enumerate(stamps) if a > 12 and b <= 12]
+    month_first = [n for n, (a, b) in enumerate(stamps) if b > 12 and a <= 12]
     if day_first and month_first:
+        # Every contradicting line, not the first pair: one stray pasted
+        # fragment vetoes all 1215 links, --dry-run is no escape because this
+        # runs first, and a pair at a time costs one import, one edit and one
+        # re-run per line.
+        one = _side("day/month", day_first, raw)
+        other = _side("month/day", month_first, raw)
         raise BadExport(
-            f"the dates contradict each other: {raw[day_first[0]]!r} reads as "
-            f"day/month and {raw[month_first[0]]!r} reads as month/day"
+            "the dates contradict each other, so the file cannot be read "
+            f"either way. {one}. {other}. Edit the lines that disagree and "
+            "import the file again"
         )
     if day_first:
         return True, False

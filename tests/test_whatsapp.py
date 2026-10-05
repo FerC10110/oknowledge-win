@@ -367,3 +367,36 @@ def test_a_real_sender_is_still_read_as_the_sender(line, sender):
     scan = parse(line + "\n")
 
     assert scan.links[0].sender == sender
+
+
+def test_every_contradicting_line_is_named_not_just_the_first_pair():
+    """One pasted fragment vetoes all 1215 links, and --dry-run is no escape
+    because parse() raises first. Naming one pair at a time costs the user one
+    import, one edit and one re-run per stray line."""
+    with pytest.raises(BadExport) as raised:
+        messages("18/7/2019, 11:36 - Fer: x\n"
+                 "7/18/2019, 11:36 - Fer: y\n"
+                 "8/19/2019, 11:36 - Fer: z\n")
+
+    said = str(raised.value)
+    assert "7/18/2019" in said
+    assert "8/19/2019" in said
+
+
+def test_the_contradiction_says_the_file_can_be_edited():
+    """The way out, in the message that blocks the way in."""
+    with pytest.raises(BadExport) as raised:
+        messages("18/7/2019, 11:36 - Fer: x\n7/18/2019, 11:36 - Fer: y\n")
+
+    assert "edit" in str(raised.value).lower()
+
+
+def test_a_line_with_both_fields_over_twelve_is_evidence_of_nothing():
+    """It read as both sides of the contradiction at once, so the error named
+    one line as contradicting itself. No reading of it is a date, which is
+    what makes it a bad line and not a bad file."""
+    found, day_first, _ = messages("18/13/2019, 11:36 - Fer: x\n"
+                                   "19/7/2019, 11:36 - Fer: y\n")
+
+    assert [m.text for m in found] == ["y"]
+    assert day_first is True
