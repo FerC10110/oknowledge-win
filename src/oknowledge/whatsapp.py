@@ -165,6 +165,16 @@ def _trim(url: str) -> str:
     return url
 
 
+def _has_host(url: str) -> bool:
+    """Is there anything left after the scheme?
+
+    `https://.` loses its dot to _trim() and leaves `https://`, which is
+    truthy: it was captured, and normalize() made it `https:///` -- a note
+    pointing at nothing.
+    """
+    return bool(url.partition("://")[2])
+
+
 def _spans(text: str) -> list[tuple[int, int, str, bool]]:
     """Every link as (start, end, url with a scheme, came bare), in order.
 
@@ -177,7 +187,7 @@ def _spans(text: str) -> list[tuple[int, int, str, bool]]:
 
     for found in FULL.finditer(text):
         url = _trim(found.group(0))
-        if url:
+        if _has_host(url):
             out.append((found.start(), found.start() + len(url), url, False))
             taken.append((found.start(), found.start() + len(url)))
 
