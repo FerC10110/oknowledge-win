@@ -297,6 +297,24 @@ def test_an_unwritable_queue_does_not_cost_the_batch_its_notes(cfg, q):
                for warning in result.warnings) == 1
 
 
+def test_a_note_that_was_written_is_not_reported_as_not_saved(cfg, q, monkeypatch):
+    """The note is on disk and safe: the entry stays pending, orphaned() finds
+    it and the next retry redoes it. Reporting the link as failed, and leaving
+    it out of `saved`, tells the user the opposite of the truth."""
+    def boom(link_id, status, error=None, title=None):
+        raise OSError("read-only file system")
+
+    monkeypatch.setattr(q, "set_status", boom)
+
+    result = import_links(cfg, [item("https://a.com/x")], queue=q)
+
+    assert result.saved == 1
+    assert result.failed == []
+    assert len(list(cfg.links_dir.glob("*.md"))) == 1
+    assert any("status could not be recorded" in warning
+               for warning in result.warnings)
+
+
 def test_a_link_whose_lock_is_held_is_taken_not_lost(cfg, q):
     with q.lock(link_id("https://a.com/x")):
         result = import_links(cfg, [item("https://a.com/x")], queue=q)

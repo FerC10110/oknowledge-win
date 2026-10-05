@@ -831,8 +831,17 @@ def import_links(cfg: Config, items: list[Imported],
                     # write would leave them.
                     _once(result.warnings, said, NO_ENTRY, _typed(error))
                 write_note(cfg, note, cfg.language)
-                q.set_status(link, "partial", error="imported, not analysed yet",
-                             title=note.title)
+                try:
+                    q.set_status(link, "partial",
+                                 error="imported, not analysed yet",
+                                 title=note.title)
+                except OSError as error:
+                    # The note is on disk and safe, so the link is saved:
+                    # the entry keeps the pending status enqueue() gave it,
+                    # orphaned() finds it and the next retry redoes it.
+                    # Reporting the link as failed would tell the user the
+                    # opposite of the truth about their own vault.
+                    _once(result.warnings, said, NO_STATUS, _typed(error))
                 result.saved += 1
         except Exception as error:
             # A link that could not be written is reported and the run goes
