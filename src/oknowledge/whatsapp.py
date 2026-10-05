@@ -121,7 +121,7 @@ cloud space live work wiki art design studio club shop store
 # because Google sold them as TLDs and the collision is worse than the others.
 EXTENSIONS = frozenset("sh py md ts js rs go pl so rb cs ai zip mov".split())
 
-FULL = re.compile(r"https?://(?:(?!https?://)[^\s<>\"])+", re.IGNORECASE)
+FULL = re.compile(r"https?://(?:(?![,;]https?://)[^\s<>\"])+", re.IGNORECASE)
 # Not preceded by @ (an email), nor by another domain character (so a host is
 # not cut in half), nor followed by one (an email's dotted local part, or a
 # TLD that is only the start of a longer label). The path is optional.

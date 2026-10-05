@@ -178,6 +178,17 @@ def test_two_full_urls_with_no_space_between_them_are_both_found():
         ("https://a.com", False), ("https://b.org", False)]
 
 
+def test_two_full_urls_separated_by_a_semicolon_are_both_found():
+    assert find_links("https://a.com;https://b.org") == [
+        ("https://a.com", False), ("https://b.org", False)]
+
+
+def test_a_url_that_contains_another_url_is_not_split():
+    url = "https://web.archive.org/web/2020/https://example.com/a"
+
+    assert find_links(url) == [(url, False)]
+
+
 def test_a_link_that_is_a_prefix_of_another_does_not_corrupt_the_comment():
     scan = parse("18/7/2019, 11:36 - Fer: foo.com, foo.com/x\n")
 
