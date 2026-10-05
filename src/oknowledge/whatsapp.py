@@ -16,9 +16,6 @@ from dataclasses import dataclass
 # What WhatsApp puts into an export that you don't see when you open it:
 # directional marks and spaces that are not regular spaces. Without removing
 # them, the regex below matches zero lines from the real file.
-# What WhatsApp puts into an export that you don't see when you open it:
-# directional marks and spaces that are not regular spaces. Without removing
-# them, the regex below matches zero lines from the real file.
 INVISIBLE = str.maketrans({
     "\u200e": "", "\u200f": "", "\u202a": "", "\u202b": "", "\u202c": "",
     "\ufeff": "", "\u00a0": " ", "\u202f": " ", "\u2009": " ",
@@ -28,7 +25,7 @@ LINE = re.compile(
     r"^(\d{1,2})/(\d{1,2})/(\d{2,4}),\s+(\d{1,2}):(\d{2})(?::(\d{2}))?\s+-\s+(.*)$"
 )
 
-WANTED = "D/M/YYYY, HH:MM - Remitente: mensaje"
+WANTED = "D/M/YYYY, HH:MM - Sender: message"
 
 
 class BadExport(Exception):
@@ -107,3 +104,123 @@ def messages(text: str) -> tuple[list[Message], bool, bool]:
             sender, rest = "", body       # a system message has no sender
         out.append(Message(sent=sent, sender=sender, text=rest))
     return out, day_first, assumed
+
+
+# The TLDs this file can find. Curated, not exhaustive: a full list lets in
+# thousands of three-letter suffixes that turn any word with a dot into a
+# link. Tune it by looking at the --dry-run output.
+TLDS = frozenset("""
+com org net io dev app me tv co info biz xyz online site tech blog news edu
+gov mil ar es mx cl uy pe br us uk de fr it nl pt ru jp cn in au ca ch se no
+fi dk pl cz gr tr il za kr be at ie nz eu gg to ly am st fm cc tk link page
+cloud space live work wiki art design studio club shop store
+""".split())
+
+# Real TLDs that are also file extensions this user types. With no path the
+# extension wins; with a path the domain wins. `zip` and `mov` are here
+# because Google sold them as TLDs and the collision is worse than the others.
+EXTENSIONS = frozenset("sh py md ts js rs go pl so rb cs ai zip mov".split())
+
+FULL = re.compile(r"https?://[^\s<>\"]+", re.IGNORECASE)
+# Not preceded by @ (an email), nor by another domain character (so a host is
+# not cut in half). The path is optional.
+BARE = re.compile(
+    r"(?<![\w@.-])((?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+([a-z]{2,24}))"
+    r"(/[^\s<>\"]*)?",
+    re.IGNORECASE,
+)
+# A dot between letters: a message like that may have had a link that did
+# not match.
+MAYBE = re.compile(r"[a-z0-9]\.[a-z]{2,}", re.IGNORECASE)
+
+TRAILING = ".,;:!?'\"”’»)]}>"
+
+
+def _trim(url: str) -> str:
+    """Strip punctuation stuck to the end without breaking a link that uses it.
+
+    A `)` goes only if it does not close a `(` of the link itself: Wikipedia
+    writes `/wiki/Python_(lenguaje)` and that parenthesis is part of the URL.
+    """
+    while url and url[-1] in TRAILING:
+        if url[-1] == ")" and url.count("(") > url.count(")") - 1:
+            break
+        url = url[:-1]
+    return url
+
+
+def find_links(text: str) -> list[tuple[str, bool]]:
+    """[(url with scheme, was written without one)], in order of appearance."""
+    out: list[tuple[int, str, bool]] = []
+    taken: list[tuple[int, int]] = []
+
+    for found in FULL.finditer(text):
+        url = _trim(found.group(0))
+        if url:
+            out.append((found.start(), url, False))
+            taken.append((found.start(), found.start() + len(url)))
+
+    for found in BARE.finditer(text):
+        start = found.start()
+        if any(a <= start < b for a, b in taken):
+            continue                      # already part of a full URL
+        tld = found.group(2).lower()
+        if tld not in TLDS and tld not in EXTENSIONS:
+            continue
+        path = found.group(3) or ""
+        if tld in EXTENSIONS and not path:
+            continue                      # script.py wins as an extension
+        url = _trim(found.group(1) + path)
+        if url:
+            out.append((start, f"https://{url}", True))
+
+    out.sort(key=lambda row: row[0])
+    return [(url, bare) for _, url, bare in out]
+
+
+@dataclass
+class Imported:
+    url: str          # with scheme, ready for normalize()
+    sent: str         # YYYY-MM-DD
+    comment: str      # the message without the links, or ""
+    sender: str
+    raw: str          # the link as it was written
+    bare: bool
+
+
+@dataclass
+class Scan:
+    links: list[Imported]
+    suspicious: list[str]
+    messages: int
+    day_first: bool
+    assumed: bool
+
+
+def _raw_of(text: str, url: str, bare: bool) -> str:
+    """What was written, so --dry-run can show the original."""
+    written = url[len("https://"):] if bare else url
+    return written if written in text else url
+
+
+def parse(text: str) -> Scan:
+    """A whole export to dated links. Raises BadExport if it can't be read."""
+    found, day_first, assumed = messages(text)
+    links: list[Imported] = []
+    suspicious: list[str] = []
+    for message in found:
+        urls = find_links(message.text)
+        if not urls:
+            if MAYBE.search(message.text):
+                suspicious.append(message.text)
+            continue
+        comment = message.text
+        for url, bare in urls:
+            comment = comment.replace(_raw_of(message.text, url, bare), " ")
+        comment = " ".join(comment.split())
+        for url, bare in urls:
+            links.append(Imported(url=url, sent=message.sent, comment=comment,
+                                  sender=message.sender,
+                                  raw=_raw_of(message.text, url, bare), bare=bare))
+    return Scan(links=links, suspicious=suspicious, messages=len(found),
+                day_first=day_first, assumed=assumed)

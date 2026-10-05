@@ -7,7 +7,7 @@ against tidy text finds zero messages in the real file.
 
 import pytest
 
-from oknowledge.whatsapp import BadExport, messages
+from oknowledge.whatsapp import BadExport, find_links, messages, parse
 
 REAL = """\
 18/7/2019, 11:36 - Fer: https://scratux.org/#download
@@ -120,3 +120,107 @@ def test_an_impossible_date_is_skipped_not_fatal():
     found, _, _ = messages("31/2/2019, 11:36 - Fer: x\n18/7/2019, 11:36 - Fer: y\n")
 
     assert [m.text for m in found] == ["y"]
+
+
+@pytest.mark.parametrize("text,expected", [
+    # full
+    ("https://scratux.org/#download", [("https://scratux.org/#download", False)]),
+    ("http://viejo.example.com/x", [("http://viejo.example.com/x", False)]),
+    # bare, and they count
+    ("youtu.be/abc", [("https://youtu.be/abc", True)]),
+    ("scratux.org", [("https://scratux.org", True)]),
+    ("www.foo.com", [("https://www.foo.com", True)]),
+    ("example.py/docs", [("https://example.py/docs", True)]),
+    # bare, and they do not
+    ("script.py", []),
+    ("README.md", []),
+    ("config.json", []),
+    ("version 3.10", []),
+    ("fer@gmail.com", []),
+    ("sudo chkrootkit", []),
+    ("11 5555-5555", []),
+])
+def test_what_counts_as_a_link(text, expected):
+    assert find_links(text) == expected
+
+
+def test_a_url_with_balanced_parens_is_not_cut():
+    """Wikipedia puts parentheses in the URL and they are part of the link."""
+    url = "https://es.wikipedia.org/wiki/Python_(lenguaje)"
+
+    assert find_links(f"mirá {url}") == [(url, False)]
+
+
+def test_a_url_inside_parens_loses_only_the_closing_one():
+    assert find_links("(https://e.com/x)") == [("https://e.com/x", False)]
+
+
+@pytest.mark.parametrize("text,expected", [
+    ("mirá github.com/y.", [("https://github.com/y", True)]),
+    ("“e.com/z”", [("https://e.com/z", True)]),
+    ("e.com/w, y nada más", [("https://e.com/w", True)]),
+    ("https://e.com/v!", [("https://e.com/v", False)]),
+])
+def test_punctuation_stuck_to_the_end_is_not_part_of_the_link(text, expected):
+    assert find_links(text) == expected
+
+
+def test_two_links_in_one_message_are_both_found():
+    assert find_links("foo.com, bar.org/x") == [
+        ("https://foo.com", True), ("https://bar.org/x", True)]
+
+
+def test_a_bare_domain_inside_a_full_url_is_not_counted_twice():
+    assert find_links("https://github.com/a/b") == [("https://github.com/a/b", False)]
+
+
+def test_the_comment_is_the_message_without_the_links():
+    scan = parse('21/7/2019, 13:50 - Fer: “Easy DevOps” by George Seif '
+                 'https://link.medium.com/JfoglQ1zvY\n')
+
+    assert scan.links[0].comment == "“Easy DevOps” by George Seif"
+    assert scan.links[0].url == "https://link.medium.com/JfoglQ1zvY"
+    assert scan.links[0].sent == "2019-07-21"
+    assert scan.links[0].sender == "Fer"
+    assert scan.links[0].bare is False
+
+
+def test_a_message_that_is_only_a_link_has_no_comment():
+    scan = parse("18/7/2019, 11:36 - Fer: https://e.com/x\n")
+
+    assert scan.links[0].comment == ""
+
+
+def test_the_raw_link_is_kept_for_the_dry_run():
+    scan = parse("18/7/2019, 11:36 - Fer: mirá youtu.be/abc\n")
+
+    assert scan.links[0].raw == "youtu.be/abc"
+    assert scan.links[0].url == "https://youtu.be/abc"
+    assert scan.links[0].bare is True
+
+
+def test_a_message_with_no_link_is_not_imported():
+    scan = parse("23/7/2019, 11:39 - Fer: sudo chkrootkit\n")
+
+    assert scan.links == []
+    assert scan.messages == 1
+
+
+def test_a_message_that_looks_like_it_had_a_link_is_reported():
+    """The list that exposes a lost link, instead of losing it quietly."""
+    scan = parse("23/7/2019, 11:39 - Fer: mirá el config.json que te mandé\n")
+
+    assert scan.links == []
+    assert scan.suspicious == ["mirá el config.json que te mandé"]
+
+
+def test_plain_text_with_no_dots_is_not_suspicious():
+    scan = parse("23/7/2019, 11:39 - Fer: sudo chkrootkit\n")
+
+    assert scan.suspicious == []
+
+
+def test_the_scan_carries_the_date_order_through():
+    scan = parse("7/8/2019, 11:36 - Fer: e.com\n")
+
+    assert (scan.day_first, scan.assumed) == (True, True)
