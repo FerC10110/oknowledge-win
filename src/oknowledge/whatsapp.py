@@ -58,6 +58,8 @@ def _is_sender(name: str) -> bool:
     allow. A name cannot be long and have a space in it, so that shape is read
     as a line with no sender at all and the whole text is kept as the message.
     """
+    if "/" in name:
+        return False                      # a link, not a name: keep it in the text
     return len(name) <= SENDER_MAX or not any(ch.isspace() for ch in name)
 
 

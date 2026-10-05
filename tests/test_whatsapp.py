@@ -338,6 +338,14 @@ def test_a_scheme_with_no_host_left_is_not_a_link(text):
     assert find_links(text) == []
 
 
+def test_a_link_written_before_the_first_colon_is_not_taken_for_a_sender():
+    """`e.com/x: algo` has a short "name" that is really the link, and dropping
+    it as the sender lost the link with no trace."""
+    scan = parse("18/7/2019, 11:36 - e.com/x: algo\n")
+
+    assert [one.url for one in scan.links] == ["https://e.com/x"]
+
+
 def test_a_system_line_whose_own_text_holds_the_first_colon_keeps_that_text():
     """Everything before the first ": " becomes the sender and is dropped from
     the message, so this line yielded a sender of `Fer cambió el asunto a
