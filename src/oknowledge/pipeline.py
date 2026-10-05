@@ -170,6 +170,68 @@ def download_cover(cfg: Config, url: str | None, link: str) -> str | None:
     return f"../attachments/{link}{suffix}"
 
 
+ICON_TIMEOUT = 8.0
+ICON_MAX_BYTES = 512 * 1024
+ICON_EXTENSIONS = dict(EXTENSIONS, **{"image/gif": ".gif",
+                                      "image/x-icon": ".ico",
+                                      "image/vnd.microsoft.icon": ".ico"})
+_DOMAIN_CHARS = frozenset("abcdefghijklmnopqrstuvwxyz0123456789.-")
+
+
+def _is_domain(name: str) -> bool:
+    """A domain we would write back unchanged as a file name, and no other."""
+    return (1 <= len(name) <= 253
+            and set(name) <= _DOMAIN_CHARS
+            and name[0].isalnum() and name[-1].isalnum()
+            and ".." not in name and "-." not in name and ".-" not in name)
+
+
+def download_icon(cfg: Config, source: str | None) -> None:
+    """Save a site's favicon once per domain, or do nothing at all.
+
+    Keyed by the domain rather than the link, for two reasons. Twenty notes
+    from one site share an icon, so this is one request instead of twenty. And
+    nothing is written into a note: there is no new frontmatter key, so a
+    backfill over an existing library touches none of the user's files, which
+    the status invariant would otherwise forbid.
+
+    Catches everything, like download_cover: an icon is decoration and must
+    never cost somebody a note. The domain arrives from frontmatter the user
+    can edit and becomes a file name, so it is validated before it becomes one.
+    """
+    if not source:
+        return
+    domain = source.strip().lower()     # domains are case-insensitive; one site,
+    if not _is_domain(domain):          # one file, and never a silent nothing
+        return
+    icons = cfg.attachments_dir / "icons"
+    try:
+        # Any suffix counts as "we have this one": fetching once is the point.
+        if next(icons.glob(f"{domain}.*"), None) is not None:
+            return
+    except OSError:
+        return
+    try:
+        got = fetch(f"https://{domain}/favicon.ico",
+                    timeout=ICON_TIMEOUT, max_bytes=ICON_MAX_BYTES)
+        suffix = ICON_EXTENSIONS.get(got.content_type.split(";")[0].strip().lower())
+        if suffix is None:
+            return               # a site with no favicon answers with its 404 page
+        wanted = icons / f"{domain}{suffix}"
+        if wanted.is_symlink():
+            return               # defence in depth behind the check above
+        target = ensure_inside_root(cfg, wanted)        # location first, as everywhere
+        target.parent.mkdir(parents=True, exist_ok=True)
+        tmp = target.parent / f".oknowledge-{secrets.token_hex(8)}.tmp"
+        try:
+            tmp.write_bytes(got.content)
+            os.replace(tmp, target)
+        finally:
+            tmp.unlink(missing_ok=True)
+    except Exception:
+        return
+
+
 def _partial_note(cfg: Config, link: str, url: str, content: str,
                   page: Extracted | None) -> Note:
     """The note that can always be written: the URL, plus whatever did arrive."""
