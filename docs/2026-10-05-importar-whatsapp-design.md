@@ -274,7 +274,7 @@ se arregla donde está.
 Salida de `import`, en una línea por dato y en inglés como el resto del CLI:
 
 ```
-1215 links in 4120 messages (dates read as day/month)
+1215 links in 4120 messages, 2019-07-18 to 2026-10-04 (dates read as day/month)
 1198 saved, 17 already there, 9 repeated in the chat
 12 of them were written without a scheme
 3 messages look like they had a link and did not match (see --dry-run)
@@ -300,9 +300,12 @@ tenía y resultó estar ya saldado no consume cupo, porque eso no es trabajo.
 
 El orden es **de lo más nuevo a lo más viejo**, que son los links con más
 chance de estar vivos y de importar. La fecha no está en la cola —`updated`
-de un lote importado es el mismo para todos— así que sale del `saved` de la
-nota: un escaneo del vault por corrida de `retry`, ~1 s con 1215 notas, no uno
-por link.
+es el momento en que se escribió cada entrada, así que un lote importado queda
+en orden de importación, del mensaje más viejo al más nuevo— así que sale del
+`saved` de la nota: un escaneo del vault por corrida de `retry`, ~1 s con 1215
+notas, no uno por link. Ese orden rige dentro de cada grupo: un link ya
+trabajado hoy va detrás de uno que nunca se trabajó, para que una tanda de
+links muertos no se quede con el cupo.
 
 Sin `--limit` se comporta como siempre, así que nada de lo que ya existe
 cambia de significado.
