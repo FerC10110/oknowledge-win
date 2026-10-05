@@ -66,6 +66,10 @@ TRUNCATED_SUMMARY = {
 # A cover is only saved if what came back really is an image we know: a default
 # extension would file an HTML error page away as cover.jpg.
 EXTENSIONS = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp"}
+# What import_links() leaves in a queue entry's error: the link is saved but no
+# attempt has been made on it. retry() reads it back to tell those links from
+# the ones it already tried, so both sides use this one string.
+IMPORTED = "imported, not analysed yet"
 NO_LOCK = ("the queue could not be locked, so the link was saved without one "
            "({reason})")
 NO_ENTRY = ("the queue entry could not be written ({reason}), so `oknowledge "
@@ -836,7 +840,7 @@ def import_links(cfg: Config, items: list[Imported],
                 write_note(cfg, note, cfg.language)
                 try:
                     q.set_status(link, "partial",
-                                 error="imported, not analysed yet",
+                                 error=IMPORTED,
                                  title=note.title)
                 except OSError as error:
                     # The note is on disk and safe, so the link is saved:
@@ -888,10 +892,15 @@ def retry(cfg: Config, queue: Queue | None = None,
         except Exception as error:
             results.append(Result(id="queue", url="", path=None, status="failed",
                                   error=f"could not list the queue ({_typed(error)})"))
-    # Newest first. The date is not in the queue -- an imported batch shares one
-    # `updated` -- so it comes from the note's `saved`: one scan per run, not
-    # one per link. An entry with no note goes first: it is a link that has not
-    # reached the vault yet, which is more urgent than any date.
+    # Newest first, within the day each link was last worked on. The date is
+    # not in the queue -- `updated` is when the entry was written, so an import
+    # runs oldest message first -- and it comes from the note's `saved`: one
+    # scan per run, not one per link. An entry with no note goes first: it is a
+    # link that has not reached the vault yet, which is more urgent than any
+    # date. Over that, the links never worked on go before the ones already
+    # tried, and the tried ones go by the day they were tried, oldest day
+    # first: a dead link keeps its old date and would otherwise sit at the top
+    # and use up every run's quota, forever.
     try:
         dates = {note.id: note.saved for note in all_notes(cfg)}
     except OSError:
@@ -900,6 +909,7 @@ def retry(cfg: Config, queue: Queue | None = None,
         dates = {}
     ordered = sorted(owed.values(), key=lambda e: dates.get(e.id, "9999-99-99"),
                      reverse=True)
+    ordered.sort(key=_last_worked)        # stable: the date still decides inside
     done = 0
     for entry in ordered:
         if limit is not None and done >= limit:
@@ -920,6 +930,17 @@ def retry(cfg: Config, queue: Queue | None = None,
             results.append(_failed(q, entry, error))
             done += 1                     # trying and failing is work too
     return results
+
+
+def _last_worked(entry: QueueEntry) -> str:
+    """The calendar day a link was last worked on, or "" if it never was.
+
+    A link still carrying the import's own marker was saved and never analysed,
+    and sorts before every date.
+    """
+    if entry.error == IMPORTED:
+        return ""
+    return entry.updated[:10]
 
 
 def _failed(q: Queue, entry: QueueEntry, error: BaseException) -> Result:

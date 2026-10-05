@@ -1604,6 +1604,42 @@ def test_an_entry_already_settled_does_not_use_up_the_quota(cfg, q, monkeypatch)
     assert [r.url for r in analysed] == ["https://e2.com/x"]
 
 
+def test_a_second_limited_retry_works_on_links_the_first_did_not(cfg, q, monkeypatch):
+    """The backlog has to advance: dead links must not hold the quota forever.
+
+    Imported oldest message first, so the queue's own `updated` runs the wrong
+    way round, and every page is dead. Run one takes the two newest; run two,
+    the same day, must reach the two it never touched.
+    """
+    sent = ["2019-01-01", "2020-01-01", "2024-01-01", "2025-01-01"]
+    import_links(cfg, [_imported(f"https://e{n}.com/x", sent=when)
+                       for n, when in enumerate(sent)], queue=q)
+    extraction(monkeypatch, Unreadable("503"))
+    no_pictures(monkeypatch)
+
+    first = {r.url for r in retry(cfg, queue=q, limit=2)}
+    second = {r.url for r in retry(cfg, queue=q, limit=2)}
+
+    assert first == {"https://e3.com/x", "https://e2.com/x"}
+    assert second == {"https://e1.com/x", "https://e0.com/x"}
+
+
+def test_a_never_worked_link_goes_before_one_worked_on_earlier_today(cfg, q,
+                                                                     monkeypatch):
+    """The case a plain day bucket gets wrong: same day, so only the marker
+    tells the untouched link from the one that already failed."""
+    import_links(cfg, [_imported("https://old.com/x", sent="2019-01-01"),
+                       _imported("https://new.com/x", sent="2025-01-01")], queue=q)
+    extraction(monkeypatch, Unreadable("503"))
+    no_pictures(monkeypatch)
+    first = retry(cfg, queue=q, limit=1)
+    assert first[0].url == "https://new.com/x"
+
+    second = retry(cfg, queue=q, limit=1)
+
+    assert second[0].url == "https://old.com/x"
+
+
 def test_a_link_that_fails_still_uses_up_the_quota(cfg, q, monkeypatch):
     """Trying and failing is work: a run of 50 dead links has to end.
 
