@@ -50,6 +50,12 @@ Create it with at least a line pointing at your Obsidian vault:
 Everything else has a default. Notes are written to <vault>/oknowledge/."""
 
 
+# How many urls one reason lists in the `not saved` report before it stops. A
+# batch can fail 1215 times for the same reason, and nothing is lost by
+# cutting the list: a link with no note is imported again by the next run of
+# the same command.
+URLS_SHOWN = 10
+
 _CONTROL = re.compile(r"[\x00-\x1f\x7f-\x9f\u2028\u2029]")
 
 
@@ -299,12 +305,6 @@ def _import(cfg, args) -> int:
     return 1 if result.failed else 0
 
 
-# How many urls a single reason lists before it stops. A batch can fail 1215
-# times for one reason, and nothing is lost by cutting the list: a link with
-# no note is imported again by the next run of the same command.
-SHOWN = 10
-
-
 def _not_saved(failed: list[tuple[str, str]]) -> None:
     """Report what could not be saved: one entry per reason, not per link.
 
@@ -327,10 +327,11 @@ def _not_saved(failed: list[tuple[str, str]]) -> None:
         else:
             print(f"not saved: {_count(len(links), 'link', 'links')}: {_clean(why)}",
                   file=sys.stderr)
-            for url in links[:SHOWN]:
+            for url in links[:URLS_SHOWN]:
                 print(f"  {_clean(url)}", file=sys.stderr)
-            if len(links) > SHOWN:
-                print(f"  ... and {len(links) - SHOWN} more", file=sys.stderr)
+            if len(links) > URLS_SHOWN:
+                print(f"  ... and {len(links) - URLS_SHOWN} more",
+                      file=sys.stderr)
 
 
 def _headline(found: int, scan, reading: str) -> str:
