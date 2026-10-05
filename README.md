@@ -170,7 +170,10 @@ unfinished; `--json` prints one object per link with what happened to it.
 large import gets analysed: 1215 links are 10 to 20 hours of fetching and
 model time, so `oknowledge retry --limit 50` once a day works through them
 without a run that never ends. The quota counts links it actually worked on,
-so an entry that turned out to be already saved does not use one up.
+so an entry that turned out to be already saved does not use one up. The exit
+code describes those links and not the backlog behind them: a limited run
+exits 0 when the links it worked on are fine, and 1 when one of them is still
+unfinished.
 
 ### Exit codes
 

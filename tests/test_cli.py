@@ -823,6 +823,19 @@ def test_retry_limit_is_passed_through(cfg, monkeypatch, capsys):
     assert seen["limit"] == 50
 
 
+@pytest.mark.parametrize("status,code", [("ok", 0), ("partial", 1)])
+def test_a_limited_retry_reports_on_the_links_it_worked_on(cfg, monkeypatch,
+                                                           capsys, status, code):
+    """What the README's --limit paragraph says: the code describes the links
+    the run was asked to do, not the backlog behind them. Exiting 1 for links
+    it was never asked to do would exit 1 every day until the last batch, and
+    then the code would carry no information at all."""
+    monkeypatch.setattr("oknowledge.cli.retry", lambda config, limit=None: [
+        Result(id="a1", url="https://e.com/a", path=None, status=status)])
+
+    assert main(["retry", "--limit", "1"]) == code
+
+
 def test_retry_refuses_a_negative_limit(cfg, capsys):
     assert main(["retry", "--limit", "-1"]) == 2
     assert "limit" in capsys.readouterr().err

@@ -895,6 +895,8 @@ def retry(cfg: Config, queue: Queue | None = None,
     try:
         dates = {note.id: note.saved for note in all_notes(cfg)}
     except OSError:
+        # With no dates the order below is arbitrary, which costs a run of
+        # the wrong links first and never a link: every entry is still owed.
         dates = {}
     ordered = sorted(owed.values(), key=lambda e: dates.get(e.id, "9999-99-99"),
                      reverse=True)
