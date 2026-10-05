@@ -75,3 +75,18 @@ def isolated_config_path(tmp_path, monkeypatch):
     for module in (config, cli, app):
         monkeypatch.setattr(module, "CONFIG_PATH", path)
     return path
+
+
+@pytest.fixture(autouse=True)
+def isolated_state_tree(tmp_path, monkeypatch):
+    """The twin of the pin above, for the same reason.
+
+    The queue lives under $XDG_STATE_HOME, and until now the pin was made
+    per-module, in the files whose tests reach the queue on purpose. That is
+    the arrangement that let a cross-site test reach the real tree once the
+    middleware it was testing was mutated away: safe while the code is
+    correct, which is not what a pin is. The modules that pin it themselves
+    still do -- their fixtures run after this one and win -- and one of them
+    asserts the result.
+    """
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "xdg-state"))

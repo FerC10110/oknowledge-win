@@ -289,3 +289,14 @@ def test_writing_through_a_malformed_id_is_refused(tmp_path):
         with pytest.raises(ValueError):
             with q.lock(bogus):
                 pass
+
+
+def test_no_test_can_reach_the_real_state_tree(tmp_path):
+    """conftest pins XDG_STATE_HOME for every test, not only for the files
+    whose tests mean to touch the queue. Asserted here because this is the
+    module that owns the state tree."""
+    import pathlib
+
+    assert state_dir().is_relative_to(tmp_path)
+    assert not state_dir().is_relative_to(pathlib.Path.home() / ".local" / "state")
+    assert os.environ["XDG_STATE_HOME"].startswith(str(tmp_path))
