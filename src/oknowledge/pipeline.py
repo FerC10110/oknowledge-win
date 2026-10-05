@@ -18,7 +18,7 @@ import datetime as dt
 import os
 import secrets
 from contextlib import ExitStack
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -41,6 +41,7 @@ from .vault import (
     rebuild_indexes,
     write_note,
 )
+from .whatsapp import Imported
 
 PARTIAL_SUMMARY = {
     "es": "Guardado sin analizar: la página no se pudo leer o el análisis falló. "
@@ -98,6 +99,11 @@ class Result:
 
 def _today() -> str:
     return dt.datetime.now(dt.timezone.utc).date().isoformat()
+
+
+def _now_iso() -> str:
+    """The same format the queue writes, so the two compare as strings."""
+    return dt.datetime.now(dt.timezone.utc).isoformat(timespec="milliseconds")
 
 
 def _uncategorized(cfg: Config) -> str:
@@ -667,6 +673,104 @@ def _reconcile(cfg: Config, q: Queue, entry: QueueEntry) -> Result | None:
         trouble = _record(q, entry.id, "ok", entry.error or "", note.title)
         return Result(id=entry.id, url=entry.url, path=path.resolve(), status="ok",
                       skipped=True, warnings=[RECONCILED, *trouble])
+
+
+@dataclass
+class ImportResult:
+    """What happened to an imported batch. No link leaves without showing up here."""
+
+    found: int = 0                              # links the batch carried
+    saved: int = 0                              # new notes written
+    already: int = 0                            # already in the vault, or taken
+    duplicated: int = 0                         # repeats within the batch
+    failed: list[tuple[str, str]] = field(default_factory=list)   # (url, why)
+
+
+def import_links(cfg: Config, items: list[Imported],
+                 queue: Queue | None = None) -> ImportResult:
+    """Write a batch of imported links as partial notes.
+
+    This does not call add() once per link, and the reason is measured: add()
+    pays two full vault scans -- find_note() to deduplicate and
+    rebuild_indexes() on save -- and rewrites every index, every time. With
+    1215 links that is quadratic: about 19 minutes of pure bookkeeping, plus
+    1215 rounds of writes inside an Obsidian vault that syncs and reindexes on
+    each one.
+
+    Here the expensive steps are paid once for the batch. What is not made
+    cheaper are the guarantees: write_note() is still the only write door, so
+    it still goes through ensure_inside_root and the marker; links are
+    deduplicated by id; each link's lock is taken; and each one leaves a queue
+    entry so retry() can finish it.
+    """
+    q = queue or Queue()
+    started = _now_iso()
+    result = ImportResult(found=len(items))
+
+    # One scan, not one per link. If the vault cannot be read there is no way
+    # to deduplicate, and writing without deduplicating is the one thing this
+    # project does not do: duplicate a note.
+    try:
+        existing = {note.id for note in all_notes(cfg)}
+    except OSError as error:
+        result.failed.append(("", f"the vault could not be read ({_typed(error)})"))
+        return result
+
+    # Dedup within the batch, keeping the oldest date: that is when it was
+    # first saved. normalize() already strips utm parameters, so two spellings
+    # of the same link land on the same id.
+    wanted: dict[str, Imported] = {}
+    for one in items:
+        clean = normalize(one.url)
+        if not clean:
+            result.failed.append((one.url, "not a usable URL"))
+            continue
+        link = link_id(clean)
+        before = wanted.get(link)
+        if before is None:
+            wanted[link] = replace(one, url=clean)
+        else:
+            result.duplicated += 1
+            if one.sent < before.sent:
+                wanted[link] = replace(one, url=clean)
+
+    mode = cfg.default_content
+    for link, one in wanted.items():
+        if link in existing:
+            result.already += 1
+            continue
+        try:
+            with q.lock(link):
+                # The queue as a cheap second index: it closes the window
+                # between the scan above and now, because add() always
+                # enqueues, and it is one JSON file instead of a second vault
+                # scan. It only counts if the entry is from this run: a stale
+                # entry from a note the user deleted must not keep that link
+                # from coming back, because the vault is the source of truth
+                # and the queue is only bookkeeping.
+                entry = q.get(link)
+                if entry is not None and entry.updated >= started:
+                    result.already += 1
+                    continue
+                note = _partial_note(cfg, link, one.url, mode, None, saved=one.sent)
+                if one.comment:
+                    note.summary = one.comment
+                    note.body = one.comment
+                write_note(cfg, note, cfg.language)
+                q.enqueue(link, one.url, mode)
+                q.set_status(link, "partial", error="imported, not analysed yet",
+                             title=note.title)
+                result.saved += 1
+        except Locked:
+            result.already += 1
+        except Exception as error:
+            # A link that could not be written is reported and the run goes
+            # on: 1214 saved and one reported beats 1215 unsaved.
+            result.failed.append((one.url, _typed(error)))
+
+    if result.saved:
+        _reindex(cfg)        # once, for the batch
+    return result
 
 
 def retry(cfg: Config, queue: Queue | None = None) -> list[Result]:
