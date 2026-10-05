@@ -169,6 +169,29 @@ def test_one_note_that_cannot_be_written_does_not_stop_the_others(cfg, q, monkey
     assert "no space left" in result.failed[0][1]
 
 
+def test_a_link_whose_note_could_not_be_written_keeps_its_queue_entry(cfg, q, monkeypatch):
+    """The entry goes in before the note, so retry can reach what failed."""
+    real = __import__("oknowledge.pipeline", fromlist=["x"]).write_note
+
+    def boom(config, note, language, path=None):
+        if note.url == "https://b.com/y":
+            raise OSError("no space left on device")
+        return real(config, note, language, path=path)
+
+    monkeypatch.setattr("oknowledge.pipeline.write_note", boom)
+
+    result = import_links(cfg, [item("https://a.com/x"), item("https://b.com/y"),
+                                item("https://c.com/z")], queue=q)
+
+    assert [url for url, _ in result.failed] == ["https://b.com/y"]
+    assert result.saved == 2
+    assert {read_note(p).url for p in cfg.links_dir.glob("*.md")} == {
+        "https://a.com/x", "https://c.com/z"}
+    entry = q.get(link_id("https://b.com/y"))
+    assert entry is not None
+    assert entry.status == "pending"
+
+
 def test_nothing_is_written_outside_the_managed_folder(cfg, q, tmp_path):
     """links/ pointed elsewhere is an Obsidian habit, not an attack."""
     outside = tmp_path / "outside"
@@ -181,6 +204,9 @@ def test_nothing_is_written_outside_the_managed_folder(cfg, q, tmp_path):
     assert list(outside.iterdir()) == []
     assert result.saved == 0
     assert len(result.failed) == 1
+    # The link failed at the write door, not because the scan broke: a failed
+    # scan reports one failure too, but with an empty url.
+    assert result.failed[0][0] == "https://a.com/x"
 
 
 def test_an_empty_batch_is_not_an_error(cfg, q):
@@ -210,3 +236,37 @@ def test_an_index_that_could_not_be_rebuilt_is_reported(cfg, q, monkeypatch):
 
     assert result.saved == 1
     assert any("could not be rebuilt" in warning for warning in result.warnings)
+
+
+def test_a_failed_vault_scan_says_how_many_links_it_took_down(cfg, q, monkeypatch):
+    def unreadable(config):
+        raise OSError("input/output error")
+
+    monkeypatch.setattr("oknowledge.pipeline.all_notes", unreadable)
+
+    result = import_links(cfg, [item("https://a.com/x"), item("https://b.com/y")],
+                          queue=q)
+
+    assert result.saved == 0
+    assert len(result.failed) == 1
+    assert "none of 2 links" in result.failed[0][1]
+
+
+def test_a_link_whose_lock_is_held_is_taken_not_lost(cfg, q):
+    with q.lock(link_id("https://a.com/x")):
+        result = import_links(cfg, [item("https://a.com/x")], queue=q)
+
+    assert (result.saved, result.already) == (0, 1)
+    assert result.failed == []
+    assert list(cfg.links_dir.glob("*.md")) == []
+
+
+def test_the_import_clock_and_the_queue_clock_share_a_format():
+    """import_links compares the two as strings; this pins what that assumes."""
+    from oknowledge.pipeline import _now_iso
+    from oknowledge.queue import _now
+
+    a, b = _now_iso(), _now()
+    assert len(a) == len(b)
+    assert a[-6:] == b[-6:] == "+00:00"
+    assert a[10] == b[10] == "T"

@@ -718,7 +718,10 @@ def import_links(cfg: Config, items: list[Imported],
     try:
         existing = {note.id for note in all_notes(cfg)}
     except OSError as error:
-        result.failed.append(("", f"the vault could not be read ({_typed(error)})"))
+        noun = "link" if len(items) == 1 else "links"
+        result.failed.append(
+            ("", f"the vault could not be read, so none of {len(items)} {noun} "
+                 f"was imported ({_typed(error)})"))
         return result
 
     # Dedup within the batch, keeping the oldest date: that is when it was
@@ -761,8 +764,13 @@ def import_links(cfg: Config, items: list[Imported],
                 if one.comment:
                     note.summary = one.comment
                     note.body = one.comment
-                write_note(cfg, note, cfg.language)
+                # The entry goes in before the note, the order add() uses. A
+                # crash between the two then leaves an entry with no note,
+                # which orphaned() finds and retry() redoes. The other way
+                # round leaves a partial note that no retry can ever reach,
+                # because retry() walks the queue and not the vault.
                 q.enqueue(link, one.url, mode)
+                write_note(cfg, note, cfg.language)
                 q.set_status(link, "partial", error="imported, not analysed yet",
                              title=note.title)
                 result.saved += 1
