@@ -223,7 +223,8 @@ def _import(cfg, args) -> int:
         # project does not allow.
         text = args.file.read_text(encoding="utf-8", errors="replace")
     except OSError as error:
-        print(f"oknowledge: cannot read {_clean(args.file)}: {error}", file=sys.stderr)
+        print(f"oknowledge: cannot read {_clean(args.file)}: "
+              f"{_clean(error.strerror or error)}", file=sys.stderr)
         return 2
 
     try:
@@ -237,7 +238,18 @@ def _import(cfg, args) -> int:
     bare = sum(1 for one in scan.links if one.bare)
 
     if args.dry_run:
-        _dry_run(scan, reading)
+        if args.json:
+            # No sender and no comment: this is the dump people paste around.
+            print(json.dumps({"links": [{"sent": one.sent, "raw": one.raw,
+                                         "url": one.url, "bare": one.bare}
+                                        for one in scan.links],
+                              "messages": scan.messages,
+                              "suspicious": scan.suspicious,
+                              "day_first": scan.day_first,
+                              "assumed": scan.assumed, "written": False},
+                             ensure_ascii=False))
+        else:
+            _dry_run(scan, reading)
         return 0
 
     result = import_links(cfg, scan.links)
@@ -256,6 +268,9 @@ def _import(cfg, args) -> int:
               f"{_count(scan.messages, 'message', 'messages')} ({reading})")
         print(f"{result.saved} saved, {result.already} already there, "
               f"{result.duplicated} repeated in the chat")
+        if result.failed:
+            print(f"{_count(len(result.failed), 'link was', 'links were')} "
+                  "not saved (see below)")
         if bare:
             print(f"{_count(bare, 'of them was', 'of them were')} written "
                   "without a scheme")
@@ -266,7 +281,7 @@ def _import(cfg, args) -> int:
         print(f"warning: {_clean(warning)}", file=sys.stderr)
     for url, why in result.failed:
         print(f"not saved: {_clean(url)}: {_clean(why)}", file=sys.stderr)
-    return 1 if result.failed and not result.saved else 0
+    return 1 if result.failed else 0
 
 
 def _dry_run(scan, reading: str) -> None:

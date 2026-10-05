@@ -564,7 +564,9 @@ def test_import_says_how_the_dates_were_read(cfg, tmp_path, capsys):
 
     main(["import", str(export)])
 
-    assert "dates read as day/month" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "dates read as day/month" in out
+    assert "(assumed)" not in out
 
 
 def test_import_marks_an_assumed_date_order(cfg, tmp_path, capsys):
@@ -605,7 +607,10 @@ def test_import_json_is_one_object(cfg, tmp_path, capsys):
 
 def test_a_file_that_is_not_there_is_a_config_error(cfg, tmp_path, capsys):
     assert main(["import", str(tmp_path / "nope.txt")]) == 2
-    assert "nope.txt" in capsys.readouterr().err
+    err = capsys.readouterr().err
+    assert "nope.txt" in err
+    assert "No such file or directory" in err
+    assert "[Errno" not in err                   # the path is not printed twice
 
 
 def test_a_file_that_is_not_an_export_names_the_format(cfg, tmp_path, capsys):
@@ -655,6 +660,46 @@ def test_an_import_that_saved_nothing_because_it_failed_exits_one(cfg, tmp_path,
     assert main(["import", str(export)]) == 1
 
     assert "no space left" in capsys.readouterr().err
+
+
+def test_an_import_that_lost_some_links_exits_one_and_says_so_on_stdout(
+        cfg, tmp_path, capsys, monkeypatch):
+    export = tmp_path / "chat.txt"
+    export.write_text(EXPORT, encoding="utf-8")
+    real = write_note
+
+    def flaky(config, note, language, path=None):
+        if "youtu.be" in note.url:
+            raise OSError("no space left on device")
+        return real(config, note, language, path)
+
+    monkeypatch.setattr("oknowledge.pipeline.write_note", flaky)
+
+    assert main(["import", str(export)]) == 1
+
+    captured = capsys.readouterr()
+    assert len(all_notes(cfg)) == 1
+    assert "1 link was not saved" in captured.out
+    assert "no space left" in captured.err
+
+
+def test_a_dry_run_with_json_is_one_document_without_senders(cfg, tmp_path, capsys):
+    export = tmp_path / "chat.txt"
+    export.write_text(EXPORT, encoding="utf-8")
+
+    assert main(["import", str(export), "--dry-run", "--json"]) == 0
+
+    payload = json.loads(capsys.readouterr().out)
+    assert list(cfg.links_dir.glob("*.md")) == []
+    assert payload["written"] is False
+    assert payload["messages"] == 4
+    assert payload["suspicious"] == ["el config.json que te mandé"]
+    assert payload["links"][0] == {"sent": "2019-07-18",
+                                   "raw": "https://scratux.org/#download",
+                                   "url": "https://scratux.org/#download",
+                                   "bare": False}
+    assert [one["bare"] for one in payload["links"]] == [False, True]
+    assert "Fer" not in json.dumps(payload)
 
 
 def test_an_index_that_could_not_be_rebuilt_is_reported(cfg, tmp_path, capsys,
