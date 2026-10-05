@@ -909,14 +909,16 @@ def retry(cfg: Config, queue: Queue | None = None,
     # Newest first, within groups. The date is not in the queue -- `updated` is
     # when the entry was written, so an import runs oldest message first -- and
     # it comes from the note's `saved`: one scan per run, not one per link. An
-    # entry with no note goes first: it is a link that has not reached the
-    # vault yet, which is more urgent than any date. After it come the links
+    # entry with no note and no failure on record goes first: it is a link
+    # that has not reached the vault yet, which is more urgent than any date. After it come the links
     # never worked on, then the ones already tried, by the day they were tried,
     # oldest day first: a dead link keeps its old date and would otherwise sit
     # at the top and use up every run's quota, forever. The note's date decides
     # inside each group. A no-note entry cannot stall the run that way: add()
     # writes a partial note even when the fetch fails, so after one attempt it
-    # has a note and joins the day rotation.
+    # has a note and joins the day rotation -- and when the write itself fails
+    # (a file of the user's in the way) the reason it leaves behind puts it in
+    # its day group all the same.
     try:
         dates = {note.id: note.saved for note in all_notes(cfg)}
     except OSError:
@@ -951,10 +953,13 @@ def retry(cfg: Config, queue: Queue | None = None,
 def _last_worked(entry: QueueEntry, dates: dict[str, str]) -> str:
     """The calendar day a link was last worked on, or "" if it never was.
 
-    A link with no note, or one still carrying the import's own marker, has
-    not been worked on, and sorts before every date.
+    A link still carrying the import's own marker, or with no note and no
+    failure on record, has not been worked on, and sorts before every date. A
+    reason that is anything else means it was tried, note or no note: an entry
+    whose write keeps failing never gets a note, and must not stay at the head
+    of the order spending a quota slot on every run.
     """
-    if entry.id not in dates or entry.error == IMPORTED:
+    if entry.error == IMPORTED or (entry.id not in dates and not entry.error):
         return ""
     return entry.updated[:10]
 

@@ -9,7 +9,7 @@ import pytest
 from oknowledge.config import Config
 from oknowledge.extract import Unreadable
 from oknowledge.model import Extracted
-from oknowledge.pipeline import add, import_links, retry
+from oknowledge.pipeline import IMPORTED, _last_worked, add, import_links, retry
 from oknowledge.queue import Locked, Queue, state_dir
 from oknowledge.urls import link_id, normalize
 from oknowledge.vault import all_notes, index_path, read_note
@@ -1668,6 +1668,28 @@ def test_an_entry_with_no_note_goes_before_links_worked_on_today(cfg, q, monkeyp
     results = retry(cfg, queue=q, limit=1)
 
     assert results[0].url == "https://orphan.com/x"
+
+
+def test_an_entry_that_can_never_get_a_note_does_not_sit_first_forever(q):
+    """No note and a failure reason: it was worked on, so it joins its day.
+
+    The user replaced the file with one lacking our marker, so the write fails
+    and the note never shows up. Sorted first as a fresh orphan, it would take
+    a quota slot on every run for good.
+    """
+    dates = {"worked": "2019-01-01"}
+    never = q.enqueue("worked", "https://a.com/x", "full")
+    never.error = IMPORTED
+    stuck = q.enqueue("stuck", "https://b.com/x", "full")
+    stuck.error = "OSError: [Errno 13] Permission denied"
+    fresh = q.enqueue("fresh", "https://c.com/x", "full")
+    imported_orphan = q.enqueue("marked", "https://d.com/x", "full")
+    imported_orphan.error = IMPORTED
+
+    assert _last_worked(fresh, dates) == ""             # no note, no reason: first
+    assert _last_worked(imported_orphan, dates) == ""   # no note, the marker: first
+    assert _last_worked(never, dates) == ""
+    assert _last_worked(stuck, dates) > _last_worked(never, dates)
 
 
 def test_a_link_that_fails_still_uses_up_the_quota(cfg, q, monkeypatch):
