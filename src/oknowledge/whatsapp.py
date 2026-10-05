@@ -137,6 +137,11 @@ FULL = re.compile(r"https?://(?:(?![,;]https?://)[^\s<>\"])+", re.IGNORECASE)
 # is reported, because MAYBE still matches the message.
 BARE = re.compile(
     r"(?<![\w@.%-])((?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+([a-z]{2,24}))(?![\w@-])"
+    # A port, and only digits count as one: the lookahead above allows the
+    # colon, so without this `foo.com:80/x` was captured as `foo.com` and the
+    # real target was recorded nowhere. Digits only, so a colon ending a
+    # sentence and the `file:line` of a traceback gain nothing.
+    r"(:\d{1,5})?"
     r"(/[^\s<>\"]*)?",
     re.IGNORECASE,
 )
@@ -183,10 +188,11 @@ def _spans(text: str) -> list[tuple[int, int, str, bool]]:
         tld = found.group(2).lower()
         if tld not in TLDS and tld not in EXTENSIONS:
             continue
-        path = found.group(3) or ""
+        port, path = found.group(3) or "", found.group(4) or ""
         if tld in EXTENSIONS and not path:
-            continue                      # script.py wins as an extension
-        url = _trim(found.group(1) + path)
+            continue                      # script.py wins as an extension, and
+                                          # so does the script.py:42 of a trace
+        url = _trim(found.group(1) + port + path)
         if url:
             out.append((start, start + len(url), f"https://{url}", True))
 

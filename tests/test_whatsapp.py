@@ -302,3 +302,26 @@ def test_a_tld_the_curated_list_was_missing(text, expected):
     """Lines 3267-3268 of the real file, two consecutive messages the user
     typed by hand. Both are real sites, and both were lost."""
     assert find_links(text) == expected
+
+
+@pytest.mark.parametrize("text,expected", [
+    ("foo.com:80/x", [("https://foo.com:80/x", True)]),
+    ("e.com:3000/panel", [("https://e.com:3000/panel", True)]),
+])
+def test_a_bare_host_with_a_port_keeps_both_the_port_and_the_path(text, expected):
+    """Without the port the path went too, and `foo.com:80/x` was saved as
+    `foo.com`: the real target recorded nowhere, and not even suspicious,
+    because a link was found. A silent wrong capture, like the mangled
+    percent-encoding above."""
+    assert find_links(text) == expected
+
+
+@pytest.mark.parametrize("text,expected", [
+    ("mirá e.com: está caído", [("https://e.com", True)]),
+    ("e.com:/x", [("https://e.com", True)]),
+    ("script.py:42", []),
+])
+def test_what_follows_a_host_is_only_a_port_when_it_is_digits(text, expected):
+    """The other half: a colon ending a sentence, a colon with nothing after
+    it, and the `file:line` of a traceback are not ports."""
+    assert find_links(text) == expected
