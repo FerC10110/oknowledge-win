@@ -1355,3 +1355,60 @@ def test_a_partial_note_gets_its_icon_too(cfg, q, monkeypatch):
 
     assert result.status == "partial"
     assert (cfg.attachments_dir / "icons" / "arstechnica.com.png").is_file()
+
+
+# --- the saved date is when it was saved, not when it was reanalysed ---------
+
+
+def test_a_reprocessed_note_keeps_the_day_it_was_saved(cfg, q, monkeypatch):
+    """Reanalysing is not saving again.
+
+    Without this, importing six years of links and analysing them afterwards
+    piles them all onto the day of the analysis.
+    """
+    extraction(monkeypatch, Unreadable("503"))
+    no_pictures(monkeypatch)
+    first = add(cfg, "https://arstechnica.com/vpn", queue=q)
+    path = next(cfg.links_dir.glob("*.md"))
+    text = path.read_text(encoding="utf-8")
+    # The date is written quoted; a replace that matches nothing would leave the
+    # note dated today and the test would pass or fail for the wrong reason.
+    assert f"saved: '{TODAY}'" in text
+    path.write_text(text.replace(f"saved: '{TODAY}'", "saved: '2019-07-18'"),
+                    encoding="utf-8")
+
+    extraction(monkeypatch, PAGE)
+    cfg.engines["fake"]["replies"] = [ANSWER]
+    again = add(cfg, "https://arstechnica.com/vpn", reprocess=True, queue=q)
+
+    assert again.status == "ok"
+    assert read_note(again.path).saved == "2019-07-18"
+    assert first.id == again.id
+
+
+def test_a_partial_note_rewritten_over_a_partial_one_keeps_its_date(cfg, q, monkeypatch):
+    extraction(monkeypatch, Unreadable("503"))
+    no_pictures(monkeypatch)
+    add(cfg, "https://arstechnica.com/vpn", queue=q)
+    path = next(cfg.links_dir.glob("*.md"))
+    text = path.read_text(encoding="utf-8")
+    # The date is written quoted; a replace that matches nothing would leave the
+    # note dated today and the test would pass or fail for the wrong reason.
+    assert f"saved: '{TODAY}'" in text
+    path.write_text(text.replace(f"saved: '{TODAY}'", "saved: '2019-07-18'"),
+                    encoding="utf-8")
+
+    extraction(monkeypatch, Unreadable("still 503"))
+    again = add(cfg, "https://arstechnica.com/vpn", reprocess=True, queue=q)
+
+    assert read_note(again.path).saved == "2019-07-18"
+
+
+def test_a_brand_new_note_is_dated_today(cfg, q, monkeypatch):
+    """The other half of the rule: with nothing on disk, the date is today."""
+    extraction(monkeypatch, PAGE)
+    no_pictures(monkeypatch)
+
+    result = add(cfg, "https://arstechnica.com/vpn", queue=q)
+
+    assert read_note(result.path).saved == TODAY

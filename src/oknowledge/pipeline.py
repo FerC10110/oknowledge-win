@@ -262,8 +262,13 @@ def download_icon(cfg: Config, source: str | None) -> None:
 
 
 def _partial_note(cfg: Config, link: str, url: str, content: str,
-                  page: Extracted | None) -> Note:
-    """The note that can always be written: the URL, plus whatever did arrive."""
+                  page: Extracted | None, saved: str | None = None) -> Note:
+    """The note that can always be written: the URL, plus whatever did arrive.
+
+    `saved` is passed by whoever already knows when this link is from: a
+    reprocess, which reads the date off the note on disk, or an import, which
+    reads it from the chat.
+    """
     return Note(
         id=link,
         url=url,
@@ -272,7 +277,7 @@ def _partial_note(cfg: Config, link: str, url: str, content: str,
         tags=[],
         type=(page.type if page else detect_type(url)),
         source=(page.source if page else _host(url)),
-        saved=_today(),
+        saved=(saved or _today()),
         summary=PARTIAL_SUMMARY.get(cfg.language, PARTIAL_SUMMARY["en"]),
         points=[],
         status="partial",
@@ -373,6 +378,11 @@ def _process(cfg: Config, q: Queue, link: str, url: str, mode: str,
     # a `status: done` or `status: reviewed` of the user's -- or a deleted status
     # line, which reads back as ok -- has to fall on the protected side.
     kept = existing[1] if existing and existing[1].status != "partial" else None
+    # A note was saved when it was saved: reanalysing it does not save it
+    # again. Without this, a batch imported with its real dates would all pile
+    # onto the day of the analysis. Taken from any existing note, partial or
+    # not, so every branch below keeps it.
+    kept_date = existing[1].saved if existing else None
 
     try:
         page = extract(url)
@@ -382,7 +392,8 @@ def _process(cfg: Config, q: Queue, link: str, url: str, mode: str,
         # pypdf, yt-dlp or in our own dispatcher would otherwise cost the user
         # the link. _reason() keeps the type name so a real bug stays legible.
         # BaseException -- Ctrl-C, SystemExit -- passes through untouched.
-        return _give_up(cfg, q, link, url, mode, None, _reason(error), kept, target)
+        return _give_up(cfg, q, link, url, mode, None, _reason(error), kept, target,
+                        saved=kept_date)
 
     try:
         analysis, used = analyze_with_chain(
@@ -392,7 +403,8 @@ def _process(cfg: Config, q: Queue, link: str, url: str, mode: str,
     except AllEnginesFailed as error:
         # The text is already out of the page: keep it, so a retry only has to
         # ask a model again instead of fetching the page again.
-        return _give_up(cfg, q, link, url, mode, page, str(error), kept, target)
+        return _give_up(cfg, q, link, url, mode, page, str(error), kept, target,
+                        saved=kept_date)
 
     summary = analysis.summary
     if len(page.text) > DEFAULT_LIMIT:
@@ -408,7 +420,7 @@ def _process(cfg: Config, q: Queue, link: str, url: str, mode: str,
         tags=analysis.tags,
         type=page.type,
         source=page.source,
-        saved=_today(),
+        saved=(kept_date or _today()),
         summary=summary,
         points=analysis.points,
         status="ok",
@@ -423,7 +435,7 @@ def _process(cfg: Config, q: Queue, link: str, url: str, mode: str,
 
 def _give_up(cfg: Config, q: Queue, link: str, url: str, mode: str,
              page: Extracted | None, reason: str, kept: Note | None,
-             target: Path | None) -> Result:
+             target: Path | None, saved: str | None = None) -> Result:
     """Record a failure that produced no analysis.
 
     With an analyzed note already on disk there is nothing to write that would
@@ -446,7 +458,7 @@ def _give_up(cfg: Config, q: Queue, link: str, url: str, mode: str,
         trouble = _record(q, link, "ok", reason, kept.title)
         return Result(id=link, url=url, path=target, status="failed", error=reason,
                       warnings=[KEPT_NOTE, *trouble])
-    note = _partial_note(cfg, link, url, mode, page)
+    note = _partial_note(cfg, link, url, mode, page, saved=saved)
     return _save(cfg, q, link, url, note, "partial", reason, None, target)
 
 
