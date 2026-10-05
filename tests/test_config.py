@@ -194,13 +194,22 @@ def test_no_test_can_reach_the_real_config_file(tmp_path):
 
 def test_saving_a_config_nobody_loaded_cannot_reach_the_real_file(tmp_path):
     """The exact shape that leaked: no source, no path, so the default decides.
-    Whatever the default is, it has to be somewhere this test owns."""
+
+    The destination is asserted BEFORE the write. A guard that writes first
+    and checks afterwards has already done the damage by the time it fails --
+    which is literally what happened to this test the first time it was
+    mutation-checked: with the pin mutated away it wrote the user's own
+    config, and then reported the failure.
+    """
+    from oknowledge import config
+
     vault = tmp_path / "vault"
     vault.mkdir()
+    assert config.CONFIG_PATH.is_relative_to(tmp_path)     # before anything is written
 
     written = save(Config(vault=vault))
 
-    assert written.is_relative_to(tmp_path)
+    assert written == config.CONFIG_PATH
     assert load(written).vault == vault
 
 
