@@ -14,6 +14,7 @@ var STRINGS = {
     "Paste a link": "Pegar un link",
     "Nothing in the clipboard": "No hay nada en el portapapeles",
     "That is not a link": "Eso no es un link",
+    "That link cannot be retried from here": "Ese link no se puede reintentar desde acá",
     "Full": "Completo",
     "Summary": "Sólo resumen",
     "Saving…": "Guardando…",

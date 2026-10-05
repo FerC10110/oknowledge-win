@@ -617,3 +617,26 @@ def test_every_error_branch_of_the_api_engine_is_redacted(monkeypatch):
             engine.complete("hola")
         assert SECRET not in str(error.value), f"the key leaked when {name}"
         assert "***" in str(error.value), f"nothing was redacted when {name}"
+
+
+def test_a_key_that_straddles_the_message_limit_keeps_its_prefix_in(monkeypatch):
+    """_server_message cut the server's text to 300 characters and _redact ran
+    on the result, so a key starting at character 290 left its first ten
+    characters in the message. Redact, then cut."""
+    padding = "x" * 290
+    engine = api(monkeypatch, response=Response({"error": padding + SECRET}, status=401))
+    with pytest.raises(EngineError) as error:
+        engine.complete("hola")
+    message = str(error.value)
+    assert "sk-live" not in message
+    assert SECRET[:4] not in message
+    assert "***" in message
+
+
+def test_the_servers_message_is_still_bounded(monkeypatch):
+    """The cut is still a cut: a server that answers with a megabyte of prose
+    does not put a megabyte into a queue entry and a desktop notification."""
+    engine = api(monkeypatch, response=Response({"error": "y" * 5000}, status=500))
+    with pytest.raises(EngineError) as error:
+        engine.complete("hola")
+    assert len(str(error.value)) < 400

@@ -417,6 +417,7 @@ test("every text the model emits is translated to Spanish", () => {
       take(M.retryOutcome(code))
     }
   for (const c of ["", "x", "https://a.test/"]) take(M.clipboardOutcome(c))
+  take(M.retryRefusal({ url: "notes://x" }))
   take(M.clipboardFailure())
   take(M.addOutcome(0, addResult({ skipped: true }), "", true))
   for (const ok of [true, false, null]) { texts.add(M.queueNote(0, ok)); texts.add(M.face(M.summarize([], NOW), 0, ok).tooltip.text) }
@@ -428,4 +429,19 @@ test("every text the model emits is translated to Spanish", () => {
   texts.delete("%1")   // a title, which is the user's own text
   for (const text of texts)
     assert.ok(Object.prototype.hasOwnProperty.call(I18n.STRINGS.es, text), "no Spanish for: " + text)
+})
+
+test("a row whose url is not a link says so instead of doing nothing", () => {
+  const row = M.summarize([entry({ status: "failed", url: "notes://x" })], NOW).recent[0]
+  assert.equal(M.retryArgs(row), null)
+  const why = M.retryRefusal(row)
+  assert.equal(why.kind, "notUrl")
+  assert.equal(why.text, "That link cannot be retried from here")
+  assert.equal(why.detail, "notes://x")
+  assert.ok(Object.prototype.hasOwnProperty.call(I18n.STRINGS.es, why.text))
+})
+
+test("the refusal survives a row with no url at all", () => {
+  assert.equal(M.retryRefusal({}).detail, "")
+  assert.equal(M.retryRefusal(null).detail, "")
 })

@@ -239,7 +239,11 @@ Item {
   // One row's Retry: `add` for that link only. The IPC `retry` still retries all.
   function retryOne(row) {
     var args = Model.retryArgs(row)
-    if (args === null) return false
+    if (args === null) {
+      // Not a link we can hand to `add`. Say so instead of looking broken.
+      service.announce(Model.retryRefusal(row), "")
+      return false
+    }
     if (service.busyUrls[args[1]] > 0) return true
     service.startAdd(args[1], args, true)
     return true

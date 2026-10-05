@@ -37,7 +37,11 @@ def from_bytes(data: bytes, url: str) -> Extracted:
             raise Unreadable(f"the PDF at {url} is protected by a password")
         pages = [_page_text(page) for page in reader.pages[:MAX_PAGES]]
         meta = reader.metadata
-        # pypdf returns its own str subclass; yaml cannot write it.
+        # pypdf returns its own str subclass; yaml cannot write it. The author
+        # reaches the frontmatter as it is, so that str() is load-bearing. The
+        # title's is defence in depth: it goes through .strip() below, which
+        # already returns a plain str -- deliberate, not redundant, because the
+        # day someone drops the strip the subclass must not come back.
         meta_title, meta_author = (str(meta.title) if meta.title else None,
                                    str(meta.author) if meta.author else None) if meta else (None, None)
     except Unreadable:

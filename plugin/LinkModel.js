@@ -57,6 +57,15 @@ function retryArgs(row) {
   return addArgs(row.url, row.mode === "full" || row.mode === "summary" ? row.mode : null)
 }
 
+// Why that Retry did nothing. retryArgs() returns null for a row whose url is
+// not http(s) -- `oknowledge add "notes://x"`, or a hand-edited queue file --
+// and a button that does nothing without saying so is worse than one that
+// explains itself. The url goes in the body, so the user can see which row.
+function retryRefusal(row) {
+  var url = String((row && row.url) || "").trim()
+  return { kind: "notUrl", text: "That link cannot be retried from here", detail: url }
+}
+
 // ---- what `add` and `retry` report
 
 function firstLine(text) {
@@ -244,7 +253,8 @@ function webPort(toml) {
 if (typeof module !== "undefined") {
   module.exports = {
     STALE_MS: STALE_MS, looksLikeUrl: looksLikeUrl, clipboardOutcome: clipboardOutcome,
-    addArgs: addArgs, retryArgs: retryArgs, clipboardFailure: clipboardFailure,
+    addArgs: addArgs, retryArgs: retryArgs, retryRefusal: retryRefusal,
+    clipboardFailure: clipboardFailure,
     glyphFor: glyphFor, notifyBody: notifyBody, queueNote: queueNote, addOutcome: addOutcome, retryOutcome: retryOutcome,
     serveIsAlreadyUp: serveIsAlreadyUp, classifyEntry: classifyEntry, parseStatus: parseStatus,
     summarize: summarize, face: face, queueDir: queueDir, webPort: webPort

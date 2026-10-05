@@ -521,10 +521,13 @@ def test_an_unlockable_state_tree_does_not_block_an_edit(setup, monkeypatch):
 # --- the refusal names the characters it refuses (m1) -----------------------
 
 def test_the_refusal_names_every_character_it_refuses():
+    """Read from the constant, so adding a character to the rule and not to the
+    message is a failing test rather than a message that lies by omission."""
+    from oknowledge.ai.base import UNSAFE_IN_A_NAME
     from oknowledge.web.app import NOTICES
 
     message = NOTICES["bad-category"]
-    for char in '/\\:*?"<>|':
+    for char in UNSAFE_IN_A_NAME:
         assert char in message, f"the refusal does not name {char!r}"
 
 

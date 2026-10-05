@@ -19,15 +19,23 @@ ENDPOINTS = {
 }
 
 
+MESSAGE_LIMIT = 300
+
+
 def _server_message(response) -> str:
-    """The server's own explanation, if it sent one (never the request headers)."""
+    """The server's own explanation, if it sent one (never the request headers).
+
+    Returned whole, and cut by the caller *after* redacting: cutting first
+    leaves the prefix of a key that straddles the limit, and ten characters of
+    a live key is still ten characters of a live key.
+    """
     try:
         error = response.json().get("error", "")
     except Exception:
         return ""
     if isinstance(error, dict):
         error = error.get("message", "")
-    return str(error).strip()[:300]
+    return str(error).strip()
 
 
 class ApiEngine:
@@ -70,7 +78,7 @@ class ApiEngine:
             if response.status_code >= 400:
                 raise EngineError(
                     f"{self.provider} failed: "
-                    f"{self._redact(_server_message(response), secret) or f'HTTP {response.status_code}'}"
+                    f"{self._redact(_server_message(response), secret)[:MESSAGE_LIMIT] or f'HTTP {response.status_code}'}"
                 )
             data = response.json()
             if self.provider == "anthropic":

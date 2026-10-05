@@ -516,6 +516,17 @@ def test_truncation_does_not_leave_a_name_the_web_refuses():
     assert not out.endswith(".")
 
 
+def test_the_rule_names_the_characters_it_is_supposed_to_name():
+    """The one list both readers consult, written out once. Shrinking it is not
+    reader drift -- both readers shrink together -- which is exactly why it
+    needs a pin of its own: dropping ":" from the set would break no other
+    test, and the web would quietly start accepting "Q&A: tips"."""
+    from oknowledge.ai.base import UNSAFE_IN_A_NAME
+
+    assert sorted(UNSAFE_IN_A_NAME) == sorted('\\/:*?"<>|')
+    assert len(UNSAFE_IN_A_NAME) == 9
+
+
 def test_the_web_refuses_every_character_the_index_name_replaces():
     """Both sides read UNSAFE_IN_A_NAME. This is what makes that one list
     load-bearing: drop a character from either reader and the web starts
