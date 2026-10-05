@@ -316,15 +316,21 @@ def _not_saved(failed: list[tuple[str, str]]) -> None:
     for url, why in failed:
         by_reason.setdefault(why, []).append(url)
     for why, urls in by_reason.items():
-        if len(urls) == 1:
-            print(f"not saved: {_clean(urls[0])}: {_clean(why)}", file=sys.stderr)
-            continue
-        print(f"not saved: {_count(len(urls), 'link', 'links')}: {_clean(why)}",
-              file=sys.stderr)
-        for url in urls[:SHOWN]:
-            print(f"  {_clean(url)}", file=sys.stderr)
-        if len(urls) > SHOWN:
-            print(f"  ... and {len(urls) - SHOWN} more", file=sys.stderr)
+        links = [url for url in urls if url]
+        if not links:
+            # The failure that belongs to the batch and to no one link: with
+            # the vault unreadable nothing was even attempted. Printed through
+            # the per-url line it read `not saved: : the vault could not ...`.
+            print(f"not saved: {_clean(why)}", file=sys.stderr)
+        elif len(links) == 1:
+            print(f"not saved: {_clean(links[0])}: {_clean(why)}", file=sys.stderr)
+        else:
+            print(f"not saved: {_count(len(links), 'link', 'links')}: {_clean(why)}",
+                  file=sys.stderr)
+            for url in links[:SHOWN]:
+                print(f"  {_clean(url)}", file=sys.stderr)
+            if len(links) > SHOWN:
+                print(f"  ... and {len(links) - SHOWN} more", file=sys.stderr)
 
 
 def _headline(found: int, scan, reading: str) -> str:

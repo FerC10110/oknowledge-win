@@ -726,6 +726,27 @@ def test_an_import_that_lost_some_links_exits_one_and_says_so_on_stdout(
     assert "no space left" in captured.err
 
 
+def test_a_failed_vault_scan_is_reported_without_an_empty_field(
+        cfg, tmp_path, capsys, monkeypatch):
+    """The one failure that belongs to the batch and to no url. It printed as
+    `not saved: : the vault could not be read ...`, with the empty field where
+    a link should be."""
+    export = tmp_path / "chat.txt"
+    export.write_text(EXPORT, encoding="utf-8")
+
+    def unreadable(config):
+        raise OSError("input/output error")
+
+    monkeypatch.setattr("oknowledge.pipeline.all_notes", unreadable)
+
+    assert main(["import", str(export)]) == 1
+
+    err = capsys.readouterr().err
+    assert "not saved: : " not in err
+    assert "not saved: the vault could not be read" in err
+    assert "none of 2 links" in err
+
+
 def test_links_that_fail_for_the_same_reason_are_reported_once(
         cfg, tmp_path, capsys, monkeypatch):
     """A whole batch failing the same way is one thing to say, not 1215.

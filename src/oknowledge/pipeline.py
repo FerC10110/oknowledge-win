@@ -715,7 +715,10 @@ class ImportResult:
     saved: int = 0                              # new notes written
     already: int = 0                            # already in the vault, or taken
     duplicated: int = 0                         # repeats within the batch
-    failed: list[tuple[str, str]] = field(default_factory=list)   # (url, why)
+    # (url, why). An empty url is the sentinel for a failure of the whole
+    # batch and of no one link -- the vault could not be read, so nothing was
+    # even attempted -- and the report prints that row without the url.
+    failed: list[tuple[str, str]] = field(default_factory=list)
     # What went wrong around the notes without costing one: the single index
     # rebuild this batch gets. Reported, not swallowed -- one failure here
     # leaves every note of the batch out of every index, and an index nobody
