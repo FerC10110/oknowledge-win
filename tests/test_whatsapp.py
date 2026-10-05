@@ -1,8 +1,8 @@
-"""El parser del export de WhatsApp. Sin disco, sin red: texto a lista.
+"""The WhatsApp export parser. No disk, no network: text to list.
 
-Casi todo acá es sobre lo que el archivo real trae y el ejemplo limpio no:
-marcas invisibles, saltos de línea de Windows, mensajes partidos. Un regex
-escrito contra texto prolijo encuentra cero mensajes en el archivo de verdad.
+Most of this is about what the real file has and the clean example does not:
+invisible marks, Windows line endings, split messages. A regex written
+against tidy text finds zero messages in the real file.
 """
 
 import pytest
@@ -32,7 +32,7 @@ def test_a_two_digit_year_is_this_century():
 
 
 def test_a_message_split_over_lines_stays_one_message():
-    """Un link partido en dos líneas no se parte."""
+    """A link split over two lines does not split."""
     found, _, _ = messages(
         "18/7/2019, 11:36 - Fer: mirá esto\nsegunda línea\n"
         "19/7/2019, 09:00 - Fer: otro\n")
@@ -42,7 +42,7 @@ def test_a_message_split_over_lines_stays_one_message():
 
 
 def test_a_system_line_has_no_sender_and_is_still_read():
-    """Un link dentro de un aviso del sistema sigue siendo un link."""
+    """A link inside a system message is still a link."""
     found, _, _ = messages("18/7/2019, 11:36 - Fer creó el grupo\n")
 
     assert found[0].sender == ""
@@ -50,15 +50,21 @@ def test_a_system_line_has_no_sender_and_is_still_read():
 
 
 def test_the_invisible_marks_whatsapp_puts_in_do_not_hide_every_message():
-    """U+200E y los espacios duros son lo que trae el archivo real.
+    """U+200E and hard spaces are what the real file carries.
 
-    Sin limpiarlos, el regex da cero mensajes: silencioso y total.
+    Without cleaning them, the regex finds zero messages: silent and total.
+    The sender split breaks if NBSP or NNBSP replace the space after ":".
     """
     found, _, _ = messages(
-        "‎18/7/2019, 11:36 - Fer: https://e.com/x\n")
+        "‎18/7/2019, 11:36 - Fer:\xa0https://e.com/x\n"
+        "18/7/2019, 11:36 - Foo: bar\n")
 
-    assert len(found) == 1
+    assert len(found) == 2
     assert found[0].sent == "2019-07-18"
+    assert found[0].sender == "Fer"
+    assert found[0].text == "https://e.com/x"
+    assert found[1].sender == "Foo"
+    assert found[1].text == "bar"
 
 
 def test_windows_line_endings_and_a_bom_are_read():
@@ -82,7 +88,7 @@ def test_month_first_is_detected_from_a_second_field_over_twelve():
 
 
 def test_an_ambiguous_file_assumes_day_first_and_says_so():
-    """Un export de menos de 13 días no tiene evidencia. Se asume y se avisa."""
+    """An export of less than 13 days has no evidence. Assume and report."""
     _, day_first, assumed = messages("7/8/2019, 11:36 - Fer: x\n")
 
     assert (day_first, assumed) == (True, True)
@@ -110,7 +116,7 @@ def test_an_empty_file_is_refused_too():
 
 
 def test_an_impossible_date_is_skipped_not_fatal():
-    """31/2 no existe. Una línea mala no se lleva el archivo."""
+    """31/2 does not exist. A bad line does not bring down the file."""
     found, _, _ = messages("31/2/2019, 11:36 - Fer: x\n18/7/2019, 11:36 - Fer: y\n")
 
     assert [m.text for m in found] == ["y"]

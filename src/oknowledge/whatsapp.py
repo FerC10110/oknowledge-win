@@ -1,24 +1,24 @@
-"""Leer un export de chat de WhatsApp.
+"""Parse a WhatsApp chat export.
 
-Puro: texto adentro, listas afuera. No conoce el vault, la cola ni la red,
-así que se prueba con un string y sin montar nada.
+Pure: text in, lists out. Does not know about the vault, queue, or network,
+so it can be tested with a plain string without any setup.
 
-Dos capas. Esta de acá convierte el archivo en mensajes; la de abajo decide
-qué pedazo de un mensaje es un link. Están separadas porque fallan por
-razones distintas: el formato de la línea es cosa de WhatsApp, y qué cuenta
-como link es cosa de cómo escribe el usuario.
+Two layers. This one converts the file into messages; the next one decides
+which part of a message is a link. They are separate because they fail for
+different reasons: the line format is a WhatsApp matter, and what counts
+as a link is a matter of how the user writes.
 """
 
 import datetime as dt
 import re
 from dataclasses import dataclass
 
-# Lo que WhatsApp intercala en un export real y no se ve al abrirlo: marcas
-# de dirección y espacios que no son el espacio. Sin sacarlos, el regex de
-# abajo no matchea una sola línea del archivo de verdad.
+# What WhatsApp puts into an export that you don't see when you open it:
+# directional marks and spaces that are not regular spaces. Without removing
+# them, the regex below matches zero lines from the real file.
 INVISIBLE = str.maketrans({
     "‎": "", "‏": "", "‪": "", "‫": "", "‬": "",
-    "﻿": "", " ": " ", " ": " ", " ": " ",
+    "﻿": "", "\xa0": " ", " ": " ", " ": " ",
 })
 
 LINE = re.compile(
@@ -29,13 +29,13 @@ WANTED = "D/M/YYYY, HH:MM - Remitente: mensaje"
 
 
 class BadExport(Exception):
-    """El archivo no es un export que se pueda leer."""
+    """The file is not a readable WhatsApp export."""
 
 
 @dataclass
 class Message:
     sent: str        # YYYY-MM-DD
-    sender: str      # "" en un aviso del sistema
+    sender: str      # "" for a system message
     text: str
 
 
@@ -44,7 +44,7 @@ def _clean(text: str) -> list[str]:
 
 
 def _order(stamps: list[tuple[int, int]], raw: list[str]) -> tuple[bool, bool]:
-    """(día primero, se asumió). Evidencia antes que convención."""
+    """(day-first, was_assumed). Evidence before convention."""
     day_first = [i for i, (a, _) in enumerate(stamps) if a > 12]
     month_first = [i for i, (_, b) in enumerate(stamps) if b > 12]
     if day_first and month_first:
@@ -56,16 +56,16 @@ def _order(stamps: list[tuple[int, int]], raw: list[str]) -> tuple[bool, bool]:
         return True, False
     if month_first:
         return False, False
-    return True, True        # sin evidencia: día primero, y se avisa
+    return True, True        # no evidence: assume day-first and report it
 
 
 def messages(text: str) -> tuple[list[Message], bool, bool]:
-    """(los mensajes, día primero, se asumió el orden).
+    """(messages, day-first, was_assumed).
 
-    Una línea que no tiene el formato es continuación del mensaje anterior,
-    así que un mensaje de varias líneas no se parte. Una línea con el formato
-    pero con una fecha imposible se saltea: una línea mala no se lleva el
-    archivo, que es la regla de que no se pierde un link aplicada al parser.
+    A line without the format is a continuation of the previous message,
+    so a multiline message is not split. A line with the format but an
+    impossible date is skipped: a bad line does not bring down the file,
+    which is the "never lose a link" rule applied to the parser.
     """
     lines = _clean(text)
     starts = [n for n, line in enumerate(lines) if LINE.match(line) is not None]
@@ -80,11 +80,11 @@ def messages(text: str) -> tuple[list[Message], bool, bool]:
     bodies: list[tuple[re.Match, str]] = []
     for n, start in enumerate(starts):
         found = LINE.match(lines[start])
-        assert found is not None          # starts sólo tiene líneas que matchean
+        assert found is not None          # starts only contains lines that match
         end = starts[n + 1] if n + 1 < len(starts) else len(lines)
         tail = lines[start + 1:end]
         while tail and not tail[-1].strip():
-            tail.pop()                    # el salto de línea final del archivo
+            tail.pop()                    # trailing newline at end of file
         stamps.append((int(found.group(1)), int(found.group(2))))
         bodies.append((found, "\n".join([found.group(7), *tail])))
 
@@ -98,9 +98,9 @@ def messages(text: str) -> tuple[list[Message], bool, bool]:
         try:
             sent = dt.date(year, month, day).isoformat()
         except ValueError:
-            continue                      # 31/2: una línea mala, no un archivo malo
+            continue                      # 31/2: a bad line, not a bad file
         sender, _, rest = body.partition(": ")
         if not rest and ": " not in body:
-            sender, rest = "", body       # un aviso del sistema no tiene remitente
+            sender, rest = "", body       # a system message has no sender
         out.append(Message(sent=sent, sender=sender, text=rest))
     return out, day_first, assumed
