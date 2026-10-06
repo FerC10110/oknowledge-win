@@ -188,6 +188,14 @@ Una URL que el modelo devuelve se guarda **solo si ese string aparece
 literalmente en el texto que se le mandó** (descripción + transcript). Si no
 aparece, se reemplaza por el link de búsqueda.
 
+"El texto que se le mandó" es literal y es importante: `render_prompt` corta el
+contenido en `limit` antes de armar el prompt, y la comparación tiene que ser
+contra **ese** recorte, no contra el transcript completo. Un video de dos horas
+se manda truncado; una URL que vive solo en la cola que se descartó es una URL
+que el modelo nunca vio, y aceptarla porque coincide con el transcript completo
+sería aceptar una invención que acertó de casualidad. La guarda compara contra lo
+que viajó.
+
 Esto es el centro del diseño. La decisión del usuario fue "nadie inventa", y una
 instrucción en el prompt es algo que el modelo puede desobedecer sin que nos
 enteremos. Una comparación de substring no. La promesa la hace cumplir el código.
@@ -210,8 +218,12 @@ elegir buscador.
   guarda igual. Hacerla obligatoria haría que `analyze()` reintentara con el
   sufijo estricto y, al segundo fallo, perdiera la nota entera por una lista.
   Eso contradice la regla más fuerte del proyecto.
-- Ítems malformados (no objeto, sin `name`, nombre vacío, nombre que es un
-  placeholder del esquema) se descartan **de a uno**, no tiran el resto.
+- Un ítem que es un string pelado en vez de un objeto se acepta como nombre, con
+  link de búsqueda. Es la forma en que un modelo chico contesta esta clase de
+  pedido más seguido que ninguna otra, y descartarla vaciaría la lista justo con
+  los motores locales.
+- Ítems malformados (ni objeto ni string, sin `name`, nombre vacío, nombre que es
+  un placeholder del esquema) se descartan **de a uno**, no tiran el resto.
   `_is_placeholder` ya existe y se reusa.
 - Nombre de más de 80 caracteres: truncado.
 - Duplicados por nombre plegado (`_fold`, que ya existe y ya maneja acentos y
@@ -317,7 +329,8 @@ No corre solo y no se corre en esta implementación.
 | El video no tiene ni descripción ni subtítulos | `Unreadable`, igual que hoy. Sin cambios. |
 | El modelo no manda `mentions` | Lista vacía. La nota se guarda. Sin reintento. |
 | El modelo manda `mentions` que no es una lista | Lista vacía. La nota se guarda. |
-| Un ítem no es un objeto, o no tiene `name` | Se descarta ese ítem. |
+| Un ítem es un string pelado (`"opencode"`) | Se acepta: ese es el nombre, con link de búsqueda. |
+| Un ítem no es ni objeto ni string, o no tiene `name` | Se descarta ese ítem. |
 | `name` vacío, o es un placeholder del esquema | Se descarta ese ítem. |
 | `url` que no aparece en el texto del video | Link de búsqueda. |
 | `url` que aparece pero no es `http`/`https` | Link de búsqueda. |
