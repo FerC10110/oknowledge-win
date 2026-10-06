@@ -150,12 +150,25 @@ mecanismo con un nombre más, en el mismo lugar de la secuencia. En `analyze.txt
 quedan dos regiones condicionales: la línea del esquema y el párrafo de
 instrucciones.
 
-Los tres modos son fragmentos de texto en `prompts/mentions/tools.txt`,
-`all.txt` y `discussed.txt`, inyectados como `{{MENTION_SCOPE}}` **dentro** del
-bloque condicional, de modo que el fragmento puede usar `{{LANGUAGE}}` y se
-sustituye en la pasada de valores como el resto de la plantilla. Van en archivos
-y no en un diccionario de Python porque el texto de los prompts de este proyecto
-vive en `prompts/`, y tres párrafos no son razón para romper eso.
+Los tres modos son fragmentos de texto en `prompts/mentions-tools.txt`,
+`mentions-all.txt` y `mentions-discussed.txt`, inyectados como `{{SCOPE}}`
+**dentro** del bloque condicional. Van en archivos y no en un diccionario de
+Python porque el texto de los prompts de este proyecto vive en `prompts/`, y
+tres párrafos no son razón para romper eso.
+
+**Los nombres son planos y los fragmentos no llevan marcadores.** Dos
+restricciones que parecen arbitrarias y no lo son:
+
+- `pyproject.toml` declara `package-data = ["prompts/*.txt", ...]`, un glob de un
+  solo nivel. Un `prompts/mentions/tools.txt` lo encuentra el install editable y
+  no lo lleva el wheel: todos los tests en verde y roto para quien instale
+  normal. Un test en `test_packaging.py` vigila el caso, y tiene que usar
+  `PurePosixPath.full_match` y no `fnmatch`, porque en `fnmatch` el `*` cruza
+  las barras y el guardia pasaría de largo exactamente el caso que vigila.
+- La pasada de valores es un solo `re.sub`, que no re-escanea lo que una
+  sustitución inserta. Un `{{LANGUAGE}}` dentro de un fragmento saldría literal.
+  Los fragmentos son texto plano, y un test comprueba que ninguno contenga
+  `{{` para que la restricción esté impuesta y no solamente recordada.
 
 Al modelo se le pide:
 
@@ -300,7 +313,7 @@ toca únicamente la sección de menciones: el título, el resumen y los puntos q
 el usuario ya leyó no se reescriben. Un comando cuyo trabajo es agregar una lista
 no tiene por qué cambiar un resumen.
 
-Ese prompt inyecta el mismo `{{MENTION_SCOPE}}` que el grande y usa los mismos
+Ese prompt inyecta el mismo `{{SCOPE}}` que el grande y usa los mismos
 tres fragmentos: el modo configurado manda acá también, o el comando contradiría
 los ajustes. La función que lo corre es
 

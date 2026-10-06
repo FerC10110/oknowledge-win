@@ -567,8 +567,13 @@ def test_every_prompt_the_code_loads_is_declared_as_package_data():
     globs = data["tool"]["setuptools"]["package-data"]["oknowledge"]
     prompts = (ROOT / "src" / "oknowledge" / "prompts").rglob("*.txt")
 
+    # full_match and not fnmatch: in fnmatch a "*" crosses "/", so
+    # "prompts/mentions/tools.txt" would count as declared by "prompts/*.txt"
+    # and this guard would wave through the one case it exists for.
+    # full_match anchors the whole path and keeps "*" single-level (3.13+).
     missing = [str(p) for p in prompts
-               if not any(fnmatch(str(p.relative_to(ROOT / "src" / "oknowledge")), g)
+               if not any(PurePosixPath(p.relative_to(ROOT / "src" / "oknowledge"))
+                          .full_match(g)
                           for g in globs)]
 
     assert missing == [], f"loaded at runtime, shipped by nothing: {missing}"
