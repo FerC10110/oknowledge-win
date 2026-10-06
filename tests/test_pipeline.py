@@ -177,11 +177,9 @@ def test_the_existing_categories_are_offered_to_the_model(cfg, q, monkeypatch):
     extraction(monkeypatch, PAGE)
     no_pictures(monkeypatch)
     seen = {}
-    import oknowledge.pipeline as pipeline
 
     def spy(config, text, meta, known, engine=None, mentions=None):
         seen["known"] = list(known)
-        from oknowledge.ai.base import Analysis
         return Analysis("T", "S", [], "Redes", ["vpn"]), "fake"
 
     monkeypatch.setattr(pipeline, "analyze_with_chain", spy)
@@ -1726,6 +1724,7 @@ def test_a_limit_of_zero_does_nothing(cfg, q, monkeypatch):
     assert retry(cfg, queue=q, limit=0) == []
     assert len(q.unfinished()) == 3
 
+
 # --- Mentions: asking a video for the tools it names ----------------------
 
 
@@ -1758,6 +1757,21 @@ def test_a_youtube_link_ends_with_its_mentions_in_the_note(cfg, q, monkeypatch):
         Mention(name="opencode", url="https://opencode.ai"),
         Mention(name="Railway", url=search_url("Railway")),
     ]
+
+
+def test_a_video_that_names_nothing_ends_with_an_empty_list_not_none(cfg, q, monkeypatch):
+    """[] means asked and found nothing; None means nobody asked. Recording the
+    first as the second would make the backfill of Task 7 re-ask that video on
+    every run."""
+    nothing = json.dumps({**json.loads(VIDEO_ANSWER), "mentions": []})
+    cfg = dataclasses.replace(cfg, engines={"fake": {"replies": [nothing]}})
+    extraction(monkeypatch, VIDEO)
+    no_pictures(monkeypatch)
+
+    note = read_note(add(cfg, "https://youtu.be/x", queue=q).path)
+
+    assert note.mentions is not None
+    assert note.mentions == []
 
 
 def test_a_link_that_is_not_a_video_is_never_asked(cfg, q, monkeypatch):
