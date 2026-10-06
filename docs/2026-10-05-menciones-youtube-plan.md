@@ -666,12 +666,15 @@ def test_a_bad_row_does_not_take_the_good_ones_with_it():
 
 
 def test_the_same_name_twice_keeps_the_one_with_a_real_url():
+    """Name included: the upgrade replaces the whole Mention, so the casing is
+    the one from the row that carried the URL. That row is usually the one
+    quoting the official address, so it is usually the official casing too."""
     data = {"mentions": [{"name": "opencode"},
                          {"name": "OpenCode", "url": "https://opencode.ai"}]}
 
     got = to_mentions(data, "https://opencode.ai")
 
-    assert got == [Mention(name="opencode", url="https://opencode.ai")]
+    assert got == [Mention(name="OpenCode", url="https://opencode.ai")]
 
 
 def test_a_url_that_is_not_http_becomes_a_search():
