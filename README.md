@@ -50,6 +50,7 @@ default_content = "full"                 # "full" keeps the original text, "summ
 [ai]
 chain = ["opencode"]                     # engines to try, in order
 language = "es"                          # language of the generated content: "es" or "en"
+mentions = "tools"                       # what to list for a YouTube video: "tools", "all" or "discussed"
 
 [ai.opencode]
 model = "opencode/ling-3.1-flash-free"   # default
@@ -113,6 +114,7 @@ unfinished, is cleared by `retry` without rewriting the note.
 | `oknowledge status [--json]` | note count, and every link that is pending, partial or failed |
 | `oknowledge reindex` | rebuild every category index from the notes |
 | `oknowledge retry [--limit N] [--json]` | finish the links left half done, newest first (see the note below) |
+| `oknowledge mentions [--limit N] [--json]` | add the list of what a video names to the videos already saved (see the note below) |
 | `oknowledge icons` | fetch the favicon of every site in the library, once per site |
 | `oknowledge import FILE [--dry-run] [--json]` | import the links out of a WhatsApp export, dated when you sent them |
 | `oknowledge serve [--open]` | start the web UI |
@@ -175,12 +177,23 @@ code describes those links and not the backlog behind them: a limited run
 exits 0 when the links it worked on are fine, and 1 when one of them is still
 unfinished.
 
+**`mentions` gives the videos already in the library their list.** A YouTube
+note now carries what the video named, written when the link is first
+processed; this command does the same for the ones saved before. It writes the
+mentions section and nothing else: the title, the summary and the points you
+have already read are left as they are. It asks each video once, even when the
+answer is empty, so running it again only looks at videos it never asked. A
+note saved with its full text reuses it, so most of a run needs no network.
+`--limit N` stops after N videos, newest first, and the exit code describes
+those videos and not the backlog behind them. It spends model calls on your
+library, so it runs only when you type it, never by itself.
+
 ### Exit codes
 
 | Code | Meaning |
 |---|---|
 | 0 | it worked |
-| 1 | it ran, but the link is unfinished: a partial note, an entry locked by another process, or a `retry` that left some links undone |
+| 1 | it ran, but the link is unfinished: a partial note, an entry locked by another process, a `retry` that left some links undone, or a `mentions` run with a video it could not finish |
 | 2 | your input or config is wrong: bad arguments, an empty URL, a missing or malformed config, a port already in use |
 | 3 | something unexpected: a disk or permission error, a refused write, a bug |
 

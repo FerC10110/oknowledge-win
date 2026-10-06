@@ -280,6 +280,41 @@ def render_prompt(text: str, meta: dict, known, language: str, limit: int = DEFA
     return re.sub(r"\{\{([A-Z]+)\}\}", lambda m: values.get(m.group(1), m.group(0)), template)
 
 
+def render_mentions_prompt(text: str, meta: dict, language: str, mode: str) -> str:
+    """The mentions-only prompt, cut at the same limit as the full one.
+
+    Both sides use sent_text(), so the text the guard compares URLs against is
+    exactly the text the model was sent.
+    """
+    template = files("oknowledge").joinpath("prompts/mentions.txt").read_text(encoding="utf-8")
+    # Same order as render_prompt: conditionals first, then one values pass, so
+    # nothing from the transcript is ever resolved.
+    template = _conditionals(template, {})
+    body = sent_text(text)
+    if len(text) > DEFAULT_LIMIT:
+        body += "\n" + TRUNCATION_MARKER
+    values = {
+        "LANGUAGE": LANGUAGE_NAMES.get(language, language),
+        "SCOPE": _mention_scope(mode),
+        "URL": meta.get("url") or "",
+        "TITLE": meta.get("title") or "",
+        "TEXT": body,
+    }
+    return re.sub(r"\{\{([A-Z]+)\}\}", lambda m: values.get(m.group(1), m.group(0)), template)
+
+
+def mentions_only(engine: Engine, text: str, meta: dict, language: str,
+                  mode: str) -> list[Mention]:
+    """Ask for the mentions and nothing else.
+
+    Shares to_mentions() with the full analysis, so there is one definition of
+    "nothing is invented" and not two.
+    """
+    sent = sent_text(text)
+    prompt = render_mentions_prompt(text, meta, language, mode)
+    return to_mentions(extract_json(engine.complete(prompt)), sent)
+
+
 def extract_json(raw: str) -> dict:
     """The JSON object that is the answer, however it comes wrapped.
 

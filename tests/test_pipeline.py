@@ -1,6 +1,7 @@
 """The pipeline: a URL in, a note out, and never a lost link."""
 
 import dataclasses
+import dataclasses
 import datetime as dt
 import json
 import os
@@ -11,11 +12,12 @@ from oknowledge import pipeline
 from oknowledge.ai.base import Analysis
 from oknowledge.config import Config
 from oknowledge.extract import Unreadable
-from oknowledge.model import Extracted, Mention
-from oknowledge.pipeline import IMPORTED, _last_worked, add, import_links, retry
+from oknowledge.model import Extracted, Mention, Note
+from oknowledge.pipeline import (IMPORTED, _last_worked, add, backfill_mentions,
+                                 import_links, retry)
 from oknowledge.queue import Locked, Queue, state_dir
 from oknowledge.urls import link_id, normalize, search_url
-from oknowledge.vault import all_notes, index_path, read_note
+from oknowledge.vault import all_notes, find_note, index_path, read_note, write_note
 from oknowledge.whatsapp import Imported
 
 ANSWER = json.dumps({
@@ -1806,3 +1808,109 @@ def test_the_pipeline_asks_for_the_configured_mode_and_only_for_a_video(
     add(cfg, url, queue=q)
 
     assert seen["mentions"] == expected
+
+
+MENTIONS_ANSWER = json.dumps(
+    {"mentions": [{"name": "opencode", "url": "https://opencode.ai"}]})
+
+
+@pytest.fixture
+def videos(cfg):
+    """Five notes on disk. Only two are candidates: the videos nobody asked.
+
+    The body carries a URL, so the guard has something true to find and the
+    run needs neither yt-dlp nor the network.
+
+    `replies` is a callable, so the fake engine answers every candidate with a
+    mentions-only document instead of running out after the first.
+    """
+    cfg = dataclasses.replace(
+        cfg, engines={"fake": {"replies": lambda prompt: MENTIONS_ANSWER}})
+
+    def video(link_id, saved, mentions, type="youtube"):
+        return Note(id=link_id, url=f"https://youtu.be/{link_id}", title=link_id,
+                    category="Redes", tags=["x"], type=type, source="youtu.be",
+                    saved=saved, summary="Resumen.", points=["uno"],
+                    content="full",
+                    body="probamos opencode, esta en https://opencode.ai",
+                    mentions=mentions)
+
+    write_note(cfg, video("the-newest", "2026-10-04", None), "es")
+    write_note(cfg, video("never-asked", "2026-10-01", None), "es")
+    write_note(cfg, video("asked-empty", "2026-10-02", []), "es")
+    write_note(cfg, video("asked-full", "2026-10-03",
+                          [Mention(name="x", url="https://x.example")]), "es")
+    write_note(cfg, video("an-article", "2026-10-05", None, type="article"), "es")
+    return cfg
+
+
+def test_only_videos_that_were_never_asked_are_candidates(videos):
+    done = backfill_mentions(videos)
+
+    assert sorted(r.id for r in done) == ["never-asked", "the-newest"]
+    assert all(r.status == "ok" for r in done)
+
+
+def test_it_does_not_rewrite_the_title_the_summary_or_the_points(videos):
+    """A command whose job is to add a list has no business changing a summary
+    the user already read."""
+    before = find_note(videos, "never-asked")[1]
+
+    backfill_mentions(videos)
+    after = find_note(videos, "never-asked")[1]
+
+    assert (after.title, after.summary, after.points) == (
+        before.title, before.summary, before.points)
+    assert after.mentions == [Mention(name="opencode", url="https://opencode.ai")]
+
+
+def test_the_stored_text_is_used_and_nothing_is_fetched(videos):
+    """A note saved with content == full already holds the transcript: no
+    yt-dlp, no network. conftest fails the test if either is touched."""
+    backfill_mentions(videos)
+
+    assert find_note(videos, "never-asked")[1].mentions
+
+
+def test_notes_already_asked_are_left_alone(videos):
+    backfill_mentions(videos)
+
+    assert find_note(videos, "asked-empty")[1].mentions == []
+    assert find_note(videos, "asked-full")[1].mentions == [
+        Mention(name="x", url="https://x.example")]
+    assert find_note(videos, "an-article")[1].mentions is None
+
+
+def test_a_video_that_mentions_nothing_is_not_asked_twice(videos):
+    empty = dataclasses.replace(
+        videos, engines={"fake": {"replies": lambda prompt: '{"mentions": []}'}})
+    backfill_mentions(empty)
+    assert find_note(empty, "never-asked")[1].mentions == []
+
+    assert backfill_mentions(videos) == []
+
+
+def test_the_limit_stops_the_run(videos):
+    assert len(backfill_mentions(videos, limit=1)) == 1
+
+
+def test_newest_first(videos):
+    assert [r.id for r in backfill_mentions(videos, limit=1)] == ["the-newest"]
+
+
+def test_a_video_that_fails_does_not_stop_the_others(videos):
+    """One failure is a failed Result with its reason, and the loop goes on."""
+    answers = iter([RuntimeError("boom"), MENTIONS_ANSWER])
+
+    def reply(prompt):
+        answer = next(answers)
+        if isinstance(answer, Exception):
+            raise answer
+        return answer
+
+    cfg = dataclasses.replace(videos, engines={"fake": {"replies": reply}})
+    done = backfill_mentions(cfg)
+
+    assert [r.status for r in done] == ["failed", "ok"]
+    assert done[0].error
+    assert find_note(cfg, done[0].id)[1].mentions is None

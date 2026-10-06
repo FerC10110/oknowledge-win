@@ -851,6 +851,62 @@ def test_retry_refuses_a_negative_limit(cfg, capsys):
     assert "limit" in capsys.readouterr().err
 
 
+def test_mentions_shows_why_a_video_failed(cfg, monkeypatch, capsys):
+    monkeypatch.setattr("oknowledge.cli.backfill_mentions", lambda config, limit=None: [
+        Result(id="a1", url="https://youtu.be/a", path=None, status="ok"),
+        Result(id="b2", url="https://youtu.be/b", path=None, status="failed",
+               error="every engine failed"),
+    ])
+    assert main(["mentions"]) == 1
+    out = capsys.readouterr().out
+    assert "1/2 videos now have their mentions" in out
+    assert "https://youtu.be/b" in out and "every engine failed" in out
+
+
+def test_mentions_json_is_one_array(cfg, monkeypatch, capsys):
+    monkeypatch.setattr("oknowledge.cli.backfill_mentions", lambda config, limit=None: [
+        Result(id="a1", url="u", path=None, status="ok"),
+        Result(id="b2", url="v", path=None, status="failed", error="x"),
+    ])
+    main(["mentions", "--json"])
+    payload = json.loads(capsys.readouterr().out)
+    assert [p["id"] for p in payload] == ["a1", "b2"]
+
+
+def test_mentions_with_nothing_to_do_exits_zero(cfg, monkeypatch, capsys):
+    monkeypatch.setattr("oknowledge.cli.backfill_mentions", lambda config, limit=None: [])
+    assert main(["mentions"]) == 0
+
+
+def test_mentions_limit_is_passed_through(cfg, monkeypatch, capsys):
+    seen = {}
+
+    def fake(config, limit=None):
+        seen["limit"] = limit
+        return []
+
+    monkeypatch.setattr("oknowledge.cli.backfill_mentions", fake)
+
+    assert main(["mentions", "--limit", "50"]) == 0
+    assert seen["limit"] == 50
+
+
+@pytest.mark.parametrize("status,code", [("ok", 0), ("failed", 1)])
+def test_a_limited_mentions_run_reports_on_the_videos_it_worked_on(
+        cfg, monkeypatch, capsys, status, code):
+    """As for retry: the code describes the videos the run was asked to do, not
+    the backlog behind them."""
+    monkeypatch.setattr("oknowledge.cli.backfill_mentions", lambda config, limit=None: [
+        Result(id="a1", url="https://youtu.be/a", path=None, status=status)])
+
+    assert main(["mentions", "--limit", "1"]) == code
+
+
+def test_mentions_refuses_a_negative_limit(cfg, capsys):
+    assert main(["mentions", "--limit", "-1"]) == 2
+    assert "limit" in capsys.readouterr().err
+
+
 def test_a_reader_that_closes_the_pipe_early_is_not_an_error(tmp_path, monkeypatch):
     """`oknowledge import ... | head` closes stdout while we are still writing.
 

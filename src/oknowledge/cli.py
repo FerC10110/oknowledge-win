@@ -39,7 +39,7 @@ from pathlib import Path
 
 from .config import CONFIG_PATH, ENGINE_NAMES, ConfigError, PortUnavailable
 from .config import load as load_config
-from .pipeline import Result, add, backfill_icons, import_links, retry
+from .pipeline import Result, add, backfill_icons, backfill_mentions, import_links, retry
 from .queue import Queue
 from .urls import link_id, normalize
 from .vault import ProtectedNote, all_notes, rebuild_indexes
@@ -115,6 +115,12 @@ def _parser() -> argparse.ArgumentParser:
     retry_cmd.add_argument("--limit", type=int, metavar="N",
                            help="finish at most N links and stop")
     retry_cmd.add_argument("--json", action="store_true")
+
+    mentions_cmd = subs.add_parser(
+        "mentions", help="add the mentions to the videos already saved")
+    mentions_cmd.add_argument("--limit", type=int, metavar="N",
+                              help="do at most N videos and stop")
+    mentions_cmd.add_argument("--json", action="store_true")
 
     serve_cmd = subs.add_parser("serve", help="open the library in the browser")
     serve_cmd.add_argument("--open", action="store_true", help="also open the browser")
@@ -391,6 +397,22 @@ def _retry(cfg, args) -> int:
     return 0 if all(r.status == "ok" for r in results) else 1
 
 
+def _mentions(cfg, args) -> int:
+    if args.limit is not None and args.limit < 0:
+        print("oknowledge: --limit cannot be negative", file=sys.stderr)
+        return 2
+    results = backfill_mentions(cfg, limit=args.limit)
+    if args.json:
+        print(json.dumps([_result_dict(r) for r in results], ensure_ascii=False))
+    else:
+        done = sum(1 for r in results if r.status == "ok")
+        print(f"{done}/{len(results)} videos now have their mentions")
+        for r in results:
+            if r.status != "ok":
+                print(f"  {r.status:8} {_clean(r.url or r.id)}: {_clean(r.error)}")
+    return 0 if all(r.status == "ok" for r in results) else 1
+
+
 def main(argv: list[str] | None = None) -> int:
     """Run a command, and survive a reader that walks away.
 
@@ -443,6 +465,8 @@ def _run(argv: list[str] | None) -> int:
             return _import(cfg, args)
         if args.command == "retry":
             return _retry(cfg, args)
+        if args.command == "mentions":
+            return _mentions(cfg, args)
         if args.command == "serve":
             serve(cfg, args.open)
             return 0

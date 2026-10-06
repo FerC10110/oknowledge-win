@@ -22,7 +22,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from .ai import AllEnginesFailed, analyze_with_chain
+from .ai import AllEnginesFailed, analyze_with_chain, mentions_with_chain
 from .ai.base import DEFAULT_LIMIT, UNCATEGORIZED
 from .config import CONTENT_MODES, Config
 from .extract import Unreadable, detect_type, extract
@@ -39,6 +39,7 @@ from .vault import (
     note_stem,
     read_note,
     rebuild_indexes,
+    update_note,
     write_note,
 )
 from .whatsapp import Imported
@@ -979,3 +980,39 @@ def _failed(q: Queue, entry: QueueEntry, error: BaseException) -> Result:
         # offer it to the next retry.
         pass
     return Result(id=entry.id, url=entry.url, path=None, status="failed", error=reason)
+
+
+def backfill_mentions(cfg: Config, limit: int | None = None) -> list[Result]:
+    """Give the videos already in the library their mentions.
+
+    Candidates are notes of type youtube whose mentions are None -- never
+    asked. A note asked before stops being one even if the answer was empty,
+    which is what makes running this again cheap instead of pointless.
+
+    The text comes from where it already is: a note saved with content == full
+    holds the transcript in its body, so most of a backfill needs neither
+    yt-dlp nor the network. One saved as summary is extracted again.
+
+    Only the mentions section is written. The title, the summary and the points
+    are left exactly as they are.
+    """
+    candidates = [note for note in all_notes(cfg)
+                  if note.type == "youtube" and note.mentions is None]
+    # Newest first, like retry: the backlog is walked from what the user saved
+    # most recently, which is what they are most likely to be looking for.
+    candidates.sort(key=lambda note: note.saved, reverse=True)
+    results: list[Result] = []
+    for note in (candidates[:limit] if limit is not None else candidates):
+        try:
+            text = note.body or extract(note.url).text
+            found = mentions_with_chain(cfg, text,
+                                        {"url": note.url, "title": note.title})
+            written = update_note(cfg, note.id, cfg.language, mentions=found)
+        except Exception as error:
+            # One video that cannot be read does not stop the others, exactly
+            # as in retry(). The reason is reported, never swallowed.
+            results.append(Result(id=note.id, url=note.url, path=None,
+                                  status="failed", error=_reason(error)))
+            continue
+        results.append(Result(id=note.id, url=note.url, path=written, status="ok"))
+    return results

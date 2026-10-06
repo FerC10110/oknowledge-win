@@ -6,7 +6,7 @@ import pytest
 from oknowledge.ai.base import (
     DEFAULT_LIMIT, TRUNCATION_MARKER, Analysis, AnalysisError, EngineError, analyze,
     MAX_MENTION_NAME, MAX_MENTIONS, canonical_category, extract_json, normalize_tags,
-    render_prompt, retry_suffix, sent_text, to_mentions,
+    render_mentions_prompt, render_prompt, retry_suffix, sent_text, to_mentions,
 )
 from oknowledge.ai.fake import FakeEngine
 from oknowledge.model import Mention
@@ -778,3 +778,25 @@ def test_an_answer_with_no_mentions_key_is_not_a_failure():
 
     assert analysis.mentions == []
     assert analysis.summary
+
+
+def test_the_mentions_prompt_cuts_where_the_guard_looks():
+    """The guard compares URLs against sent_text(); the prompt must send that
+    same text, plus the marker, and nothing past it."""
+    text = "a" * DEFAULT_LIMIT + "https://late.example"
+    prompt = render_mentions_prompt(text, META, "es", "tools")
+
+    assert sent_text(text) in prompt
+    assert "https://late.example" not in prompt
+    assert TRUNCATION_MARKER in prompt
+
+
+def test_the_mentions_prompt_never_resolves_what_the_transcript_says():
+    prompt = render_mentions_prompt("{{IF_X}} {{LANGUAGE}} {{SCOPE}}", META, "es", "tools")
+
+    assert "{{IF_X}} {{LANGUAGE}} {{SCOPE}}" in prompt
+
+
+def test_the_mentions_prompt_carries_the_scope_of_its_mode():
+    assert render_mentions_prompt("t", META, "es", "discussed") != \
+        render_mentions_prompt("t", META, "es", "tools")
