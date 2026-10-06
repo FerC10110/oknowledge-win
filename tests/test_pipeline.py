@@ -1999,3 +1999,28 @@ def test_a_failed_retry_keeps_a_mentions_section_already_written(cfg, q, monkeyp
 
     assert [r.status for r in results] == ["partial"]
     assert read_note(next(cfg.links_dir.glob("*.md"))).mentions == kept
+
+
+def test_a_dead_engine_chain_stops_the_run_after_the_first_video(videos):
+    """With no working engine every video would pay its own extraction and
+    print its own copy of one failure. Stop, and say why."""
+    from oknowledge.ai.base import EngineError
+
+    asked = []
+
+    def down(prompt):
+        asked.append(prompt)
+        raise EngineError("connection refused")
+
+    cfg = dataclasses.replace(videos, engines={"fake": {"replies": down}})
+
+    done = backfill_mentions(cfg)
+
+    assert len(asked) == 1
+    assert [r.status for r in done] == ["failed"]
+    assert "every engine failed" in done[0].error
+    assert "stopped" in done[0].error
+    assert "1 more" in done[0].error
+    # Nothing was written: both stay candidates for the next run.
+    assert find_note(cfg, "never-asked")[1].mentions is None
+    assert find_note(cfg, "the-newest")[1].mentions is None

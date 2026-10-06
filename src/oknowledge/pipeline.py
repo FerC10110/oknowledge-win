@@ -1010,7 +1010,8 @@ def backfill_mentions(cfg: Config, limit: int | None = None,
     # most recently, which is what they are most likely to be looking for.
     candidates.sort(key=lambda note: note.saved, reverse=True)
     results: list[Result] = []
-    for note in (candidates[:limit] if limit is not None else candidates):
+    todo = candidates[:limit] if limit is not None else candidates
+    for index, note in enumerate(todo):
         try:
             with ExitStack() as stack:
                 try:
@@ -1044,6 +1045,22 @@ def backfill_mentions(cfg: Config, limit: int | None = None,
                     cfg, text, {"url": note.url, "title": note.title})
                 written = update_note(cfg, note.id, cfg.language,
                                       mentions=found_mentions)
+        except AllEnginesFailed as error:
+            # Same shape as import_links' _once(): trouble that is the same for
+            # every video is reported once, not once per video. Where _once()
+            # can carry on and stay quiet, this has to stop, because carrying
+            # on costs an extraction (yt-dlp, the network) per video to learn
+            # the same thing. Nothing is written, so every video stays a
+            # candidate and the next run, with an engine back, picks them up.
+            left = len(todo) - index - 1
+            reason = _reason(error)
+            if left:
+                reason += (f" -- stopped: {left} more video"
+                           f"{'s' if left != 1 else ''} not tried, run it again "
+                           "when an engine works")
+            results.append(Result(id=note.id, url=note.url, path=None,
+                                  status="failed", error=reason))
+            break
         except Exception as error:
             # One video that cannot be read does not stop the others, exactly
             # as in retry(). The reason is reported, never swallowed.
