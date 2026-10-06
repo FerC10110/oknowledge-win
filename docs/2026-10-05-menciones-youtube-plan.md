@@ -724,9 +724,9 @@ def to_mentions(data: dict, sent: str) -> list[Mention]:
 
 ```python
 def _to_analysis(data: dict, known, meta: dict, language: str, sent: str = "") -> Analysis:
-    ...
+    # el cuerpo de hoy, sin tocar: missing, summary, title, points
     return Analysis(
-        ...,
+        # los cinco campos de hoy, sin tocar
         mentions=to_mentions(data, sent),
     )
 ```
@@ -941,29 +941,73 @@ git commit -m "feat: choose which mentions a video is asked for, in the config a
 
 - [ ] **Step 1: los tests**
 
+Usan los helpers que `tests/test_pipeline.py` ya tiene: el fixture `cfg` (cadena
+`("fake",)`), el fixture `q`, `extraction(monkeypatch, result)` y
+`no_pictures(monkeypatch)` — sin ese último, conftest hace fallar el test por
+tocar la red.
+
 ```python
 # tests/test_pipeline.py
-def test_a_youtube_link_ends_with_its_mentions_in_the_note(cfg, monkeypatch):
-    ...  # extractor fake que devuelve Extracted(type="youtube", text con la URL)
-    note = read_note(add(cfg, "https://youtu.be/x").path)
+VIDEO = Extracted(
+    title="Mi stack 2026",
+    text="probamos opencode, esta en https://opencode.ai y tambien Railway",
+    type="youtube",
+    source="youtu.be",
+)
 
-    assert note.mentions == [Mention(name="opencode", url="https://opencode.ai")]
+VIDEO_ANSWER = json.dumps({
+    "title": "Mi stack 2026",
+    "summary": "Cuenta que herramientas usa.",
+    "points": ["Usa opencode"],
+    "category": "Redes",
+    "tags": ["dev"],
+    "mentions": [{"name": "opencode", "url": "https://opencode.ai"},
+                 {"name": "Railway", "url": ""}],
+})
 
 
-def test_a_link_that_is_not_a_video_is_never_asked(cfg, monkeypatch):
-    """Not an empty list: None. Nobody asked, and the backfill must be able to
-    tell the difference."""
-    note = read_note(add(cfg, "https://e.com/x").path)
+def test_a_youtube_link_ends_with_its_mentions_in_the_note(cfg, q, monkeypatch):
+    cfg = dataclasses.replace(cfg, engines={"fake": {"replies": [VIDEO_ANSWER]}})
+    extraction(monkeypatch, VIDEO)
+    no_pictures(monkeypatch)
+
+    note = read_note(add(cfg, "https://youtu.be/x", queue=q).path)
+
+    assert note.mentions == [
+        Mention(name="opencode", url="https://opencode.ai"),
+        Mention(name="Railway", url=search_url("Railway")),
+    ]
+
+
+def test_a_link_that_is_not_a_video_is_never_asked(cfg, q, monkeypatch):
+    """None, not an empty list. Nobody asked, and the backfill of Task 7 has to
+    be able to tell those two apart."""
+    extraction(monkeypatch, PAGE)
+    no_pictures(monkeypatch)
+
+    note = read_note(add(cfg, "https://e.com/x", queue=q).path)
 
     assert note.mentions is None
 
 
-def test_the_mode_that_reaches_the_prompt_is_the_configured_one(cfg, monkeypatch):
+@pytest.mark.parametrize("page,expected", [(VIDEO, "discussed"), (PAGE, None)])
+def test_the_pipeline_asks_for_the_configured_mode_and_only_for_a_video(
+        cfg, q, monkeypatch, page, expected):
+    cfg = dataclasses.replace(cfg, mentions="discussed")
+    extraction(monkeypatch, page)
+    no_pictures(monkeypatch)
     seen = {}
-    monkeypatch.setattr("oknowledge.pipeline.analyze_with_chain",
-                        lambda *a, **kw: seen.update(kw) or (ANALYSIS, "fake"))
-    ...
-    assert seen["mentions"] == cfg.mentions
+
+    def spy(config, text, meta, known, engine=None, mentions=None):
+        seen["mentions"] = mentions
+        return Analysis(title="t", summary="s", points=[], category="Redes",
+                        tags=["x"], mentions=[]), "fake"
+
+    monkeypatch.setattr(pipeline, "analyze_with_chain", spy)
+
+    add(cfg, "https://youtu.be/x", queue=q)
+
+    assert seen["mentions"] == expected
 ```
 
 - [ ] **Step 2: correr y ver fallar**
@@ -1090,12 +1134,19 @@ def test_deleting_a_mention_does_not_rebuild_the_indexes(client, cfg,
     client.post("/item/a1/mentions/delete", data={"name": "Railway"})
 
 
-def test_the_reprocess_warning_still_has_its_translation():
-    """In i18n the key IS the English text, so changing the warning moves the
-    key: the Spanish entry has to move with it or the warning comes out in
-    English."""
-    from oknowledge.web.templates import ...   # leer item.html y sacar el data-ask
-    assert warning in STRINGS["es"]
+def test_every_confirmation_in_the_note_page_still_has_its_translation():
+    """In i18n the key IS the English text, so changing the reprocess warning
+    changes the key. The Spanish entry has to move with it, or a Spanish
+    interface shows an English warning about what it is going to overwrite."""
+    template = (Path(web.__file__).parent / "templates" / "item.html").read_text(
+        encoding="utf-8")
+
+    asked = re.findall(r"data-ask=\"\{\{ t\('(.+?)'\) \}\}\"", template)
+
+    assert asked, "the forms lost their data-ask"
+    assert [text for text in asked if text not in STRINGS["es"]] == []
+    assert any("mention" in text.lower() for text in asked), (
+        "the reprocess warning does not say the mentions are replaced too")
 ```
 
 - [ ] **Step 2: correr y ver fallar**
@@ -1108,7 +1159,7 @@ Expected: FAIL, 404 en la ruta nueva
 ```python
 def update_note(cfg: Config, link_id: str, language: str,
                 category: str | None = None, tags=None, mentions=None) -> Path | None:
-    ...
+    # el cuerpo de hoy hasta el write_note: find_note, category, tags
     if mentions is not None:
         note.mentions = list(mentions)
     written = write_note(cfg, note, language, path=path)
@@ -1201,47 +1252,70 @@ git commit -m "feat: read a video's mentions in the library, and drop the ones y
 
 ```python
 # tests/test_pipeline.py
-def test_only_videos_that_were_never_asked_are_candidates(cfg):
-    ...  # un youtube con mentions=None, uno con [], uno con lista, un articulo
-    done = backfill_mentions(cfg)
+@pytest.fixture
+def videos(cfg):
+    """Five notes on disk. Only two are candidates: the videos nobody asked.
 
-    assert [r.id for r in done] == ["never-asked"]
+    The body carries a URL, so the guard has something true to find and the
+    run needs neither yt-dlp nor the network.
+    """
+    def video(link_id, saved, mentions, type="youtube"):
+        return Note(id=link_id, url=f"https://youtu.be/{link_id}", title=link_id,
+                    category="Redes", tags=["x"], type=type, source="youtu.be",
+                    saved=saved, summary="Resumen.", points=["uno"],
+                    content="full",
+                    body="probamos opencode, esta en https://opencode.ai",
+                    mentions=mentions)
+
+    write_note(cfg, video("the-newest", "2026-10-04", None), "es")
+    write_note(cfg, video("never-asked", "2026-10-01", None), "es")
+    write_note(cfg, video("asked-empty", "2026-10-02", []), "es")
+    write_note(cfg, video("asked-full", "2026-10-03",
+                          [Mention(name="x", url="https://x.example")]), "es")
+    write_note(cfg, video("an-article", "2026-10-05", None, type="article"), "es")
+    return cfg
 
 
-def test_it_does_not_rewrite_the_title_the_summary_or_the_points(cfg):
+def test_only_videos_that_were_never_asked_are_candidates(videos):
+    done = backfill_mentions(videos)
+
+    assert sorted(r.id for r in done) == ["never-asked", "the-newest"]
+
+
+def test_it_does_not_rewrite_the_title_the_summary_or_the_points(videos):
     """A command whose job is to add a list has no business changing a summary
     the user already read."""
-    before = find_note(cfg, "v1")[1]
+    before = find_note(videos, "never-asked")[1]
 
-    backfill_mentions(cfg)
-    after = find_note(cfg, "v1")[1]
+    backfill_mentions(videos)
+    after = find_note(videos, "never-asked")[1]
 
     assert (after.title, after.summary, after.points) == (
         before.title, before.summary, before.points)
     assert after.mentions
 
 
-def test_the_stored_text_is_used_and_nothing_is_fetched(cfg):
+def test_the_stored_text_is_used_and_nothing_is_fetched(videos):
     """A note saved with content == full already holds the transcript: no
     yt-dlp, no network. conftest fails the test if either is touched."""
-    backfill_mentions(cfg)
+    backfill_mentions(videos)
 
-    assert find_note(cfg, "v1")[1].mentions
+    assert find_note(videos, "never-asked")[1].mentions
 
 
-def test_a_video_that_mentions_nothing_is_not_asked_twice(cfg):
-    backfill_mentions(cfg)
-    second = backfill_mentions(cfg)
+def test_a_video_that_mentions_nothing_is_not_asked_twice(videos):
+    backfill_mentions(videos)
+    second = backfill_mentions(videos)
 
     assert second == []
 
 
-def test_the_limit_stops_the_run(cfg):
-    assert len(backfill_mentions(cfg, limit=1)) == 1
+def test_the_limit_stops_the_run(videos):
+    assert len(backfill_mentions(videos, limit=1)) == 1
 
 
-def test_newest_first(cfg):
-    assert [r.id for r in backfill_mentions(cfg, limit=1)] == ["the-newest"]
+def test_newest_first(videos):
+    assert [r.id for r in backfill_mentions(videos, limit=1)] == ["the-newest"]
 ```
 
 - [ ] **Step 2: correr y ver fallar**
@@ -1295,12 +1369,36 @@ def backfill_mentions(cfg: Config, limit: int | None = None) -> list[Result]:
     """
 ```
 
-Recorre `all_notes(cfg)`, filtra, ordena por `saved` descendente, corta en
-`limit`, y por cada una: texto (`note.body` o re-extracción), `mentions_with_chain`,
-`update_note(..., mentions=...)`. Cada fallo es un `Result` con `status` y
-`error` y **no** corta el recorrido, igual que `retry`.
+```python
+    candidates = [note for note in all_notes(cfg)
+                  if note.type == "youtube" and note.mentions is None]
+    # Newest first, like retry: the backlog is walked from what the user saved
+    # most recently, which is what they are most likely to be looking for.
+    candidates.sort(key=lambda note: note.saved, reverse=True)
+    results: list[Result] = []
+    for note in (candidates[:limit] if limit is not None else candidates):
+        try:
+            text = note.body or extract(note.url).text
+            found = mentions_with_chain(cfg, text,
+                                        {"url": note.url, "title": note.title})
+            written = update_note(cfg, note.id, cfg.language, mentions=found)
+        except Exception as error:
+            # One video that cannot be read does not stop the others, exactly
+            # as in retry(). The reason is reported, never swallowed.
+            results.append(Result(id=note.id, url=note.url, path=None,
+                                  status="failed", error=_reason(error)))
+            continue
+        results.append(Result(id=note.id, url=note.url, path=written, status="ok"))
+    return results
+```
+
+`mentions_with_chain(cfg, text, meta) -> list[Mention]` vive en `ai/__init__.py`,
+lee el modo de `cfg.mentions` y recorre `cfg.chain` como `analyze_with_chain`.
 
 - [ ] **Step 6: el subcomando**
+
+Espeja `_retry` línea por línea, incluido el guardia del límite negativo y el
+reuso de `_result_dict` y `_clean`:
 
 ```python
 def _mentions(cfg, args) -> int:
@@ -1308,8 +1406,22 @@ def _mentions(cfg, args) -> int:
         print("oknowledge: --limit cannot be negative", file=sys.stderr)
         return 2
     results = backfill_mentions(cfg, limit=args.limit)
-    ...
+    if args.json:
+        print(json.dumps([_result_dict(r) for r in results], ensure_ascii=False))
+    else:
+        done = sum(1 for r in results if r.status == "ok")
+        print(f"{done}/{len(results)} videos now have their mentions")
+        for r in results:
+            if r.status != "ok":
+                print(f"  {r.status:8} {_clean(r.url or r.id)}: {_clean(r.error)}")
     return 0 if all(r.status == "ok" for r in results) else 1
+```
+
+Y el despacho en `_run`, junto a los otros:
+
+```python
+        if args.command == "mentions":
+            return _mentions(cfg, args)
 ```
 
 Registrado como `icons` en `_parser`, con `--limit N` y `--json`, con la ayuda
