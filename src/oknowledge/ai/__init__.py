@@ -37,7 +37,7 @@ def build_engine(name: str, cfg: Config) -> Engine:
 
 
 def analyze_with_chain(cfg: Config, text: str, meta: dict, known,
-                       engine: str | None = None) -> tuple[Analysis, str]:
+                       engine: str | None = None, mentions: str | None = None) -> tuple[Analysis, str]:
     """Try each listed engine in order; return the analysis and who produced it.
 
     An engine that is not in the chain is never tried. Forcing one by name is an
@@ -49,7 +49,7 @@ def analyze_with_chain(cfg: Config, text: str, meta: dict, known,
     failures = []
     for name in names:
         try:
-            return analyze(build_engine(name, cfg), text, meta, known, cfg.language), name
+            return analyze(build_engine(name, cfg), text, meta, known, cfg.language, mentions=mentions), name
         except (EngineError, AnalysisError) as error:
             failures.append(f"{name}: {error}")
     raise AllEnginesFailed("every engine failed: " + "; ".join(failures))

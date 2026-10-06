@@ -1,17 +1,20 @@
 """The pipeline: a URL in, a note out, and never a lost link."""
 
+import dataclasses
 import datetime as dt
 import json
 import os
 
 import pytest
 
+from oknowledge import pipeline
+from oknowledge.ai.base import Analysis
 from oknowledge.config import Config
 from oknowledge.extract import Unreadable
-from oknowledge.model import Extracted
+from oknowledge.model import Extracted, Mention
 from oknowledge.pipeline import IMPORTED, _last_worked, add, import_links, retry
 from oknowledge.queue import Locked, Queue, state_dir
-from oknowledge.urls import link_id, normalize
+from oknowledge.urls import link_id, normalize, search_url
 from oknowledge.vault import all_notes, index_path, read_note
 from oknowledge.whatsapp import Imported
 
@@ -176,7 +179,7 @@ def test_the_existing_categories_are_offered_to_the_model(cfg, q, monkeypatch):
     seen = {}
     import oknowledge.pipeline as pipeline
 
-    def spy(config, text, meta, known, engine=None):
+    def spy(config, text, meta, known, engine=None, mentions=None):
         seen["known"] = list(known)
         from oknowledge.ai.base import Analysis
         return Analysis("T", "S", [], "Redes", ["vpn"]), "fake"
@@ -1722,3 +1725,70 @@ def test_a_limit_of_zero_does_nothing(cfg, q, monkeypatch):
 
     assert retry(cfg, queue=q, limit=0) == []
     assert len(q.unfinished()) == 3
+
+# --- Mentions: asking a video for the tools it names ----------------------
+
+
+VIDEO = Extracted(
+    title="Mi stack 2026",
+    text="probamos opencode, esta en https://opencode.ai y tambien Railway",
+    type="youtube",
+    source="youtu.be",
+)
+
+VIDEO_ANSWER = json.dumps({
+    "title": "Mi stack 2026",
+    "summary": "Cuenta que herramientas usa.",
+    "points": ["Usa opencode"],
+    "category": "Redes",
+    "tags": ["dev"],
+    "mentions": [{"name": "opencode", "url": "https://opencode.ai"},
+                 {"name": "Railway", "url": ""}],
+})
+
+
+def test_a_youtube_link_ends_with_its_mentions_in_the_note(cfg, q, monkeypatch):
+    cfg = dataclasses.replace(cfg, engines={"fake": {"replies": [VIDEO_ANSWER]}})
+    extraction(monkeypatch, VIDEO)
+    no_pictures(monkeypatch)
+
+    note = read_note(add(cfg, "https://youtu.be/x", queue=q).path)
+
+    assert note.mentions == [
+        Mention(name="opencode", url="https://opencode.ai"),
+        Mention(name="Railway", url=search_url("Railway")),
+    ]
+
+
+def test_a_link_that_is_not_a_video_is_never_asked(cfg, q, monkeypatch):
+    """None, not an empty list. Nobody asked, and the backfill of Task 7 has to
+    be able to tell those two apart."""
+    extraction(monkeypatch, PAGE)
+    no_pictures(monkeypatch)
+
+    note = read_note(add(cfg, "https://e.com/x", queue=q).path)
+
+    assert note.mentions is None
+
+
+@pytest.mark.parametrize("page,url,expected", [
+    (VIDEO, "https://youtu.be/x", "discussed"),
+    (PAGE, "https://e.com/x", None),
+])
+def test_the_pipeline_asks_for_the_configured_mode_and_only_for_a_video(
+        cfg, q, monkeypatch, page, url, expected):
+    cfg = dataclasses.replace(cfg, mentions="discussed")
+    extraction(monkeypatch, page)
+    no_pictures(monkeypatch)
+    seen = {}
+
+    def spy(config, text, meta, known, engine=None, mentions=None):
+        seen["mentions"] = mentions
+        return Analysis(title="t", summary="s", points=[], category="Redes",
+                        tags=["x"], mentions=[]), "fake"
+
+    monkeypatch.setattr(pipeline, "analyze_with_chain", spy)
+
+    add(cfg, url, queue=q)
+
+    assert seen["mentions"] == expected

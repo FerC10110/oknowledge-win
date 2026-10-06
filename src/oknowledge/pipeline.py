@@ -436,6 +436,9 @@ def _process(cfg: Config, q: Queue, link: str, url: str, mode: str,
         analysis, used = analyze_with_chain(
             cfg, page.text, {"url": url, "title": page.title},
             list(categories(cfg)), engine=engine,
+            # Only a video is asked, and only the pipeline sees both the type
+            # and the config at once.
+            mentions=cfg.mentions if page.type == "youtube" else None,
         )
     except AllEnginesFailed as error:
         # The text is already out of the page: keep it, so a retry only has to
@@ -466,6 +469,7 @@ def _process(cfg: Config, q: Queue, link: str, url: str, mode: str,
         published=page.published,
         cover=download_cover(cfg, page.cover_url, link),
         body=page.text if mode == "full" else None,
+        mentions=analysis.mentions if page.type == "youtube" else None,
     )
     return _save(cfg, q, link, url, note, "ok", "", used, target)
 
