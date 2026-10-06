@@ -1123,76 +1123,118 @@ git commit -m "feat: ask a video for its mentions, and nothing else for any"
 
 **Interfaces:**
 - Consumes: `Note.mentions`, `is_search_url` de la Task 1.
-- Produces: `update_note(cfg, link_id, language, category=None, tags=None, mentions=None)`;
+- Produces: `update_note(cfg, link_id, language, category=None, tags=None, mentions=None, drop_mention=None)`;
   `POST /item/{link_id}/mentions/delete` con el campo `name`.
 
 - [ ] **Step 1: los tests**
 
+Los fixtures de menciones no existen: hay que escribirlos, siguiendo la forma
+que cada archivo ya usa. En `tests/test_web_read.py` el fixture `client`
+devuelve sólo el `TestClient` y hay un helper `note(...)` local; en
+`tests/test_web_write.py` el fixture `setup` devuelve la tupla `(cfg, client)`.
+A los dos helpers `note(...)` se les agregan los parámetros `type="article"` y
+`mentions=None`, en vez de mutar atributos después de construir la `Note`.
+
 ```python
 # tests/test_web_read.py
-def test_the_mentions_show_up_on_the_note(client, note_with_mentions):
-    page = client.get("/item/a1").text
+MENTIONED = [Mention(name="opencode", url="https://opencode.ai"),
+             Mention(name="Railway", url=search_url("Railway"))]
+
+
+@pytest.fixture
+def video(tmp_path):
+    """Un cliente cuyo a1 es un video con dos menciones: una real y una búsqueda."""
+    vault = tmp_path / "vault"
+    (vault / "oknowledge" / "links").mkdir(parents=True)
+    cfg = Config(vault=vault)
+    write_note(cfg, note("a1", "Mi stack 2026", "Redes", ["dev"],
+                         "Qué herramientas usa.", type="youtube",
+                         mentions=MENTIONED), "es")
+    rebuild_indexes(cfg, "es")
+    return TestClient(create_app(cfg))
+
+
+def test_the_mentions_show_up_on_the_note(video):
+    page = video.get("/item/a1").text
 
     assert "opencode" in page
     assert "https://opencode.ai" in page
 
 
-def test_a_search_link_is_marked_and_a_real_one_is_not(client, note_with_mentions):
+def test_a_search_link_is_marked_and_a_real_one_is_not(video):
     """The distinction the user chose has to be readable without thinking."""
-    page = client.get("/item/a1").text
+    page = video.get("/item/a1").text
 
     assert page.count("mention-search") == 1
 
 
-def test_a_note_never_asked_shows_no_section(client, note_without_mentions):
-    assert "Menciones" not in client.get("/item/a1").text
+def test_a_note_never_asked_shows_no_section(client):
+    """The section's own class, not its heading: conftest points the shared
+    language file at a path that does not exist, so every test here renders in
+    English and `"Menciones" not in page` would pass however the note looks.
+    `client`'s a1 is an article nobody asked, which is the case under test."""
+    assert 'class="mentions"' not in client.get("/item/a1").text
 
 
-def test_the_popup_shows_the_mentions_but_offers_no_way_to_delete(client,
-                                                                  note_with_mentions):
+def test_the_popup_shows_the_mentions_but_offers_no_way_to_delete(video):
     """embed.html is a fragment that writes nothing, and its own header says
     so. Respecting that matters more than saving a click."""
-    page = client.get("/embed/a1").text
+    page = video.get("/embed/a1").text
 
     assert "opencode" in page
     assert "mentions/delete" not in page
 
 
-# tests/test_web_write.py
-def test_deleting_a_mention_leaves_the_rest(client, cfg, note_with_mentions):
+# tests/test_web_write.py -- el fixture `video` acá es el mismo `setup` con una
+# nota de video: devuelve `(cfg, client)` y mantiene el XDG_STATE_HOME en
+# tmp_path, como hace `setup`.
+def test_deleting_a_mention_leaves_the_rest(video):
+    cfg, client = video
     client.post("/item/a1/mentions/delete", data={"name": "Railway"})
 
     assert [m.name for m in find_note(cfg, "a1")[1].mentions] == ["opencode"]
 
 
-def test_deleting_the_last_one_leaves_an_empty_list_not_none(client, cfg,
-                                                             note_with_mentions):
+def test_deleting_the_last_one_leaves_an_empty_list_not_none(video):
+    cfg, client = video
     for name in ("opencode", "Railway"):
         client.post("/item/a1/mentions/delete", data={"name": name})
 
     assert find_note(cfg, "a1")[1].mentions == []
 
 
-def test_deleting_a_mention_that_is_gone_is_not_an_error(client, note_with_mentions):
+def test_deleting_from_a_note_nobody_asked_leaves_none(setup):
+    """None means nobody asked and [] means asked and nothing found. A crafted
+    post must not flip one into the other: the backfill of the Task 7 would
+    skip that video for good."""
+    cfg, client = setup
+
+    client.post("/item/a1/mentions/delete", data={"name": "x"})
+
+    assert find_note(cfg, "a1")[1].mentions is None
+
+
+def test_deleting_a_mention_that_is_gone_is_not_an_error(video):
     """A double click, or a tab left open since yesterday."""
+    _, client = video
     answer = client.post("/item/a1/mentions/delete", data={"name": "nada"},
                          follow_redirects=False)
 
     assert answer.status_code < 400
 
 
-def test_deleting_a_mention_of_a_note_that_is_not_there_is_404(client):
+def test_deleting_a_mention_of_a_note_that_is_not_there_is_404(setup):
+    _, client = setup
     answer = client.post("/item/nope/mentions/delete", data={"name": "x"},
                          follow_redirects=False)
 
     assert answer.status_code == 404
 
 
-def test_deleting_a_mention_does_not_rebuild_the_indexes(client, cfg,
-                                                         note_with_mentions,
-                                                         monkeypatch):
+def test_deleting_a_mention_does_not_rebuild_the_indexes(video, monkeypatch):
     """No index mentions a mention. With 1227 notes, rebuilding them all on
     every click is real work for nothing."""
+    _, client = video
     monkeypatch.setattr("oknowledge.vault.rebuild_indexes",
                         lambda *a, **kw: pytest.fail("rebuilt for nothing"))
 
@@ -1223,10 +1265,16 @@ Expected: FAIL, 404 en la ruta nueva
 
 ```python
 def update_note(cfg: Config, link_id: str, language: str,
-                category: str | None = None, tags=None, mentions=None) -> Path | None:
+                category: str | None = None, tags=None, mentions=None,
+                drop_mention: str | None = None) -> Path | None:
     # el cuerpo de hoy hasta el write_note: find_note, category, tags
     if mentions is not None:
         note.mentions = list(mentions)
+    if drop_mention is not None and note.mentions is not None:
+        # `is not None`, not a truthiness test: a note nobody asked has None
+        # here, and turning that into [] would tell the backfill this video
+        # was already asked, for good.
+        note.mentions = [m for m in note.mentions if m.name != drop_mention]
     written = write_note(cfg, note, language, path=path)
     # A mentions-only change skips the rebuild: no index names a mention, and
     # rebuilding the whole library on a delete click buys nothing.
@@ -1235,22 +1283,47 @@ def update_note(cfg: Config, link_id: str, language: str,
     return _finish(cfg, language, written)
 ```
 
+`drop_mention` existe para que la ruta no tenga que leer la nota ella misma:
+`find_note()` escanea y parsea el vault entero, así que filtrar afuera costaría
+dos escaneos por clic (el doble que `move` y `retag`) y habría que leer la nota
+antes de tomar el lock, que es una carrera con un reproceso. Con el parámetro,
+el filtro pasa adentro del lock y en un solo escaneo. `mentions=` sigue
+existiendo porque el backfill de la Task 7 escribe una lista.
+
 - [ ] **Step 4: la ruta**
+
+La ruta pasa por el helper `edit()`, con la misma forma que sus tres vecinas
+(`web/app.py:484-495`):
 
 ```python
     @app.post("/item/{link_id}/mentions/delete")
     def drop_mention(link_id: str, name: str = Form("")):
-        found = find_note(current["cfg"], link_id)
-        if found is None:
-            raise HTTPException(status_code=404)
-        _, note = found
-        kept = [m for m in (note.mentions or []) if m.name != name]
-        update_note(current["cfg"], link_id, language(), mentions=kept)
-        return see_other(f"/item/{link_id}", notice="saved")
+        result = edit(link_id, lambda cfg, language: update_note(
+            cfg, link_id, language, drop_mention=name), "saved", "indexes-stale")
+        if result.notice == MISSING:
+            raise HTTPException(status_code=404, detail="no such link")
+        return see_other(item_url(link_id), notice=result.notice)
 ```
 
-(seguir exactamente la forma de las rutas vecinas para el 404, el `see_other` y
-el manejo de `OSError`/`IndexesStale` que ya tengan)
+`edit()` es obligatorio, no cosmético. Hace tres cosas que la ruta no puede
+hacer sola:
+
+* toma el lock del link, así que un reproceso de fondo no aterriza encima del
+  borrado — y lo toma sólo para un link que existe, porque un archivo de lock
+  no se borra nunca (`test_an_unknown_link_leaves_no_lock_behind`);
+* le pasa a `change(cfg, language)` la lengua **del contenido** (`[ai]
+  language`), no la de la interfaz. Pasar la de la interfaz le cambiaría los
+  encabezados a cada nota castellana en cada edición;
+* traduce `OSError`, `IndexesStale` y `Locked` a los notices que la página ya
+  sabe mostrar.
+
+Como una edición de solo-menciones no reconstruye índices, el notice
+`indexes-stale` es inalcanzable acá: no hay que inventarle un test.
+
+Hay que agregar la ruta nueva a `WRITE_ROUTES` (`tests/test_web_write.py:25`) y
+a la lista parametrizada de `test_an_unknown_link_leaves_no_lock_behind`
+(`:909`, la de `zzz`). Dos tests de cobertura recorren las rutas POST que
+declara la app y exigen que cada una tenga su caso cross-site.
 
 - [ ] **Step 5: los templates**
 
