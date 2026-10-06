@@ -59,7 +59,7 @@ en una sección Markdown de la nota, como los puntos clave.
 | `src/oknowledge/ai/base.py` | condicional con nombre, parseo de menciones, la guarda, `mentions_only()` |
 | `src/oknowledge/ai/__init__.py` | pasar el modo por la cadena de motores |
 | `src/oknowledge/prompts/analyze.txt` | dos regiones condicionales |
-| `src/oknowledge/prompts/mentions/{tools,all,discussed}.txt` | el texto de cada modo |
+| `src/oknowledge/prompts/mentions-{tools,all,discussed}.txt` | el texto de cada modo |
 | `src/oknowledge/prompts/mentions-only.txt` | el prompt del comando de relleno |
 | `src/oknowledge/config.py` | `[ai] mentions`, validación, guardado |
 | `src/oknowledge/pipeline.py` | decidir el modo por tipo; `backfill_mentions()` |
@@ -383,7 +383,8 @@ git commit -m "feat: a note can carry the mentions of a video, and read them bac
 **Files:**
 - Modify: `src/oknowledge/ai/base.py:167-190` (`render_prompt`)
 - Modify: `src/oknowledge/prompts/analyze.txt`
-- Create: `src/oknowledge/prompts/mentions/tools.txt`, `all.txt`, `discussed.txt`
+- Create: `src/oknowledge/prompts/mentions-tools.txt`, `mentions-all.txt`, `mentions-discussed.txt`
+- Modify: `tests/test_packaging.py`
 - Test: `tests/test_analysis.py`
 
 **Interfaces:**
@@ -459,9 +460,15 @@ def _conditionals(template: str, flags: dict[str, bool]) -> str:
 
 ```python
 def _mention_scope(mode: str) -> str:
-    return files("oknowledge").joinpath(f"prompts/mentions/{mode}.txt").read_text(
+    return files("oknowledge").joinpath(f"prompts/mentions-{mode}.txt").read_text(
         encoding="utf-8").strip()
 ```
+
+**Los nombres son planos a propósito.** `pyproject.toml` declara
+`package-data = ["prompts/*.txt", ...]`, un glob de un solo nivel: un
+`prompts/mentions/tools.txt` no se empaqueta, y como el entorno de desarrollo es
+un install editable, los tests pasarían igual y la función se rompería sólo para
+quien instale normal. Un nombre plano entra en el glob que ya existe.
 
 En `render_prompt`, reemplazar el `re.sub` del `IF_KNOWN` por:
 
@@ -506,7 +513,7 @@ completes de memoria. Una dirección inventada es peor que ninguna.
 
 - [ ] **Step 5: los tres fragmentos**
 
-`prompts/mentions/tools.txt`:
+`prompts/mentions-tools.txt`:
 
 ```
 Contá como mención el software, los productos, los servicios y las empresas:
@@ -514,30 +521,52 @@ cosas que se pueden abrir en un navegador. No incluyas personas, libros,
 papers ni eventos.
 ```
 
-`prompts/mentions/all.txt`:
+`prompts/mentions-all.txt`:
 
 ```
 Contá como mención todo lo que el video nombre y tenga nombre propio:
 software, productos, empresas, personas, canales, libros, papers y eventos.
 ```
 
-`prompts/mentions/discussed.txt`:
+`prompts/mentions-discussed.txt`:
 
 ```
 Contá como mención sólo lo que el video explica, compara o recomienda de
 verdad. Lo que nombra al pasar, sin decir nada sobre eso, no entra.
 ```
 
-- [ ] **Step 6: correr y ver pasar**
+- [ ] **Step 6: el test de que los prompts se empaquetan**
 
-Run: `pytest tests/test_analysis.py -v`
+El código carga los prompts por nombre en tiempo de ejecución, así que uno que no
+se empaquete es un crash para un usuario real y un verde para nosotros. En
+`tests/test_packaging.py`, que ya existe para comprobar lo que el proyecto
+declara sobre sí mismo:
+
+```python
+def test_every_prompt_the_code_loads_is_declared_as_package_data():
+    """An editable install finds a file the wheel would not ship. This is the
+    only place that difference shows up before a user hits it."""
+    data = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    globs = data["tool"]["setuptools"]["package-data"]["oknowledge"]
+    prompts = (ROOT / "src" / "oknowledge" / "prompts").rglob("*.txt")
+
+    missing = [str(p) for p in prompts
+               if not any(fnmatch(str(p.relative_to(ROOT / "src" / "oknowledge")), g)
+                          for g in globs)]
+
+    assert missing == [], f"loaded at runtime, shipped by nothing: {missing}"
+```
+
+- [ ] **Step 7: correr y ver pasar**
+
+Run: `pytest tests/test_analysis.py tests/test_packaging.py -v`
 Expected: PASS. Si algún test viejo compara el prompt completo, actualizarlo
 mostrando que lo que cambió es sólo el agregado condicional.
 
-- [ ] **Step 7: commit**
+- [ ] **Step 8: commit**
 
 ```bash
-git add src/oknowledge/ai/base.py src/oknowledge/prompts tests/test_analysis.py
+git add src/oknowledge/ai/base.py src/oknowledge/prompts tests/
 git commit -m "feat: ask a video's prompt for its mentions, in one of three scopes"
 ```
 
@@ -785,40 +814,51 @@ git commit -m "feat: read a video's mentions, and keep only URLs the video reall
 
 - [ ] **Step 1: los tests de la config**
 
+El módulo ya tiene `write_config(tmp_path, body) -> Path` y el idioma
+`pytest.raises(ConfigError, match=...)`. Usar esos, no inventar un helper:
+
 ```python
 # tests/test_config.py
+def vault_at(tmp_path):
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    return vault
+
+
 def test_the_default_mention_mode_is_tools(tmp_path):
-    assert write_and_load(tmp_path, 'vault = "{vault}"\n').mentions == "tools"
+    path = write_config(tmp_path, f'vault = "{vault_at(tmp_path)}"\n')
+
+    assert load(path).mentions == "tools"
 
 
 @pytest.mark.parametrize("mode", ["tools", "all", "discussed"])
 def test_every_mention_mode_loads(tmp_path, mode):
-    text = 'vault = "{vault}"\n[ai]\nmentions = "%s"\n' % mode
+    path = write_config(
+        tmp_path, f'vault = "{vault_at(tmp_path)}"\n[ai]\nmentions = "{mode}"\n')
 
-    assert write_and_load(tmp_path, text).mentions == mode
+    assert load(path).mentions == mode
 
 
 @pytest.mark.parametrize("value", ['"nope"', "3", "true", "[]"])
 def test_a_mention_mode_we_do_not_know_names_the_ones_we_do(tmp_path, value):
-    """This is the file the user hand-writes: the answer says what is valid."""
-    text = 'vault = "{vault}"\n[ai]\nmentions = %s\n' % value
+    """This is the file the user hand-writes, so the answer says what is valid.
+    A value that is not even a string lands in the same message, not a
+    TypeError, because the check is membership in the tuple."""
+    path = write_config(
+        tmp_path, f'vault = "{vault_at(tmp_path)}"\n[ai]\nmentions = {value}\n')
 
-    with pytest.raises(ConfigError) as error:
-        write_and_load(tmp_path, text)
-
-    assert "discussed" in str(error.value)
+    with pytest.raises(ConfigError, match="discussed"):
+        load(path)
 
 
 def test_a_saved_config_loads_again_with_its_mode(tmp_path):
     """save() only writes what load() accepts, and that has to include this."""
-    cfg = write_and_load(tmp_path, 'vault = "{vault}"\n[ai]\nmentions = "all"\n')
-    path = save(cfg, tmp_path / "again.toml")
+    path = write_config(
+        tmp_path, f'vault = "{vault_at(tmp_path)}"\n[ai]\nmentions = "all"\n')
+    again = save(load(path), tmp_path / "again.toml")
 
-    assert load(path).mentions == "all"
+    assert load(again).mentions == "all"
 ```
-
-(usar el helper que el módulo ya tenga para escribir y cargar; si no hay, uno
-local de tres líneas)
 
 - [ ] **Step 2: correr y ver fallar**
 
@@ -1209,8 +1249,14 @@ En `item.html`, después del bloque de `points`:
     {% endif %}
 ```
 
-El test `search_link` se registra como los que ya existen (`web_url`), y es
-`is_search_url`. En `embed.html`, el mismo bloque **sin** el formulario.
+El test de Jinja se registra junto al que ya existe, en `web/app.py:307`:
+
+```python
+    templates.env.tests["search_link"] = is_search_url
+```
+
+con `is_search_url` importado de `..urls`. En `embed.html`, el mismo bloque
+**sin** el formulario.
 
 - [ ] **Step 6: el CSS y las cadenas**
 
