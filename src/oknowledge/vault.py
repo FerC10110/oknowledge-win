@@ -560,17 +560,22 @@ def _finish(cfg: Config, language: str, done):
 
 def update_note(cfg: Config, link_id: str, language: str,
                 category: str | None = None, tags=None, mentions=None,
-                drop_mention: str | None = None) -> Path | None:
+                drop_mention: str | None = None,
+                found: tuple[Path, Note] | None = None) -> Path | None:
     """Change one of our notes' classification and rebuild the indexes.
 
     `mentions` replaces the whole list. `drop_mention` removes the entries of
     that name, inside the same scan, so a caller never has to read the note
     itself (which would cost a second vault scan, and race with a re-analysis).
 
+    `found` is a (path, note) the caller already read, under its own lock, so
+    this does not scan the vault a second time. Without it the note is looked up.
+
     Returns the path written, or None if no note of ours has that id. Raises
     BadCategory for a category we refuse, before touching anything.
     """
-    found = find_note(cfg, link_id)
+    if found is None:
+        found = find_note(cfg, link_id)
     if found is None:
         return None
     path, note = found

@@ -67,8 +67,12 @@ def analyze_with_chain(cfg: Config, text: str, meta: dict, known,
     raise AllEnginesFailed("every engine failed: " + "; ".join(failures))
 
 
-def mentions_with_chain(cfg: Config, text: str, meta: dict) -> list[Mention]:
+def mentions_with_chain(cfg: Config, text: str,
+                        meta: dict) -> tuple[list[Mention], str]:
     """Ask the chain for a video's mentions and nothing else.
+
+    Returns the mentions and the name of the engine that produced them, like
+    analyze_with_chain.
 
     Mirrors analyze_with_chain: the order is the priority, and every failure
     is kept for the one error raised when none of them answers.
@@ -80,7 +84,7 @@ def mentions_with_chain(cfg: Config, text: str, meta: dict) -> list[Mention]:
     for name in cfg.chain:
         try:
             return mentions_only(build_engine(name, cfg), text, meta,
-                                 cfg.language, cfg.mentions)
+                                 cfg.language, cfg.mentions), name
         except AnalysisError as error:
             # The engine replied; what it said was no use.
             answered = True

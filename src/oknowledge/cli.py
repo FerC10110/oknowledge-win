@@ -405,10 +405,13 @@ def _mentions(cfg, args) -> int:
     if args.json:
         print(json.dumps([_result_dict(r) for r in results], ensure_ascii=False))
     else:
-        done = sum(1 for r in results if r.status == "ok")
+        done = sum(1 for r in results if r.status == "ok" and not r.skipped)
         print(f"{done}/{len(results)} videos now have their mentions")
         for r in results:
-            if r.status != "ok":
+            if r.skipped:
+                print(f"  {'skipped':8} {_clean(r.url or r.id)}: "
+                      f"{_clean('; '.join(r.warnings))}")
+            elif r.status != "ok":
                 print(f"  {r.status:8} {_clean(r.url or r.id)}: {_clean(r.error)}")
     return 0 if all(r.status == "ok" for r in results) else 1
 

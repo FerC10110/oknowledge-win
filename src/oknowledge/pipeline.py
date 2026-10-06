@@ -475,6 +475,9 @@ def _process(cfg: Config, q: Queue, link: str, url: str, mode: str,
         cover=download_cover(cfg, page.cover_url, link),
         body=page.text if mode == "full" else None,
         mentions=analysis.mentions if page.type == "youtube" else None,
+        # Not among the things a reprocess says it replaces: what the user
+        # typed in the section stays.
+        mentions_extra=(existing[1].mentions_extra if existing else []),
     )
     return _save(cfg, q, link, url, note, "ok", "", used, target)
 
@@ -987,7 +990,7 @@ def _failed(q: Queue, entry: QueueEntry, error: BaseException) -> Result:
 
 
 def backfill_mentions(cfg: Config, limit: int | None = None,
-                     queue: Queue | None = None) -> list[Result]:
+                      queue: Queue | None = None) -> list[Result]:
     """Give the videos already in the library their mentions.
 
     Candidates are finished notes (status ok) of type youtube whose mentions
@@ -1039,12 +1042,21 @@ def backfill_mentions(cfg: Config, limit: int | None = None,
                 # case somebody answered or removed the note in the meantime.
                 found = find_note(cfg, note.id)
                 if found is None or found[1].mentions is not None:
+                    # Nothing happened and nothing went wrong: "ok", but
+                    # skipped, like add() reports a link already saved, so the
+                    # report neither counts it as work nor as a failure.
+                    why = ("it is no longer in the library" if found is None
+                           else "it already had its mentions")
+                    results.append(Result(id=note.id, url=note.url, path=None,
+                                          status="ok", skipped=True, warnings=[why]))
                     continue
-                text = note.body or extract(note.url).text
-                found_mentions = mentions_with_chain(
-                    cfg, text, {"url": note.url, "title": note.title})
+                # The copy read under the lock, not the one handed in before it.
+                fresh = found[1]
+                text = fresh.body or extract(fresh.url).text
+                found_mentions, engine = mentions_with_chain(
+                    cfg, text, {"url": fresh.url, "title": fresh.title})
                 written = update_note(cfg, note.id, cfg.language,
-                                      mentions=found_mentions)
+                                      mentions=found_mentions, found=found)
         except AllEnginesFailed as error:
             if error.answered:
                 # An engine replied and the reply was no use: this video's
@@ -1075,5 +1087,6 @@ def backfill_mentions(cfg: Config, limit: int | None = None,
             results.append(Result(id=note.id, url=note.url, path=None,
                                   status="failed", error=_reason(error)))
             continue
-        results.append(Result(id=note.id, url=note.url, path=written, status="ok"))
+        results.append(Result(id=note.id, url=note.url, path=written, status="ok",
+                              engine=engine))
     return results

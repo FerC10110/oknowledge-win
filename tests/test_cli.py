@@ -863,6 +863,18 @@ def test_mentions_shows_why_a_video_failed(cfg, monkeypatch, capsys):
     assert "https://youtu.be/b" in out and "every engine failed" in out
 
 
+def test_mentions_reports_a_skipped_video_without_counting_it_done(
+        cfg, monkeypatch, capsys):
+    monkeypatch.setattr("oknowledge.cli.backfill_mentions", lambda config, limit=None: [
+        Result(id="a1", url="https://youtu.be/a", path=None, status="ok", skipped=True,
+               warnings=["it already had its mentions"])])
+
+    assert main(["mentions"]) == 0
+    out = capsys.readouterr().out
+    assert "0/1 videos now have their mentions" in out
+    assert "skipped" in out and "already had its mentions" in out
+
+
 def test_mentions_json_is_one_array(cfg, monkeypatch, capsys):
     monkeypatch.setattr("oknowledge.cli.backfill_mentions", lambda config, limit=None: [
         Result(id="a1", url="u", path=None, status="ok"),

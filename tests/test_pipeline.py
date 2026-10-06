@@ -2073,3 +2073,84 @@ def test_a_partly_working_chain_carries_on(videos):
 
     assert [r.status for r in done] == ["failed", "ok"]
     assert "stopped" not in done[0].error
+
+
+def test_a_reprocess_keeps_the_prose_the_user_typed_in_the_mentions_section(
+        cfg, q, monkeypatch):
+    """The reprocess warning lists what is replaced: title, summary, points,
+    category, tags, mentions. A sentence the user typed is none of those."""
+    cfg = dataclasses.replace(cfg, engines={"fake": {"replies": [VIDEO_ANSWER, VIDEO_ANSWER]}})
+    extraction(monkeypatch, VIDEO)
+    no_pictures(monkeypatch)
+    first = add(cfg, "https://youtu.be/x", queue=q)
+    note = read_note(first.path)
+    note.mentions_extra = ["Esto lo escribi yo a mano y me importa."]
+    write_note(cfg, note, "es", path=first.path)
+
+    second = add(cfg, "https://youtu.be/x", reprocess=True, queue=q)
+
+    assert second.status == "ok"
+    assert read_note(second.path).mentions_extra == [
+        "Esto lo escribi yo a mano y me importa."]
+
+
+def test_the_engine_that_answered_is_in_the_result(videos):
+    done = backfill_mentions(videos)
+
+    assert {r.engine for r in done} == {"fake"}
+
+
+def test_a_candidate_answered_in_the_meantime_is_reported_as_skipped(videos, monkeypatch):
+    """Nothing happened to it and nothing went wrong: status ok, skipped True,
+    like add() reports a link that was already saved."""
+    real = pipeline.find_note
+
+    def answered_meanwhile(cfg, link_id):
+        found = real(cfg, link_id)
+        if found and link_id == "never-asked":
+            found[1].mentions = []
+        return found
+
+    monkeypatch.setattr(pipeline, "find_note", answered_meanwhile)
+
+    done = {r.id: r for r in backfill_mentions(videos)}
+
+    assert (done["never-asked"].status, done["never-asked"].skipped) == ("ok", True)
+    assert done["never-asked"].warnings
+    assert not done["the-newest"].skipped
+
+
+def test_the_text_comes_from_the_copy_read_under_the_lock(videos, monkeypatch):
+    """The re-read exists because the pre-lock copy may be stale; using the
+    pre-lock body anyway makes it pointless."""
+    real = pipeline.find_note
+    prompts = []
+
+    def fresh(cfg, link_id):
+        found = real(cfg, link_id)
+        if found and link_id == "never-asked":
+            found[1].body = "texto nuevo con https://caddyserver.com"
+            found[1].title = "Titulo nuevo"
+        return found
+
+    monkeypatch.setattr(pipeline, "find_note", fresh)
+    cfg = dataclasses.replace(videos, engines={"fake": {"replies": lambda prompt: (
+        prompts.append(prompt), MENTIONS_ANSWER)[1]}})
+
+    backfill_mentions(cfg, limit=2)
+
+    mine = [p for p in prompts if "Titulo nuevo" in p]
+    assert mine and "texto nuevo con https://caddyserver.com" in mine[0]
+
+
+def test_a_candidate_costs_one_vault_scan_not_two(videos, monkeypatch):
+    from oknowledge import vault
+
+    real = vault._scan
+    calls = []
+    monkeypatch.setattr(vault, "_scan", lambda cfg: (calls.append(1), real(cfg))[1])
+
+    backfill_mentions(videos, limit=1)
+
+    # One to list the candidates, one under the lock, handed on to update_note.
+    assert len(calls) == 2
