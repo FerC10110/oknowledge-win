@@ -409,3 +409,44 @@ def test_the_original_content_still_parses_with_mentions_in_between(tmp_path):
     assert read.body == "El texto del video."
     assert read.points == ["uno"]
     assert read.mentions == note.mentions
+
+
+def test_a_url_with_parentheses_survives(tmp_path):
+    path = tmp_path / "n.md"
+    note = note_with([Mention(name="Foo", url="https://en.wikipedia.org/wiki/Foo_(bar)")])
+
+    path.write_text(render(note, "es"), encoding="utf-8")
+
+    assert read_note(path).mentions == note.mentions
+
+
+def test_an_empty_bullet_is_not_a_mention(tmp_path):
+    path = tmp_path / "n.md"
+    path.write_text(render(note_with([]), "es").replace(
+        "## Menciones\n", "## Menciones\n\n- \n- Caddy\n"), encoding="utf-8")
+
+    assert read_note(path).mentions == [Mention(name="Caddy", url=search_url("Caddy"))]
+
+
+def test_a_bullet_that_is_neither_form_is_kept_verbatim_as_the_name(tmp_path):
+    path = tmp_path / "n.md"
+    path.write_text(render(note_with([]), "es").replace(
+        "## Menciones\n", "## Menciones\n\n- [roto](\n"), encoding="utf-8")
+
+    assert read_note(path).mentions == [
+        Mention(name="[roto](", url=search_url("[roto]("))]
+
+
+def test_the_english_headings_round_trip(tmp_path):
+    path = tmp_path / "n.md"
+    note = note_with([Mention(name="opencode", url="https://opencode.ai")])
+    note.body = "The video text."
+
+    text = render(note, "en")
+    path.write_text(text, encoding="utf-8")
+
+    assert "## Mentions\n" in text
+    read = read_note(path)
+    assert read.mentions == note.mentions
+    assert read.points == ["uno"]
+    assert read.body == "The video text."

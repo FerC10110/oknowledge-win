@@ -27,8 +27,8 @@ from .ai.base import MAX_CATEGORY_LENGTH, UNSAFE_IN_A_NAME, normalize_tags
 from .atomic import atomic_write
 from .config import Config
 from .model import Mention, Note
-from .urls import search_url
 from .queue import Locked
+from .urls import search_url
 
 MARKER = "oknowledge"
 MARKER_VERSION = 1
@@ -161,7 +161,7 @@ def read_front(path: Path) -> dict | None:
 _POINTS_HEADINGS = {f"## {h[0]}" for h in HEADINGS.values()}
 _MENTIONS_HEADINGS = {f"## {h[1]}" for h in HEADINGS.values()}
 _CONTENT_HEADINGS = {f"## {h[2]}" for h in HEADINGS.values()}
-_BULLET = re.compile(r"^\[(?P<name>.*)\]\((?P<url>[^)]*)\)$")
+_BULLET = re.compile(r"^\[(?P<name>.*)\]\((?P<url>.*)\)$")
 
 
 def _mention(text: str) -> Mention:
@@ -210,7 +210,7 @@ def _split_body(
             if line.startswith("- "):
                 points.append(line[2:].strip())
         elif mode == "mentions":
-            if line.startswith("- "):
+            if line.startswith("- ") and line[2:].strip():
                 mentions.append(_mention(line[2:].strip()))
         else:
             original.append(line)
