@@ -14,6 +14,17 @@
       <h2>{{ t('Key points') }}</h2>
       <ul>{% for point in note.points %}<li>{{ point }}</li>{% endfor %}</ul>
     {% endif %}
+    {% if note.mentions %}
+      <h2>{{ t('Mentions') }}</h2>
+      <ul class="mentions">
+        {% for m in note.mentions %}
+          <li>
+            <a href="{{ m.url }}" target="_blank" rel="noreferrer">{{ m.name }}</a>
+            {% if m.url is search_link %}<span class="mention-search">{{ t('search') }}</span>{% endif %}
+          </li>
+        {% endfor %}
+      </ul>
+    {% endif %}
     <p class="actions">
       <a class="button" href="/item/{{ note.id|slug }}">{{ t('Open the note') }}</a>
       {% if note.url is web_url %}

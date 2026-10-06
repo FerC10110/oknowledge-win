@@ -1,20 +1,26 @@
 import os
+import re
 import time
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
 
 from oknowledge.config import Config
-from oknowledge.model import Note
+from oknowledge import web
+from oknowledge.i18n import STRINGS
+from oknowledge.model import Mention, Note
+from oknowledge.urls import search_url
 from oknowledge.vault import rebuild_indexes, write_note
 from oknowledge.web.app import create_app
 
 
-def note(id, title, category, tags, summary, body=None, saved="2026-10-03"):
+def note(id, title, category, tags, summary, body=None, saved="2026-10-03",
+         type="article", mentions=None):
     return Note(
         id=id, url=f"https://e.com/{id}", title=title, category=category, tags=list(tags),
-        type="article", source="e.com", saved=saved, summary=summary,
-        points=["un punto"], body=body,
+        type=type, source="e.com", saved=saved, summary=summary,
+        points=["un punto"], body=body, mentions=mentions,
     )
 
 
@@ -413,3 +419,68 @@ def test_a_javascript_url_in_the_frontmatter_is_not_a_live_link(tmp_path):
     write_note(cfg, n, "es")
     body = TestClient(create_app(cfg)).get("/item/j1").text
     assert 'href="javascript:' not in body
+
+
+MENTIONED = [Mention(name="opencode", url="https://opencode.ai"),
+             Mention(name="Railway", url=search_url("Railway"))]
+
+
+@pytest.fixture
+def video(tmp_path):
+    """A client whose a1 is a video with two mentions: a real one and a search."""
+    vault = tmp_path / "vault"
+    (vault / "oknowledge" / "links").mkdir(parents=True)
+    cfg = Config(vault=vault)
+    write_note(cfg, note("a1", "Mi stack 2026", "Redes", ["dev"],
+                         "Qué herramientas usa.", type="youtube",
+                         mentions=MENTIONED), "es")
+    rebuild_indexes(cfg, "es")
+    return TestClient(create_app(cfg))
+
+
+def test_the_mentions_show_up_on_the_note(video):
+    page = video.get("/item/a1").text
+
+    assert 'class="mentions"' in page
+    assert "opencode" in page
+    assert "https://opencode.ai" in page
+
+
+def test_a_search_link_is_marked_and_a_real_one_is_not(video):
+    """The distinction the user chose has to be readable without thinking."""
+    page = video.get("/item/a1").text
+
+    assert page.count('class="mention-search"') == 1
+
+
+def test_a_note_never_asked_shows_no_section(client):
+    """The section's own class, not its heading: conftest points the shared
+    language file at a path that does not exist, so every test here renders in
+    English and `"Menciones" not in page` would pass however the note looks.
+    `client`'s a1 is an article nobody asked, which is the case under test."""
+    assert 'class="mentions"' not in client.get("/item/a1").text
+
+
+def test_the_popup_shows_the_mentions_but_offers_no_way_to_delete(video):
+    """embed.html is a fragment that writes nothing, and its own header says
+    so. Respecting that matters more than saving a click."""
+    page = video.get("/embed/a1").text
+
+    assert 'class="mentions"' in page
+    assert "opencode" in page
+    assert "mentions/delete" not in page
+
+
+def test_every_confirmation_in_the_note_page_still_has_its_translation():
+    """In i18n the key IS the English text, so changing the reprocess warning
+    changes the key. The Spanish entry has to move with it, or a Spanish
+    interface shows an English warning about what it is going to overwrite."""
+    template = (Path(web.__file__).parent / "templates" / "item.html").read_text(
+        encoding="utf-8")
+
+    asked = re.findall(r"data-ask=\"\{\{ t\('(.+?)'\) \}\}\"", template)
+
+    assert asked, "the forms lost their data-ask"
+    assert [text for text in asked if text not in STRINGS["es"]] == []
+    assert any("mention" in text.lower() for text in asked), (
+        "the reprocess warning does not say the mentions are replaced too")

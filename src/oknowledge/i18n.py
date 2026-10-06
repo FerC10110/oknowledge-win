@@ -89,10 +89,13 @@ STRINGS = {
         "and that you can write to it.":
             "No se pudieron guardar los ajustes. Revisá que la carpeta de "
             "configuración exista y que puedas escribir en ella.",
-        "Re-run the analysis? The title, summary, points, category and tags "
-        "are replaced by the new answer.":
-            "¿Reprocesar? El título, el resumen, los puntos, la categoría y "
-            "las etiquetas se reemplazan por la respuesta nueva.",
+        "Re-run the analysis? The title, summary, points, category, tags and "
+        "mentions are replaced by the new answer.":
+            "¿Reprocesar? El título, el resumen, los puntos, la categoría, las "
+            "etiquetas y las menciones se reemplazan por la respuesta nueva.",
+        "Mentions": "Menciones",
+        "search": "búsqueda",
+        "Remove": "Quitar",
         "%1 notes moved, %2 could not be written. "
         "Check the folder and try again.":
             "Se movieron %1 notas; %2 no se pudieron escribir. "

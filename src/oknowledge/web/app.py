@@ -33,6 +33,7 @@ from ..i18n import LANGUAGES, set_ui_language, translator, ui_language
 from ..pipeline import add as add_link
 from ..pipeline import icon_path, is_domain
 from ..queue import Locked, Queue
+from ..urls import is_search_url
 from ..vault import (
     BadCategory, IndexesStale, ProtectedNote, clean_category, delete_note,
     rename_category, update_note,
@@ -305,6 +306,7 @@ def create_app(cfg: Config) -> FastAPI:
     templates.env.filters["plain"] = plain
     templates.env.filters["slug"] = lambda value: quote(str(value), safe="")
     templates.env.tests["web_url"] = is_web_url
+    templates.env.tests["search_link"] = is_search_url
     app.mount("/static", StaticFiles(directory=str(WEB.joinpath("static"))), name="static")
 
     def page(request: Request, name: str, status_code: int = 200, **context) -> HTMLResponse:
@@ -499,6 +501,16 @@ def create_app(cfg: Config) -> FastAPI:
         wanted = [word for word in tags.replace(",", " ").split() if word]
         result = edit(link_id, lambda cfg, language: update_note(
             cfg, link_id, language, tags=wanted), "saved", "indexes-stale")
+        if result.notice == MISSING:
+            raise HTTPException(status_code=404, detail="no such link")
+        return see_other(item_url(link_id), notice=result.notice)
+
+    @app.post("/item/{link_id}/mentions/delete")
+    def drop_mention(link_id: str, name: str = Form("")):
+        # No index names a mention, so update_note() does not rebuild them and
+        # the "indexes-stale" notice cannot happen here.
+        result = edit(link_id, lambda cfg, language: update_note(
+            cfg, link_id, language, drop_mention=name), "saved", "indexes-stale")
         if result.notice == MISSING:
             raise HTTPException(status_code=404, detail="no such link")
         return see_other(item_url(link_id), notice=result.notice)

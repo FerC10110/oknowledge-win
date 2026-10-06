@@ -544,8 +544,13 @@ def _finish(cfg: Config, language: str, done):
 
 
 def update_note(cfg: Config, link_id: str, language: str,
-                category: str | None = None, tags=None) -> Path | None:
+                category: str | None = None, tags=None, mentions=None,
+                drop_mention: str | None = None) -> Path | None:
     """Change one of our notes' classification and rebuild the indexes.
+
+    `mentions` replaces the whole list. `drop_mention` removes the entries of
+    that name, inside the same scan, so a caller never has to read the note
+    itself (which would cost a second vault scan, and race with a re-analysis).
 
     Returns the path written, or None if no note of ours has that id. Raises
     BadCategory for a category we refuse, before touching anything.
@@ -558,9 +563,20 @@ def update_note(cfg: Config, link_id: str, language: str,
         note.category = _checked_category(category)
     if tags is not None:
         note.tags = normalize_tags(tags)
+    if mentions is not None:
+        note.mentions = list(mentions)
+    if drop_mention is not None and note.mentions is not None:
+        # `is not None`, not a truthiness test: a note nobody asked has None
+        # here, and turning that into [] would tell the backfill this video
+        # was already asked, for good.
+        note.mentions = [m for m in note.mentions if m.name != drop_mention]
     # In place: the name is a function of saved + title, which this never
     # changes, and an unlink here would be a note destroyed by a failed write.
     written = write_note(cfg, note, language, path=path)
+    # A mentions-only change skips the rebuild: no index names a mention, and
+    # rebuilding the whole library on a delete click buys nothing.
+    if category is None and tags is None:
+        return written
     return _finish(cfg, language, written)
 
 

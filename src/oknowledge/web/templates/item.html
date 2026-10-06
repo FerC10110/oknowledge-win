@@ -11,6 +11,21 @@
       <h2>{{ t('Key points') }}</h2>
       <ul>{% for point in note.points %}<li>{{ point }}</li>{% endfor %}</ul>
     {% endif %}
+    {% if note.mentions %}
+      <h2>{{ t('Mentions') }}</h2>
+      <ul class="mentions">
+        {% for m in note.mentions %}
+          <li>
+            <a href="{{ m.url }}" target="_blank" rel="noreferrer">{{ m.name }}</a>
+            {% if m.url is search_link %}<span class="mention-search">{{ t('search') }}</span>{% endif %}
+            <form action="/item/{{ note.id|slug }}/mentions/delete" method="post">
+              <input type="hidden" name="name" value="{{ m.name }}">
+              <button type="submit" aria-label="{{ t('Remove') }}">×</button>
+            </form>
+          </li>
+        {% endfor %}
+      </ul>
+    {% endif %}
     {% if note.url is web_url %}
       <p><a class="button" href="{{ note.url }}" rel="noreferrer">{{ t('Open original') }}</a></p>
     {% else %}
@@ -34,7 +49,7 @@
         <button type="submit">{{ t('Save') }}</button>
       </form>
       <form action="/item/{{ note.id|slug }}/reprocess" method="post" class="row"
-            data-ask="{{ t('Re-run the analysis? The title, summary, points, category and tags are replaced by the new answer.') }}">
+            data-ask="{{ t('Re-run the analysis? The title, summary, points, category, tags and mentions are replaced by the new answer.') }}">
         {# It asks because it is the one action here with no undo: a finished
            analysis writes a whole new note over this one. Delete is asked
            too, and that one at least leaves a copy in trash/. #}

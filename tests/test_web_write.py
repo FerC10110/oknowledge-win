@@ -16,7 +16,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from oknowledge.config import Config, load
-from oknowledge.model import Note
+from oknowledge.model import Mention, Note
+from oknowledge.urls import search_url
 from oknowledge.vault import (
     find_note, index_path, rebuild_indexes, trash_dir, write_note,
 )
@@ -26,6 +27,7 @@ WRITE_ROUTES = [
     ("/item/a1/category", {"category": "Redes"}),
     ("/item/a1/tags", {"tags": "vpn"}),
     ("/item/a1/delete", {}),
+    ("/item/a1/mentions/delete", {"name": "x"}),
     ("/item/a1/reprocess", {"engine": "ollama"}),
     ("/categories/rename", {"old": "Networking", "new": "Redes"}),
     ("/settings", {"chain": ["ollama"], "language": "en",
@@ -33,10 +35,10 @@ WRITE_ROUTES = [
 ]
 
 
-def note(id, title, category, tags=("x",)):
+def note(id, title, category, tags=("x",), type="article", mentions=None):
     return Note(id=id, url=f"https://e.com/{id}", title=title, category=category,
-                tags=list(tags), type="article", source="e.com", saved="2026-10-03",
-                summary=f"Resumen de {title}.", points=[])
+                tags=list(tags), type=type, source="e.com", saved="2026-10-03",
+                summary=f"Resumen de {title}.", points=[], mentions=mentions)
 
 
 def snapshot(root):
@@ -910,6 +912,7 @@ def test_a_rename_from_the_web_skips_a_note_being_analysed(setup):
     ("/item/zzz/category", {"category": "Redes"}),
     ("/item/zzz/tags", {"tags": "vpn"}),
     ("/item/zzz/delete", {}),
+    ("/item/zzz/mentions/delete", {"name": "x"}),
 ])
 def test_an_unknown_link_leaves_no_lock_behind(setup, tmp_path, path, data):
     """A lock file is never deleted, so creating one for a link that does not
@@ -1114,3 +1117,73 @@ def test_no_test_in_this_file_can_reach_the_real_config(tmp_path):
 
     assert webapp.CONFIG_PATH.is_relative_to(tmp_path)
     assert webapp.CONFIG_PATH != Path.home() / ".config" / "oknowledge" / "config.toml"
+
+
+# --- deleting a mention ------------------------------------------------------
+
+@pytest.fixture
+def video(tmp_path, config_path, monkeypatch):
+    """`setup`, with a1 a video that named two things: a real link and a search."""
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
+    vault = tmp_path / "vault"
+    (vault / "oknowledge" / "links").mkdir(parents=True)
+    cfg = Config(vault=vault)
+    write_note(cfg, note("a1", "Mi stack", "Networking", type="youtube",
+                         mentions=[Mention(name="opencode", url="https://opencode.ai"),
+                                   Mention(name="Railway", url=search_url("Railway"))]),
+               "es")
+    rebuild_indexes(cfg, "es")
+    return cfg, TestClient(create_app(cfg))
+
+
+def test_deleting_a_mention_leaves_the_rest(video):
+    cfg, client = video
+    client.post("/item/a1/mentions/delete", data={"name": "Railway"})
+
+    assert [m.name for m in find_note(cfg, "a1")[1].mentions] == ["opencode"]
+
+
+def test_deleting_the_last_one_leaves_an_empty_list_not_none(video):
+    cfg, client = video
+    for name in ("opencode", "Railway"):
+        client.post("/item/a1/mentions/delete", data={"name": name})
+
+    assert find_note(cfg, "a1")[1].mentions == []
+
+
+def test_deleting_from_a_note_nobody_asked_leaves_none(setup):
+    """None means nobody asked and [] means asked and nothing found. A crafted
+    post must not flip one into the other: the Task 7 backfill would skip that
+    video for good."""
+    cfg, client = setup
+
+    client.post("/item/a1/mentions/delete", data={"name": "x"})
+
+    assert find_note(cfg, "a1")[1].mentions is None
+
+
+def test_deleting_a_mention_that_is_gone_is_not_an_error(video):
+    """A double click, or a tab left open since yesterday."""
+    _, client = video
+    answer = client.post("/item/a1/mentions/delete", data={"name": "nada"},
+                         follow_redirects=False)
+
+    assert answer.status_code < 400
+
+
+def test_deleting_a_mention_of_a_note_that_is_not_there_is_404(setup):
+    _, client = setup
+    answer = client.post("/item/nope/mentions/delete", data={"name": "x"},
+                         follow_redirects=False)
+
+    assert answer.status_code == 404
+
+
+def test_deleting_a_mention_does_not_rebuild_the_indexes(video, monkeypatch):
+    """No index mentions a mention. With 1227 notes, rebuilding them all on
+    every click is real work for nothing."""
+    _, client = video
+    monkeypatch.setattr("oknowledge.vault.rebuild_indexes",
+                        lambda *a, **kw: pytest.fail("rebuilt for nothing"))
+
+    client.post("/item/a1/mentions/delete", data={"name": "Railway"})
