@@ -982,7 +982,8 @@ def _failed(q: Queue, entry: QueueEntry, error: BaseException) -> Result:
     return Result(id=entry.id, url=entry.url, path=None, status="failed", error=reason)
 
 
-def backfill_mentions(cfg: Config, limit: int | None = None) -> list[Result]:
+def backfill_mentions(cfg: Config, limit: int | None = None,
+                     queue: Queue | None = None) -> list[Result]:
     """Give the videos already in the library their mentions.
 
     Candidates are notes of type youtube whose mentions are None -- never
@@ -996,6 +997,7 @@ def backfill_mentions(cfg: Config, limit: int | None = None) -> list[Result]:
     Only the mentions section is written. The title, the summary and the points
     are left exactly as they are.
     """
+    q = queue or Queue()
     candidates = [note for note in all_notes(cfg)
                   if note.type == "youtube" and note.mentions is None]
     # Newest first, like retry: the backlog is walked from what the user saved
@@ -1004,10 +1006,38 @@ def backfill_mentions(cfg: Config, limit: int | None = None) -> list[Result]:
     results: list[Result] = []
     for note in (candidates[:limit] if limit is not None else candidates):
         try:
-            text = note.body or extract(note.url).text
-            found = mentions_with_chain(cfg, text,
-                                        {"url": note.url, "title": note.title})
-            written = update_note(cfg, note.id, cfg.language, mentions=found)
+            with ExitStack() as stack:
+                try:
+                    stack.enter_context(q.lock(note.id))
+                except Locked as error:
+                    # A reprocess, an edit or another run is on this note.
+                    # update_note() reads and writes it back, so writing now
+                    # could land our copy over theirs. Unfinished, not failed:
+                    # it stays a candidate and the next run does it.
+                    results.append(Result(id=note.id, url=note.url, path=None,
+                                          status="pending", error=str(error)))
+                    continue
+                except OSError as error:
+                    # An unlockable state tree. add() carries on unlocked
+                    # because a lost link costs more than a duplicated one, but
+                    # nothing can be lost here: the note on disk is finished and
+                    # the only thing at stake is adding a list to it, which the
+                    # next run can do just as well. Carrying on could overwrite
+                    # a note somebody else is writing, so, like _reconcile, this
+                    # skips.
+                    results.append(Result(id=note.id, url=note.url, path=None,
+                                          status="failed", error=_reason(error)))
+                    continue
+                # What we were handed was read before the lock: look again, in
+                # case somebody answered or removed the note in the meantime.
+                found = find_note(cfg, note.id)
+                if found is None or found[1].mentions is not None:
+                    continue
+                text = note.body or extract(note.url).text
+                found_mentions = mentions_with_chain(
+                    cfg, text, {"url": note.url, "title": note.title})
+                written = update_note(cfg, note.id, cfg.language,
+                                      mentions=found_mentions)
         except Exception as error:
             # One video that cannot be read does not stop the others, exactly
             # as in retry(). The reason is reported, never swallowed.

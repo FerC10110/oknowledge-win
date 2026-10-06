@@ -1933,3 +1933,36 @@ def test_a_video_saved_as_a_summary_is_extracted_again(videos, monkeypatch):
     assert done["summarised"].status == "ok"
     assert find_note(videos, "summarised")[1].mentions == [
         Mention(name="opencode", url="https://opencode.ai")]
+
+
+def test_a_video_being_worked_on_is_not_written_and_the_rest_go_on(videos, q):
+    """The lock is the one every other writer takes. update_note() reads the
+    note and writes it back, so without the lock a reprocess landing in between
+    would be overwritten by the version we read."""
+    before = find_note(videos, "never-asked")[0].read_text(encoding="utf-8")
+
+    with q.lock("never-asked"):
+        done = {r.id: r for r in backfill_mentions(videos, queue=q)}
+
+    assert done["never-asked"].status == "pending"
+    assert "already being processed" in done["never-asked"].error
+    assert done["the-newest"].status == "ok"
+    assert find_note(videos, "never-asked")[0].read_text(encoding="utf-8") == before
+    assert find_note(videos, "never-asked")[1].mentions is None   # still a candidate
+
+
+def test_an_unlockable_state_tree_skips_the_video_instead_of_writing(videos, q, monkeypatch):
+    """Skipping loses nothing here: the video stays a candidate for the next run."""
+    import contextlib
+
+    @contextlib.contextmanager
+    def broken(link_id):
+        raise PermissionError("state tree is read-only")
+        yield
+
+    monkeypatch.setattr(q, "lock", broken)
+
+    done = backfill_mentions(videos, queue=q)
+
+    assert {r.status for r in done} == {"failed"}
+    assert find_note(videos, "never-asked")[1].mentions is None
