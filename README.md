@@ -207,8 +207,8 @@ queue. The rule the project is built around is that a link is never lost.
 
 `oknowledge serve` prints `oknowledge: the library is at http://127.0.0.1:8787/`
 to stderr and, with `--open`, opens the browser. Screens: Library (cards, filter
-by category and tag), Search (title, summary, points, tags and full text, with
-the matching fragment), Item (change category, edit tags, reprocess, delete),
+by category and tag), Search (title, summary, points, tags, what a video
+mentioned and full text, with the matching fragment), Item (change category, edit tags, reprocess, delete),
 Categories (rename and merge, rewriting the affected notes and indexes) and
 Settings.
 

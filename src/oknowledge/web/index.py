@@ -22,6 +22,7 @@ from pathlib import Path
 
 from ..config import Config
 from ..model import Note
+from ..urls import is_search_url
 from ..vault import read_note, scan_file
 
 SNIPPET = 160
@@ -100,14 +101,37 @@ class Entry:
     note: Note                        # a list view: body is None
     path: Path
     mtime_ns: int
-    tiers: tuple[str, str, str, str]  # folded: title+tags, category+summary+points,
+    tiers: tuple[str, str, str, str, str]  # folded: title+tags,
+                                      # category+summary+points, mentions,
                                       # source+author+url, body
+
+
+def _mention_text(note: Note) -> str:
+    """What a video named, as one searchable block: every name, and the URLs
+    that came out of the video itself.
+
+    A name nobody gave a link to carries a search URL instead, and every one of
+    those shares a host. Folding them in would make one query ("duckduckgo")
+    return every video that ever named something without a link, so only a real
+    URL goes in -- which is also the only kind worth searching by domain.
+    """
+    parts: list[str] = []
+    for mention in note.mentions or []:
+        parts.append(mention.name)
+        if not is_search_url(mention.url):
+            parts.append(mention.url)
+    return "\n".join(parts)
 
 
 def _entry(path: Path, note: Note, mtime_ns: int) -> Entry:
     tiers = (
         "\n".join([note.title, *note.tags]),
         "\n".join([note.category, note.summary, *note.points]),
+        # What the video talked about: weaker than the summary, which says what
+        # the note IS about, and stronger than one word passing by in a
+        # transcript. A note with no mentions contributes "", which no term
+        # matches, because terms() never yields an empty word.
+        _mention_text(note),
         "\n".join(filter(None, [note.source, note.author, note.url])),
         note.body or "",
     )
@@ -251,8 +275,9 @@ class Library:
 
         A note matches when every term of the query is somewhere in it. Hits
         rank by where the terms were found (title and tags, then category,
-        summary and points, then source, author and url, then body); entries
-        are already newest first and the sort is stable, so date breaks ties.
+        summary and points, then what a video mentioned, then source, author
+        and url, then body); entries are already newest first and the sort is
+        stable, so date breaks ties.
         """
         words = terms(query)
         if not words:
@@ -275,7 +300,8 @@ class Library:
     def _snippet(self, entry: Entry, words: list[str]) -> str:
         note = entry.note
         fields = [note.title, " ".join(note.tags), note.category, note.summary,
-                  "\n".join(note.points), note.source, note.author or "", note.url]
+                  "\n".join(note.points), _mention_text(note), note.source,
+                  note.author or "", note.url]
         for word in words:                     # centred on the first term that matched
             for text in fields:
                 found = snippet_of(text, word)

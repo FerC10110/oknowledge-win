@@ -7,17 +7,20 @@ from fastapi.testclient import TestClient
 
 from oknowledge import i18n
 from oknowledge.config import Config
-from oknowledge.model import Note
+from oknowledge.model import Mention, Note
 from oknowledge.vault import write_note
 from oknowledge.web.app import create_app
+from oknowledge.urls import search_url
 from oknowledge.web.index import fold, fold_map
 
 
 def note(id, title, category="Misc", tags=(), summary="Resumen.", body=None,
-         saved="2026-10-03", source="e.com", author=None, url=None, points=("p",)):
+         saved="2026-10-03", source="e.com", author=None, url=None, points=("p",),
+         type="article", mentions=None):
     return Note(id=id, url=url or f"https://e.com/{id}", title=title, category=category,
-                tags=list(tags), type="article", source=source, saved=saved,
-                summary=summary, points=list(points), author=author, body=body)
+                tags=list(tags), type=type, source=source, saved=saved,
+                summary=summary, points=list(points), author=author, body=body,
+                mentions=mentions)
 
 
 def make_cfg(tmp_path):
@@ -418,3 +421,85 @@ def test_ids_are_url_encoded_in_links(tmp_path):
     text = client.get("/").text
     assert "/item/a%20b%3Fc%23d" in text and "/cover/a%20b%3Fc%23d" in text
     assert "/item/a b" not in text
+
+
+# --- 8: what a video mentioned is searchable ------------------------------------------
+#
+# The point of the mentions is to go on investigating: the name has to be a way
+# back to the video. The transcript is only in the body when the note was saved
+# with content == full, it ranks last when it is, and the name the model wrote
+# is not always the one the speaker said.
+
+
+def video(id, title, mentions, **rest):
+    return note(id, title, type="youtube", source="youtu.be",
+                url=f"https://youtu.be/{id}", mentions=mentions, **rest)
+
+
+def test_a_mention_name_is_searchable(tmp_path):
+    _, client = app_with(tmp_path, video(
+        "v1", "Un video", [Mention(name="OpenCode", url="https://opencode.ai")]))
+
+    assert "/item/v1" in hits(client, "opencode")
+
+
+def test_a_mention_is_found_though_the_transcript_said_the_name_differently(tmp_path):
+    """The model writes the name as a name; the speaker said two words. Without
+    the mentions tier the only copy is the transcript's, which does not match."""
+    _, client = app_with(tmp_path, video(
+        "v1", "Un video", [Mention(name="OpenCode", url="https://opencode.ai")],
+        body="y despues probamos open code un rato"))
+
+    assert "/item/v1" in hits(client, "opencode")
+
+
+def test_a_domain_the_video_really_named_is_searchable(tmp_path):
+    _, client = app_with(tmp_path, video(
+        "v1", "Un video", [Mention(name="OpenCode", url="https://opencode.ai")]))
+
+    assert "/item/v1" in hits(client, "opencode.ai")
+
+
+def test_a_search_link_does_not_make_its_search_engine_searchable(tmp_path):
+    """A name with no URL gets a search link, and every one of them shares a
+    host. Folding those in would make one query return every video that ever
+    named something without a link."""
+    _, client = app_with(tmp_path, video(
+        "v1", "Un video", [Mention(name="Gizmo", url=search_url("Gizmo"))]))
+
+    assert "/item/v1" in hits(client, "gizmo")
+    assert "/item/v1" not in hits(client, "duckduckgo")
+
+
+def test_a_note_about_the_term_outranks_a_video_that_only_mentioned_it(tmp_path):
+    _, client = app_with(
+        tmp_path,
+        video("v1", "Un video", [Mention(name="Gizmo", url="https://gizmo.dev")],
+              saved="2026-01-01"),
+        note("n1", "Otra cosa", summary="a gizmo review", saved="2020-01-01"),
+    )
+    text = hits(client, "gizmo")
+
+    assert text.index("/item/n1") < text.index("/item/v1")
+
+
+def test_a_mention_outranks_the_same_word_buried_in_a_transcript(tmp_path):
+    _, client = app_with(
+        tmp_path,
+        note("n1", "Otra cosa", body="al pasar dijo gizmo y siguio", saved="2026-01-01"),
+        video("v1", "Un video", [Mention(name="Gizmo", url="https://gizmo.dev")],
+              saved="2020-01-01"),
+    )
+    text = hits(client, "gizmo")
+
+    assert text.index("/item/v1") < text.index("/item/n1")
+
+
+def test_a_hit_on_a_mention_says_so_in_its_snippet(tmp_path):
+    """Falling through to the summary leaves the user guessing why the video
+    came back at all."""
+    _, client = app_with(tmp_path, video(
+        "v1", "Un video", [Mention(name="Gizmo", url="https://gizmo.dev")],
+        summary="Un resumen que no dice nada de eso."))
+
+    assert "Gizmo" in hits(client, "gizmo")
