@@ -1966,3 +1966,36 @@ def test_an_unlockable_state_tree_skips_the_video_instead_of_writing(videos, q, 
 
     assert {r.status for r in done} == {"failed"}
     assert find_note(videos, "never-asked")[1].mentions is None
+
+
+def test_an_imported_unanalysed_video_is_not_a_backfill_candidate(cfg, q):
+    """An import saves a placeholder of type youtube with mentions None. The
+    body is the chat comment, not a transcript: handing it to the model would
+    write an answer onto a note whose summary says it was never analysed, and
+    spend the one question the tri-state allows."""
+    import_links(cfg, [_imported("https://youtu.be/abc123", comment="mirá esto")],
+                 queue=q)
+    note = read_note(next(cfg.links_dir.glob("*.md")))
+    assert (note.type, note.status, note.mentions) == ("youtube", "partial", None)
+
+    assert backfill_mentions(cfg, queue=q) == []
+    assert read_note(next(cfg.links_dir.glob("*.md"))).mentions is None
+
+
+def test_a_failed_retry_keeps_a_mentions_section_already_written(cfg, q, monkeypatch):
+    """_partial_note rebuilds the note on a failed retry; the mentions section
+    is carried like the summary and the body, or the backfill pays for it again."""
+    from oknowledge.vault import update_note
+
+    import_links(cfg, [_imported("https://youtu.be/abc123", comment="mirá esto")],
+                 queue=q)
+    link = read_note(next(cfg.links_dir.glob("*.md"))).id
+    kept = [Mention(name="opencode", url="https://opencode.ai")]
+    update_note(cfg, link, "es", mentions=kept)
+    extraction(monkeypatch, Unreadable("503"))
+    no_pictures(monkeypatch)
+
+    results = retry(cfg, queue=q)
+
+    assert [r.status for r in results] == ["partial"]
+    assert read_note(next(cfg.links_dir.glob("*.md"))).mentions == kept

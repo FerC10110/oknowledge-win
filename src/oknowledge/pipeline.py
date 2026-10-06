@@ -318,6 +318,9 @@ def _partial_note(cfg: Config, link: str, url: str, content: str,
         published=(page.published if page else None),
         body=(page.text if page and content == "full"
               else (keep.body if keep else None)),
+        # Carried like the summary: a retry that fails must not erase a section
+        # an earlier run paid a model call for.
+        mentions=(keep.mentions if keep else None),
     )
 
 
@@ -986,8 +989,9 @@ def backfill_mentions(cfg: Config, limit: int | None = None,
                      queue: Queue | None = None) -> list[Result]:
     """Give the videos already in the library their mentions.
 
-    Candidates are notes of type youtube whose mentions are None -- never
-    asked. A note asked before stops being one even if the answer was empty,
+    Candidates are finished notes (status ok) of type youtube whose mentions
+    are None -- never asked. An imported link nobody analysed yet is a
+    youtube note too, but its body is a chat comment, not a transcript. A note asked before stops being one even if the answer was empty,
     which is what makes running this again cheap instead of pointless.
 
     The text comes from where it already is: a note saved with content == full
@@ -999,7 +1003,8 @@ def backfill_mentions(cfg: Config, limit: int | None = None,
     """
     q = queue or Queue()
     candidates = [note for note in all_notes(cfg)
-                  if note.type == "youtube" and note.mentions is None]
+                  if note.type == "youtube" and note.status == "ok"
+                  and note.mentions is None]
     # Newest first, like retry: the backlog is walked from what the user saved
     # most recently, which is what they are most likely to be looking for.
     candidates.sort(key=lambda note: note.saved, reverse=True)
