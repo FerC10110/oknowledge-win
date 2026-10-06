@@ -499,3 +499,18 @@ def test_a_javascript_url_in_a_mention_is_text_not_a_live_link(tmp_path):
         page = client.get(path).text
         assert "Sneaky" in page, path
         assert 'href="javascript:' not in page, path
+
+
+@pytest.mark.parametrize("bad", ["www.foo.com", "javascript:alert(1)"])
+def test_a_rejected_mention_url_is_still_shown_as_text(tmp_path, bad):
+    """Not linking a URL must not hide it, like note.url: the user typed
+    `- [Foo](www.foo.com)` in Obsidian and needs to see what to repair."""
+    cfg = make_cfg(tmp_path)
+    write_note(cfg, note("j1", "Uno", "Redes", [], "Resumen.", type="youtube",
+                         mentions=[Mention(name="Foo", url=bad)]), "es")
+    client = TestClient(create_app(cfg))
+    for path in ("/item/j1", "/embed/j1"):
+        page = client.get(path).text
+        assert "Foo" in page, path
+        assert bad in page.replace("&#39;", "'"), path
+        assert f'href="{bad}"' not in page, path

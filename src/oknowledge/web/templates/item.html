@@ -19,7 +19,9 @@
             {# The URL comes from the note body, which is hand-editable: only
                http(s) is linked, anything else is shown as text. #}
             {% if m.url is web_url %}<a href="{{ m.url }}" target="_blank" rel="noreferrer">{{ m.name }}</a>
-            {% else %}<span>{{ m.name }}</span>{% endif %}
+            {# Not linked, not hidden either: the URL beside the name, as text,
+               so the user can see what it is and repair it. #}
+            {% else %}<span>{{ m.name }}</span> <span class="mention-url">{{ m.url }}</span>{% endif %}
             {% if m.url is search_link %}<span class="mention-search">{{ t('search') }}</span>{% endif %}
             <form action="/item/{{ note.id|slug }}/mentions/delete" method="post">
               <input type="hidden" name="name" value="{{ m.name }}">
