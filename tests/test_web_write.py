@@ -1162,6 +1162,16 @@ def test_deleting_from_a_note_nobody_asked_leaves_none(setup):
     assert find_note(cfg, "a1")[1].mentions is None
 
 
+def test_a_delete_with_no_name_field_at_all_deletes_nothing(video):
+    """The route defaults a missing name to "". If an absent name ever meant
+    "all", a crafted post would wipe a whole list in silence."""
+    cfg, client = video
+
+    client.post("/item/a1/mentions/delete", data={})
+
+    assert [m.name for m in find_note(cfg, "a1")[1].mentions] == ["opencode", "Railway"]
+
+
 def test_deleting_a_mention_that_is_gone_is_not_an_error(video):
     """A double click, or a tab left open since yesterday."""
     _, client = video

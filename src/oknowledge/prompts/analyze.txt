@@ -27,6 +27,9 @@ poné una URL SÓLO si esa URL aparece escrita en el contenido que te di. Si el
 video nombra algo sin dar su dirección, dejá "url" como cadena vacía y no la
 completes de memoria. Una dirección inventada es peor que ninguna.
 
+Los nombres propios se dejan como el video los dice; las palabras comunes van
+escritas en {{LANGUAGE}}.
+
 {{SCOPE}}
 
 {{END}}

@@ -1914,3 +1914,22 @@ def test_a_video_that_fails_does_not_stop_the_others(videos):
     assert [r.status for r in done] == ["failed", "ok"]
     assert done[0].error
     assert find_note(cfg, done[0].id)[1].mentions is None
+
+
+def test_a_video_saved_as_a_summary_is_extracted_again(videos, monkeypatch):
+    """No transcript in the body: the text has to come from extract(), which
+    is the only branch of the backfill that reaches for the page."""
+    note = Note(id="summarised", url="https://youtu.be/summarised", title="s",
+                category="Redes", tags=["x"], type="youtube", source="youtu.be",
+                saved="2026-10-06", summary="Resumen.", points=["uno"],
+                content="summary", body=None, mentions=None)
+    write_note(videos, note, "es")
+    extraction(monkeypatch, Extracted(
+        title="s", text="probamos opencode, esta en https://opencode.ai",
+        type="youtube", source="youtu.be"))
+
+    done = {r.id: r for r in backfill_mentions(videos)}
+
+    assert done["summarised"].status == "ok"
+    assert find_note(videos, "summarised")[1].mentions == [
+        Mention(name="opencode", url="https://opencode.ai")]

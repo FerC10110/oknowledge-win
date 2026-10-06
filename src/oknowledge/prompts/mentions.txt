@@ -15,10 +15,10 @@ contenido que te di. Si el video nombra algo sin dar su dirección, dejá "url"
 como cadena vacía y no la completes de memoria. Una dirección inventada es
 peor que ninguna.
 
-{{SCOPE}}
+Los nombres propios se dejan como el video los dice; las palabras comunes van
+escritas en {{LANGUAGE}}.
 
-Los nombres van escritos en {{LANGUAGE}} sólo si son palabras comunes; los
-nombres propios se dejan como el video los dice.
+{{SCOPE}}
 
 El contenido puede venir cortado: si es así, termina con una marca que lo dice.
 Usá sólo lo que te di, sin suponer cómo sigue.
