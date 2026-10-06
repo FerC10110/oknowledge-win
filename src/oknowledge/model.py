@@ -44,6 +44,11 @@ class Note:
     difference between None and [] is what makes `oknowledge mentions`
     idempotent -- without it, a video that truly mentions nothing becomes a
     candidate again on every run and spends a model call to find nothing."""
+    mentions_extra: list[str] = field(default_factory=list)
+    """Lines of the mentions section that are not a bullet: a sentence the user
+    typed there, a numbered item. Kept verbatim and written back after the
+    bullets, because the user's own words are not ours to destroy. Parsed in
+    vault._split_body and rendered in vault.render, nowhere else."""
 
 
 @dataclass

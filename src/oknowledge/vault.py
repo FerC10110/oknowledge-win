@@ -116,7 +116,8 @@ def render(note: Note, language: str) -> str:
                             for m in note.mentions)
         # The heading alone when there is nothing: the section's presence is
         # what says this note was already asked.
-        parts.append(f"## {mentions_heading}\n\n{bullets}\n" if bullets
+        lines = bullets.splitlines() + list(note.mentions_extra)
+        parts.append(f"## {mentions_heading}\n\n" + "\n".join(lines) + "\n" if lines
                      else f"## {mentions_heading}\n")
     if note.content == "full" and note.body:
         parts.append(f"## {content_heading}\n\n{note.body.strip()}\n")
@@ -161,6 +162,8 @@ def read_front(path: Path) -> dict | None:
 _POINTS_HEADINGS = {f"## {h[0]}" for h in HEADINGS.values()}
 _MENTIONS_HEADINGS = {f"## {h[1]}" for h in HEADINGS.values()}
 _CONTENT_HEADINGS = {f"## {h[2]}" for h in HEADINGS.values()}
+# Any bullet a person types: -, * or +, indented or not.
+_LIST_ITEM = re.compile(r"^\s*[-*+]\s+(?P<text>\S.*)$")
 _BULLET = re.compile(r"^\[(?P<name>.*)\]\((?P<url>.*)\)$")
 
 
@@ -182,8 +185,11 @@ def _mention(text: str) -> Mention:
 
 def _split_body(
     body: str,
-) -> tuple[str, list[str], list[Mention] | None, str | None]:
-    """Return (summary, points, mentions, original content) from a body written by render().
+) -> tuple[str, list[str], list[Mention] | None, list[str], str | None]:
+    """Return (summary, points, mentions, mentions_extra, original content).
+
+    From a body written by render(), or edited by hand. Lines in the mentions
+    section that are not bullets come back verbatim as mentions_extra.
 
     Sections are recognized by their heading text, not by position, so a missing
     section never shifts the others. The content section runs to end of file, so
@@ -194,6 +200,7 @@ def _split_body(
     summary: list[str] = []
     points: list[str] = []
     mentions: list[Mention] | None = None
+    extra: list[str] = []
     original: list[str] = []
     mode = "summary"
     for line in lines[start:]:
@@ -201,7 +208,11 @@ def _split_body(
         if mode != "content" and marker in _CONTENT_HEADINGS:
             mode = "content"
         elif mode != "content" and marker in _MENTIONS_HEADINGS:
-            mode, mentions = "mentions", []
+            # Accumulates, like the points section: a second heading adds to
+            # the list instead of discarding what the first one held.
+            mode = "mentions"
+            if mentions is None:
+                mentions = []
         elif mode == "summary" and marker in _POINTS_HEADINGS:
             mode = "points"
         elif mode == "summary":
@@ -210,12 +221,15 @@ def _split_body(
             if line.startswith("- "):
                 points.append(line[2:].strip())
         elif mode == "mentions":
-            if line.startswith("- ") and line[2:].strip():
-                mentions.append(_mention(line[2:].strip()))
+            item = _LIST_ITEM.match(line)
+            if item:
+                mentions.append(_mention(item.group("text").strip()))
+            elif line.strip() and not re.fullmatch(r"\s*[-*+]\s*", line):
+                extra.append(line.rstrip())
         else:
             original.append(line)
     content = "\n".join(original).strip()
-    return "\n".join(summary).strip(), points, mentions, content or None
+    return "\n".join(summary).strip(), points, mentions, extra, content or None
 
 
 _REQUIRED_TEXT = ("id", "url", "title", "category", "type", "source")
@@ -245,7 +259,7 @@ def read_note(path: Path) -> Note | None:
     for key in ("author", "cover"):
         if front.get(key) is not None and not isinstance(front[key], str):
             return None
-    summary, points, mentions, body = _split_body(rest)
+    summary, points, mentions, extra, body = _split_body(rest)
     return Note(
         id=required["id"],
         url=required["url"],
@@ -264,6 +278,7 @@ def read_note(path: Path) -> Note | None:
         cover=front.get("cover"),
         body=body,
         mentions=mentions,
+        mentions_extra=extra,
     )
 
 

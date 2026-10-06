@@ -321,6 +321,7 @@ def _partial_note(cfg: Config, link: str, url: str, content: str,
         # Carried like the summary: a retry that fails must not erase a section
         # an earlier run paid a model call for.
         mentions=(keep.mentions if keep else None),
+        mentions_extra=(keep.mentions_extra if keep else []),
     )
 
 

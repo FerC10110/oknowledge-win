@@ -450,3 +450,63 @@ def test_the_english_headings_round_trip(tmp_path):
     assert read.mentions == note.mentions
     assert read.points == ["uno"]
     assert read.body == "The video text."
+
+
+HAND_EDITED = """\
+## Menciones
+
+- [opencode](https://opencode.ai)
+* [Caddy](https://caddyserver.com)
+  - [sub](https://sub.example)
+1. [Numbered](https://num.example)
+Esto lo escribi yo a mano y me importa.
+- [Railway](https://duckduckgo.com/?q=Railway)
+"""
+
+
+def _with_section(tmp_path, section):
+    path = tmp_path / "n.md"
+    text = render(note_with(None), "es").rstrip("\n") + "\n\n" + section
+    path.write_text(text, encoding="utf-8")
+    return path
+
+
+def test_a_hand_edited_section_survives_a_round_trip(tmp_path):
+    """README: 'Editing by hand is part of the design.' One click on a
+    mention's x rewrites this section, and nothing a person typed may go."""
+    cfg = make_config(tmp_path)
+    path = _with_section(tmp_path, HAND_EDITED)
+
+    first = read_note(path)
+    written = write_note(cfg, first, "es")
+    second = read_note(written)
+
+    assert [(m.name, m.url) for m in second.mentions] == [
+        ("opencode", "https://opencode.ai"),
+        ("Caddy", "https://caddyserver.com"),
+        ("sub", "https://sub.example"),
+        ("Railway", "https://duckduckgo.com/?q=Railway"),
+    ]
+    text = written.read_text(encoding="utf-8")
+    assert "1. [Numbered](https://num.example)" in text
+    assert "Esto lo escribi yo a mano y me importa." in text
+    # And a second pass changes nothing: the lines are not duplicated.
+    again = write_note(cfg, second, "es")
+    assert again.read_text(encoding="utf-8") == text
+
+
+def test_the_three_bullet_markers_all_make_mentions(tmp_path):
+    path = _with_section(tmp_path,
+                         "## Menciones\n\n- [a](https://a.x)\n* [b](https://b.x)\n"
+                         "+ [c](https://c.x)\n   * [d](https://d.x)\n")
+
+    assert [m.name for m in read_note(path).mentions] == ["a", "b", "c", "d"]
+
+
+def test_a_repeated_mentions_heading_accumulates(tmp_path):
+    """Like a repeated key-points heading: the first list is not discarded."""
+    path = _with_section(tmp_path,
+                         "## Menciones\n\n- [a](https://a.x)\n\n"
+                         "## Menciones\n\n- [b](https://b.x)\n")
+
+    assert [m.name for m in read_note(path).mentions] == ["a", "b"]
