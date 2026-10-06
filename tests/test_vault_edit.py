@@ -9,7 +9,8 @@ import contextlib
 import pytest
 
 from oknowledge.config import Config
-from oknowledge.model import Note
+from oknowledge.model import Mention, Note
+from oknowledge.urls import search_url
 from oknowledge.queue import Locked
 from oknowledge.vault import (
     BadCategory,
@@ -18,6 +19,7 @@ from oknowledge.vault import (
     categories,
     clean_category,
     delete_note,
+    find_note,
     index_path,
     read_note,
     rebuild_indexes,
@@ -421,3 +423,110 @@ def test_renaming_without_a_lock_is_still_allowed(tmp_path):
     cfg = make(tmp_path)
     write_note(cfg, note("a1", "WireGuard", "Networking"), "es")
     assert rename_category(cfg, "Networking", "Redes", "es").moved == 1
+
+
+# --- mentions ----------------------------------------------------------------
+
+def video(tmp_path, mentions):
+    cfg = make(tmp_path)
+    n = note("a1", "Mi stack", "Redes")
+    n.type, n.mentions = "youtube", mentions
+    return cfg, write_note(cfg, n, "es")
+
+
+TWO = [Mention(name="opencode", url="https://opencode.ai"),
+       Mention(name="Railway", url=search_url("Railway"))]
+
+
+def test_mentions_replaces_the_whole_list(tmp_path):
+    cfg, path = video(tmp_path, TWO)
+    update_note(cfg, "a1", "es", mentions=[Mention(name="n", url="https://n.io")])
+    assert [m.name for m in read_note(path).mentions] == ["n"]
+
+
+def test_an_empty_mentions_list_is_empty_not_none(tmp_path):
+    """Task 7's backfill takes None to mean nobody asked."""
+    cfg, path = video(tmp_path, TWO)
+    update_note(cfg, "a1", "es", mentions=[])
+    assert read_note(path).mentions == []
+
+
+def test_dropping_from_a_note_nobody_asked_leaves_none(tmp_path):
+    cfg, path = video(tmp_path, None)
+    update_note(cfg, "a1", "es", drop_mention="x")
+    assert read_note(path).mentions is None
+
+
+def test_dropping_a_name_that_is_not_there_changes_nothing(tmp_path):
+    cfg, path = video(tmp_path, TWO)
+    update_note(cfg, "a1", "es", drop_mention="nada")
+    assert read_note(path).mentions == TWO
+
+
+def test_dropping_an_empty_name_is_a_no_op(tmp_path):
+    cfg, path = video(tmp_path, TWO)
+    update_note(cfg, "a1", "es", drop_mention="")
+    assert read_note(path).mentions == TWO
+
+
+def spy_rebuild(monkeypatch):
+    calls = []
+    real = rebuild_indexes
+    monkeypatch.setattr("oknowledge.vault.rebuild_indexes",
+                        lambda cfg, language: calls.append(1) or real(cfg, language))
+    return calls
+
+
+def test_a_mentions_only_edit_skips_the_rebuild_and_returns_the_path(
+        tmp_path, monkeypatch):
+    cfg, path = video(tmp_path, TWO)
+    calls = spy_rebuild(monkeypatch)
+
+    assert update_note(cfg, "a1", "es", drop_mention="Railway") == path
+    assert update_note(cfg, "a1", "es", mentions=[]) == path
+    assert calls == []
+
+
+@pytest.mark.parametrize("extra", [{"category": "Seguridad"}, {"tags": ["vpn"]}])
+def test_mentions_together_with_a_classification_change_still_rebuilds(
+        tmp_path, monkeypatch, extra):
+    """The early return keys on two arguments being None, not on what changed."""
+    cfg, _ = video(tmp_path, TWO)
+    calls = spy_rebuild(monkeypatch)
+
+    update_note(cfg, "a1", "es", mentions=[], **extra)
+    update_note(cfg, "a1", "es", drop_mention="opencode", **extra)
+
+    assert len(calls) == 2
+
+
+def test_stale_indexes_still_propagate_from_a_category_edit(tmp_path, monkeypatch):
+    cfg, _ = video(tmp_path, TWO)
+    break_reindex(monkeypatch)
+    with pytest.raises(IndexesStale):
+        update_note(cfg, "a1", "es", category="Seguridad")
+
+
+def test_a_mentions_only_edit_does_not_raise_when_the_rebuild_would_fail(
+        tmp_path, monkeypatch):
+    cfg, path = video(tmp_path, TWO)
+    break_reindex(monkeypatch)
+    update_note(cfg, "a1", "es", drop_mention="Railway")
+    assert [m.name for m in read_note(path).mentions] == ["opencode"]
+
+
+def test_an_unknown_id_returns_none_and_writes_nothing(tmp_path):
+    cfg, path = video(tmp_path, TWO)
+    before = path.read_bytes()
+    assert update_note(cfg, "zzz", "es", drop_mention="opencode") is None
+    assert update_note(cfg, "zzz", "es", mentions=[]) is None
+    assert path.read_bytes() == before
+
+
+def test_dropping_survives_a_round_trip_with_awkward_names(tmp_path):
+    awkward = [Mention(name="a [b] c", url="https://x.io"),
+               Mention(name="back\\slash", url="https://y.io"),
+               Mention(name="gone", url="https://z.io")]
+    cfg, _ = video(tmp_path, awkward)
+    update_note(cfg, "a1", "es", drop_mention="gone")
+    assert find_note(cfg, "a1")[1].mentions == awkward[:2]

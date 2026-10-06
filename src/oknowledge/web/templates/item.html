@@ -16,7 +16,10 @@
       <ul class="mentions">
         {% for m in note.mentions %}
           <li>
-            <a href="{{ m.url }}" target="_blank" rel="noreferrer">{{ m.name }}</a>
+            {# The URL comes from the note body, which is hand-editable: only
+               http(s) is linked, anything else is shown as text. #}
+            {% if m.url is web_url %}<a href="{{ m.url }}" target="_blank" rel="noreferrer">{{ m.name }}</a>
+            {% else %}<span>{{ m.name }}</span>{% endif %}
             {% if m.url is search_link %}<span class="mention-search">{{ t('search') }}</span>{% endif %}
             <form action="/item/{{ note.id|slug }}/mentions/delete" method="post">
               <input type="hidden" name="name" value="{{ m.name }}">

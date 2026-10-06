@@ -469,6 +469,7 @@ def test_the_popup_shows_the_mentions_but_offers_no_way_to_delete(video):
     assert 'class="mentions"' in page
     assert "opencode" in page
     assert "mentions/delete" not in page
+    assert "<form" not in page and "<button" not in page
 
 
 def test_every_confirmation_in_the_note_page_still_has_its_translation():
@@ -484,3 +485,17 @@ def test_every_confirmation_in_the_note_page_still_has_its_translation():
     assert [text for text in asked if text not in STRINGS["es"]] == []
     assert any("mention" in text.lower() for text in asked), (
         "the reprocess warning does not say the mentions are replaced too")
+
+
+def test_a_javascript_url_in_a_mention_is_text_not_a_live_link(tmp_path):
+    """A mention's URL comes out of the note body, which is as hand-editable as
+    the frontmatter. Refusing to link it must not mean hiding it."""
+    cfg = make_cfg(tmp_path)
+    write_note(cfg, note("j1", "Uno", "Redes", [], "Resumen.", type="youtube",
+                         mentions=[Mention(name="Sneaky", url="javascript:alert(1)")]),
+               "es")
+    client = TestClient(create_app(cfg))
+    for path in ("/item/j1", "/embed/j1"):
+        page = client.get(path).text
+        assert "Sneaky" in page, path
+        assert 'href="javascript:' not in page, path
