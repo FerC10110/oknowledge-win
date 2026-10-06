@@ -5,9 +5,12 @@ import pytest
 
 from oknowledge.ai.base import (
     DEFAULT_LIMIT, TRUNCATION_MARKER, Analysis, AnalysisError, EngineError, analyze,
-    canonical_category, extract_json, normalize_tags, render_prompt, retry_suffix,
+    MAX_MENTION_NAME, MAX_MENTIONS, canonical_category, extract_json, normalize_tags,
+    render_prompt, retry_suffix, sent_text, to_mentions,
 )
 from oknowledge.ai.fake import FakeEngine
+from oknowledge.model import Mention
+from oknowledge.urls import search_url
 
 GOOD = {
     "title": "WireGuard vs OpenVPN",
@@ -610,3 +613,115 @@ def test_a_mode_that_is_not_a_plain_word_never_reaches_the_filesystem(mode):
     from oknowledge.ai.base import _mention_scope
     with pytest.raises(ValueError, match="mention scope"):
         _mention_scope(mode)
+
+
+def test_a_url_that_appears_in_the_video_is_kept():
+    data = {"mentions": [{"name": "opencode", "url": "https://opencode.ai"}]}
+
+    got = to_mentions(data, "miren https://opencode.ai que esta bueno")
+
+    assert got == [Mention(name="opencode", url="https://opencode.ai")]
+
+
+def test_a_url_the_video_never_said_becomes_a_search():
+    """The decision the user made: nobody invents an address. A sentence in the
+    prompt is something a model can disobey; this comparison is not."""
+    data = {"mentions": [{"name": "Railway", "url": "https://railway.app"}]}
+
+    got = to_mentions(data, "probamos Railway un rato")
+
+    assert got == [Mention(name="Railway", url=search_url("Railway"))]
+
+
+def test_the_guard_judges_the_text_that_was_sent_not_the_whole_transcript():
+    """render_prompt truncates at limit. A URL living only in the tail that was
+    dropped is a URL the model never saw: accepting it would be accepting a
+    guess that happened to be right."""
+    tail = "x" * DEFAULT_LIMIT + " https://late.example"
+    data = {"mentions": [{"name": "late", "url": "https://late.example"}]}
+
+    got = to_mentions(data, sent_text(tail))
+
+    assert got == [Mention(name="late", url=search_url("late"))]
+
+
+def test_analyze_applies_the_guard_to_the_truncated_text():
+    text = "x" * DEFAULT_LIMIT + " https://late.example"
+    answer = {**GOOD, "mentions": [{"name": "late", "url": "https://late.example"}]}
+
+    analysis = analyze(FakeEngine([json.dumps(answer)]), text, {}, [], "es",
+                       mentions="tools")
+
+    assert analysis.mentions == [Mention(name="late", url=search_url("late"))]
+
+
+def test_render_prompt_shows_the_model_exactly_what_sent_text_says():
+    text = "\u2460" * 50 + "\u2461" * 50
+
+    prompt = render_prompt(text, {}, [], "es", limit=50)
+
+    assert sent_text(text, 50) in prompt
+    assert "\u2461" not in prompt
+
+
+def test_a_bare_string_is_a_name():
+    """What a small local model answers more often than anything else."""
+    got = to_mentions({"mentions": ["opencode", "github"]}, "")
+
+    assert got == [Mention(name="opencode", url=search_url("opencode")),
+                   Mention(name="github", url=search_url("github"))]
+
+
+@pytest.mark.parametrize("rows", [
+    "no soy una lista", [None], [[]], [{}], [{"name": ""}], [{"name": "   "}],
+    [{"name": "<lo que el video nombra>"}], [{"url": "https://e.com"}],
+])
+def test_a_malformed_row_is_dropped_and_nothing_else_breaks(rows):
+    got = to_mentions({"mentions": rows}, "https://e.com")
+
+    assert got == []
+
+
+def test_a_bad_row_does_not_take_the_good_ones_with_it():
+    data = {"mentions": [{"name": ""}, "opencode", {"name": "Caddy"}]}
+
+    assert [m.name for m in to_mentions(data, "")] == ["opencode", "Caddy"]
+
+
+def test_the_same_name_twice_keeps_the_one_with_a_real_url():
+    data = {"mentions": [{"name": "opencode"},
+                         {"name": "OpenCode", "url": "https://opencode.ai"}]}
+
+    got = to_mentions(data, "https://opencode.ai")
+
+    assert got == [Mention(name="OpenCode", url="https://opencode.ai")]
+
+
+def test_a_url_that_is_not_http_becomes_a_search():
+    data = {"mentions": [{"name": "algo", "url": "javascript:alert(1)"}]}
+
+    got = to_mentions(data, "javascript:alert(1)")
+
+    assert got == [Mention(name="algo", url=search_url("algo"))]
+
+
+def test_a_long_name_is_cut():
+    got = to_mentions({"mentions": [{"name": "a" * 200}]}, "")
+
+    assert len(got[0].name) == MAX_MENTION_NAME
+
+
+def test_no_more_than_thirty():
+    rows = [{"name": f"n{i}"} for i in range(50)]
+
+    assert len(to_mentions({"mentions": rows}, "")) == MAX_MENTIONS
+
+
+def test_an_answer_with_no_mentions_key_is_not_a_failure():
+    """Never REQUIRED: a retry on the strict suffix and then losing the note
+    over a list is exactly what this project does not allow."""
+    analysis = analyze(FakeEngine([json.dumps(GOOD)]), "t", {}, [], "es",
+                       mentions="tools")
+
+    assert analysis.mentions == []
+    assert analysis.summary

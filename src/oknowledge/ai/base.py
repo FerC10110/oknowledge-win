@@ -10,9 +10,12 @@ from __future__ import annotations
 import json
 import re
 import unicodedata
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from importlib.resources import files
 from typing import Protocol
+
+from ..model import Mention
+from ..urls import is_search_url, search_url
 
 DEFAULT_LIMIT = 24_000
 MAX_KNOWN_CATEGORIES = 60
@@ -66,6 +69,7 @@ class Analysis:
     points: list[str]
     category: str
     tags: list[str]
+    mentions: list[Mention] = field(default_factory=list)
 
 
 def retry_suffix(language: str, reason: str) -> str:
@@ -191,6 +195,63 @@ def _mention_scope(mode: str) -> str:
         encoding="utf-8").strip()
 
 
+MAX_MENTIONS = 30
+MAX_MENTION_NAME = 80
+
+
+def sent_text(text: str, limit: int = DEFAULT_LIMIT) -> str:
+    """The slice of the content that travels in the prompt.
+
+    One function, called by the prompt builder and by the guard, so the two
+    can never disagree about what the model was actually shown.
+    """
+    return text[:limit]
+
+
+def to_mentions(data: dict, sent: str) -> list[Mention]:
+    """The mentions in an answer, with every URL checked against the video.
+
+    A URL survives only if it appears literally in `sent` -- the text the model
+    was given. Anything else becomes a search for the name: a domain it
+    remembered, a near miss, the schema's own example. The user's decision was
+    that nothing is invented, and this comparison is what keeps it; the
+    prompt's wording only asks.
+
+    A row that is a bare string is a name: small models answer this way more
+    often than with objects, and dropping those would empty the list on
+    exactly the local engines. Rows that are neither are dropped one by one --
+    a bad row never costs the good ones.
+    """
+    rows = data.get("mentions")
+    if not isinstance(rows, list):
+        return []
+    best: dict[str, Mention] = {}
+    for row in rows:
+        if isinstance(row, str):
+            row = {"name": row}
+        if not isinstance(row, dict):
+            continue
+        name = row.get("name")
+        if not isinstance(name, str):
+            continue
+        name = name.strip()[:MAX_MENTION_NAME].strip()
+        if not name or _is_placeholder(name):
+            continue
+        raw = row.get("url")
+        raw = raw.strip() if isinstance(raw, str) else ""
+        real = raw.startswith(("http://", "https://")) and raw in sent
+        candidate = Mention(name=name, url=raw if real else search_url(name))
+        key = _fold(name)
+        current = best.get(key)
+        if current is None:
+            if len(best) >= MAX_MENTIONS:
+                break
+            best[key] = candidate
+        elif real and is_search_url(current.url):
+            best[key] = candidate
+    return list(best.values())
+
+
 def render_prompt(text: str, meta: dict, known, language: str, limit: int = DEFAULT_LIMIT,
                   mentions: str | None = None) -> str:
     template = files("oknowledge").joinpath("prompts/analyze.txt").read_text(encoding="utf-8")
@@ -200,7 +261,7 @@ def render_prompt(text: str, meta: dict, known, language: str, limit: int = DEFA
     # in the page text or title is never substituted a second time.
     template = _conditionals(template, {"KNOWN": bool(categories),
                                         "MENTIONS": bool(mentions)})
-    body = text[:limit]
+    body = sent_text(text, limit)
     if len(text) > limit:
         body += "\n" + TRUNCATION_MARKER
     values = {
@@ -269,7 +330,7 @@ def _items(data: dict, key: str) -> list:
     return value
 
 
-def _to_analysis(data: dict, known, meta: dict, language: str) -> Analysis:
+def _to_analysis(data: dict, known, meta: dict, language: str, sent: str = "") -> Analysis:
     missing = [k for k in REQUIRED if k not in data]
     if missing:
         raise AnalysisError(f"the answer is missing: {', '.join(missing)}")
@@ -287,15 +348,19 @@ def _to_analysis(data: dict, known, meta: dict, language: str) -> Analysis:
         points=points[:MAX_POINTS],
         category=canonical_category(_text(data, "category"), known, language),
         tags=normalize_tags(_items(data, "tags")),
+        mentions=to_mentions(data, sent),
     )
 
 
-def analyze(engine: Engine, text: str, meta: dict, known, language: str) -> Analysis:
-    prompt = render_prompt(text, meta, known, language)
+def analyze(engine: Engine, text: str, meta: dict, known, language: str,
+            mentions: str | None = None) -> Analysis:
+    sent = sent_text(text)
+    prompt = render_prompt(text, meta, known, language, mentions=mentions)
     request = prompt
     for attempt in range(2):
         try:
-            return _to_analysis(extract_json(engine.complete(request)), known, meta, language)
+            return _to_analysis(extract_json(engine.complete(request)), known,
+                                meta, language, sent)
         except AnalysisError as error:
             last = error
             request = prompt + retry_suffix(language, str(error))
