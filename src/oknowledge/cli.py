@@ -21,6 +21,10 @@ when it could not listen on web.port.
 
 `status` and `reindex` exit 0 when they ran, even if they report that an index
 was blocked or queue files were unreadable: the report is the result.
+
+A reader that stops reading (`| head`, quitting `less` early) is not a failure:
+every command finishes its work before it prints its first line, so the only
+thing lost is the report. The exit code is 0 and nothing is printed about it.
 """
 
 from __future__ import annotations
@@ -28,6 +32,7 @@ from __future__ import annotations
 import argparse
 import dataclasses
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -387,6 +392,27 @@ def _retry(cfg, args) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Run a command, and survive a reader that walks away.
+
+    The flush has to happen here, inside the catch. stdout to a pipe is block
+    buffered, so `oknowledge import ... | head` usually fails nowhere in
+    `_run` at all: the interpreter flushes the buffer on its way out, after
+    every handler below is gone, and prints "Exception ignored while flushing
+    sys.stdout" past our control before exiting 120.
+    """
+    try:
+        code = _run(argv)
+        sys.stdout.flush()
+        return code
+    except BrokenPipeError:
+        # The buffer still holds what could not be delivered and would be
+        # flushed again at exit. Point the file descriptor at the void so that
+        # last flush has nothing to fail on.
+        os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
+        return 0
+
+
+def _run(argv: list[str] | None) -> int:
     parser = _parser()
     args = parser.parse_args(argv)
     if not args.command:
@@ -427,6 +453,10 @@ def main(argv: list[str] | None = None) -> int:
     except ProtectedNote as error:
         print(f"oknowledge: refused to write: {error}{_queued(args)}", file=sys.stderr)
         return 3
+    except BrokenPipeError:
+        # A broken pipe is an OSError, and the handler below would report it as
+        # a disk error and exit 3. It belongs to main(), which knows what to do.
+        raise
     except OSError as error:
         print(f"oknowledge: {error}{_queued(args)}", file=sys.stderr)
         return 3

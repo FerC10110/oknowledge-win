@@ -3,6 +3,9 @@ here can touch the real queue, and the config is always passed explicitly."""
 
 import errno
 import json
+import os
+import subprocess
+import sys
 
 import pytest
 
@@ -13,6 +16,10 @@ from oknowledge.model import Extracted, Note
 from oknowledge.pipeline import Result
 from oknowledge.queue import Queue, state_dir
 from oknowledge.vault import RebuildResult, all_notes, write_note
+
+# Captured at import time, before conftest's autouse fixture swaps them out:
+# one test below has to start a real process.
+REAL_RUN, REAL_POPEN = subprocess.run, subprocess.Popen
 
 ANSWER = json.dumps({
     "title": "WireGuard",
@@ -842,3 +849,39 @@ def test_a_limited_retry_reports_on_the_links_it_worked_on(cfg, monkeypatch,
 def test_retry_refuses_a_negative_limit(cfg, capsys):
     assert main(["retry", "--limit", "-1"]) == 2
     assert "limit" in capsys.readouterr().err
+
+
+def test_a_reader_that_closes_the_pipe_early_is_not_an_error(tmp_path, monkeypatch):
+    """`oknowledge import ... | head` closes stdout while we are still writing.
+
+    Python flushes sys.stdout once more as the interpreter exits, and that
+    second failure prints "Exception ignored" past every handler in this file
+    and exits 120. Only the report is lost: every command finishes its work
+    before it prints its first line.
+
+    This is the one test that starts a real process. Nothing else reproduces
+    a flush that happens after main() has already returned.
+    """
+    monkeypatch.setattr(subprocess, "Popen", REAL_POPEN)   # conftest bans it by default
+    vault = tmp_path / "vault"
+    (vault / "oknowledge" / "links").mkdir(parents=True)
+    config = tmp_path / "config.toml"
+    config.write_text(f'vault = "{vault}"\n', encoding="utf-8")
+    export = tmp_path / "chat.txt"
+    export.write_text("18/7/2019, 11:36 - Fer: https://e.com/x\n", encoding="utf-8")
+
+    read_end, write_end = os.pipe()
+    os.close(read_end)          # nobody will ever read: EPIPE on the first write
+    try:
+        done = REAL_RUN(
+            [sys.executable, "-c",
+             "import sys; from oknowledge.cli import main; sys.exit(main())",
+             "--config", str(config), "import", str(export), "--dry-run"],
+            stdout=write_end, stderr=subprocess.PIPE, text=True,
+            env={**os.environ, "XDG_STATE_HOME": str(tmp_path / "state")})
+    finally:
+        os.close(write_end)
+
+    assert "BrokenPipeError" not in done.stderr
+    assert "Exception ignored" not in done.stderr
+    assert done.returncode == 0
