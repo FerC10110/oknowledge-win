@@ -8,7 +8,7 @@ dependency tree for nothing (F7).
 import pathlib
 import re
 import tomllib
-from fnmatch import fnmatch
+from pathlib import PurePosixPath
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
@@ -35,15 +35,32 @@ def test_the_dev_extra_is_not_empty_either():
     assert "pytest" in dev_dependencies()
 
 
+def shipped(relative: str, globs) -> bool:
+    """Whether a wheel would include this package-relative path.
+
+    fnmatch is not usable here (its `*` crosses `/`, so a prompt in a
+    subdirectory would look shipped by `prompts/*.txt`), nor PurePath.match
+    (unanchored on the left). full_match anchors the whole path and keeps `*`
+    single-level.
+    """
+    return any(PurePosixPath(relative).full_match(g) for g in globs)
+
+
+def test_the_guard_can_fail_for_a_subdirectory():
+    globs = ["prompts/*.txt"]
+
+    assert shipped("prompts/analyze.txt", globs)
+    assert not shipped("prompts/mentions/tools.txt", globs)
+
+
 def test_every_prompt_the_code_loads_is_declared_as_package_data():
     """An editable install finds a file the wheel would not ship. This is the
     only place that difference shows up before a user hits it."""
     data = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     globs = data["tool"]["setuptools"]["package-data"]["oknowledge"]
-    prompts = (ROOT / "src" / "oknowledge" / "prompts").rglob("*.txt")
+    package = ROOT / "src" / "oknowledge"
 
-    missing = [str(p) for p in prompts
-               if not any(fnmatch(str(p.relative_to(ROOT / "src" / "oknowledge")), g)
-                          for g in globs)]
+    missing = [str(p) for p in (package / "prompts").rglob("*.txt")
+               if not shipped(p.relative_to(package).as_posix(), globs)]
 
     assert missing == [], f"loaded at runtime, shipped by nothing: {missing}"

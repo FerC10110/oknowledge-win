@@ -1,4 +1,5 @@
 import json
+import pathlib
 
 import pytest
 
@@ -552,6 +553,11 @@ def test_a_prompt_for_anything_but_a_video_is_the_one_we_already_sent():
 
     assert "mentions" not in plain
     assert "{{" not in plain
+    # The seam where the second region was removed: exactly one blank line.
+    assert ('No escribas "este artículo trata sobre"; escribí directamente lo que dice.'
+            "\n\nEl contenido puede venir cortado:") in plain
+    assert render_prompt("texto", {"url": "https://e.com"}, ["Redes"], "es",
+                         mentions="") == plain
 
 
 @pytest.mark.parametrize("mode,needle", [
@@ -587,3 +593,20 @@ def test_the_known_categories_conditional_still_works_both_ways():
 
     assert "Redes" in with_known
     assert "todavía no hay ninguna" in without
+
+
+def test_no_scope_fragment_uses_a_placeholder():
+    """The values pass is one re.sub: it does not rescan what a replacement
+    inserted, so a {{LANGUAGE}} inside a fragment would come out literally."""
+    folder = pathlib.Path(__file__).resolve().parent.parent / "src/oknowledge/prompts"
+    fragments = sorted(folder.glob("mentions-*.txt"))
+
+    assert len(fragments) == 3
+    assert [f.name for f in fragments if "{{" in f.read_text(encoding="utf-8")] == []
+
+
+@pytest.mark.parametrize("mode", ["../analyze", "a/b", "tools.txt", "", "to ols", "x1"])
+def test_a_mode_that_is_not_a_plain_word_never_reaches_the_filesystem(mode):
+    from oknowledge.ai.base import _mention_scope
+    with pytest.raises(ValueError, match="mention scope"):
+        _mention_scope(mode)

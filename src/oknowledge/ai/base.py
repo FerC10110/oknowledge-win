@@ -181,6 +181,10 @@ def _conditionals(template: str, flags: dict[str, bool]) -> str:
 
 
 def _mention_scope(mode: str) -> str:
+    # The mode becomes a file name, so its shape is checked here; which modes
+    # exist is config's business.
+    if not mode.isascii() or not mode.isalpha():
+        raise ValueError(f"mention scope must be a plain word, got {mode!r}")
     # Flat file names on purpose: package-data is the single-level glob
     # "prompts/*.txt", so a subdirectory would work editable and not in a wheel.
     return files("oknowledge").joinpath(f"prompts/mentions-{mode}.txt").read_text(
