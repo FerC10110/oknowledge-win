@@ -6,7 +6,8 @@ import pytest
 from oknowledge.ai.base import (
     DEFAULT_LIMIT, TRUNCATION_MARKER, Analysis, AnalysisError, EngineError, analyze,
     MAX_MENTION_NAME, MAX_MENTIONS, canonical_category, extract_json, normalize_tags,
-    render_mentions_prompt, render_prompt, retry_suffix, sent_text, to_mentions,
+    mentions_only, render_mentions_prompt, render_prompt, retry_suffix, sent_text,
+    to_mentions,
 )
 from oknowledge.ai.fake import FakeEngine
 from oknowledge.model import Mention
@@ -789,6 +790,22 @@ def test_the_mentions_prompt_cuts_where_the_guard_looks():
     assert sent_text(text) in prompt
     assert "https://late.example" not in prompt
     assert TRUNCATION_MARKER in prompt
+
+
+def test_a_narrower_limit_cuts_the_prompt_and_the_guard_at_the_same_place():
+    """`sent` is what the guard checks a URL against; the prompt is what the
+    model actually saw. If a limit ever moves one and not the other, the gap
+    between them is text nobody sent: a URL the model made up could sit there
+    and pass the guard as if the video had said it.
+    """
+    text = "a" * 400 + "https://late.example"
+    engine = FakeEngine([json.dumps(
+        {"mentions": [{"name": "Late", "url": "https://late.example"}]})])
+
+    got = mentions_only(engine, text, META, "es", "tools", limit=400)
+
+    assert "https://late.example" not in engine.prompts[0]
+    assert got == [Mention(name="Late", url=search_url("Late"))]
 
 
 def test_the_mentions_prompt_never_resolves_what_the_transcript_says():
