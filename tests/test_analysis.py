@@ -800,3 +800,13 @@ def test_the_mentions_prompt_never_resolves_what_the_transcript_says():
 def test_the_mentions_prompt_carries_the_scope_of_its_mode():
     assert render_mentions_prompt("t", META, "es", "discussed") != \
         render_mentions_prompt("t", META, "es", "tools")
+
+
+@pytest.mark.parametrize("name", ["open\ncode", "open\tcode", "  open \n\t code "])
+def test_a_name_with_stray_whitespace_is_normalized_and_keeps_its_url(name):
+    """A newline in a name renders a two-line bullet, which reads back as a
+    broken link and loses the video's real URL."""
+    got = to_mentions({"mentions": [{"name": name, "url": "https://opencode.ai"}]},
+                      "ver https://opencode.ai")
+
+    assert got == [Mention(name="open code", url="https://opencode.ai")]

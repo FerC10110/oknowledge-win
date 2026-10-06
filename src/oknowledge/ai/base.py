@@ -237,7 +237,9 @@ def to_mentions(data: dict, sent: str) -> list[Mention]:
         name = row.get("name")
         if not isinstance(name, str):
             continue
-        name = name.strip()[:MAX_MENTION_NAME].strip()
+        # Whitespace first, like normalize_tags: a newline in a name would
+        # render a two-line bullet that reads back with the URL lost.
+        name = " ".join(name.split())[:MAX_MENTION_NAME].strip()
         if not name or _is_placeholder(name):
             continue
         raw = row.get("url")
