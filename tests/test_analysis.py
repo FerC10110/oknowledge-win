@@ -810,3 +810,22 @@ def test_a_name_with_stray_whitespace_is_normalized_and_keeps_its_url(name):
                       "ver https://opencode.ai")
 
     assert got == [Mention(name="open code", url="https://opencode.ai")]
+
+
+@pytest.mark.parametrize("said,returned,kept", [
+    ("visitá https://opencode.ai, está buenísimo", "https://opencode.ai,", "https://opencode.ai"),
+    ("mirá https://opencode.ai. Y después", "https://opencode.ai.", "https://opencode.ai"),
+    ("es https://opencode.ai/x; o no", "https://opencode.ai/x;", "https://opencode.ai/x"),
+    ("¿viste https://opencode.ai?", "https://opencode.ai?", "https://opencode.ai"),
+    ("en https://en.wikipedia.org/wiki/Foo_(bar)", "https://en.wikipedia.org/wiki/Foo_(bar)",
+     "https://en.wikipedia.org/wiki/Foo_(bar)"),
+    ("en https://en.wikipedia.org/wiki/Foo_(bar)", "https://en.wikipedia.org/wiki/Foo_(bar",
+     "https://en.wikipedia.org/wiki/Foo_(bar"),
+])
+def test_prose_punctuation_is_not_part_of_a_kept_url(said, returned, kept):
+    """A transcript writes URLs inside sentences. The comma is in `sent`, so the
+    substring guard would pass it, and the link would point nowhere. A closing
+    parenthesis is left alone: a Wikipedia URL really ends with one."""
+    got = to_mentions({"mentions": [{"name": "Foo", "url": returned}]}, said)
+
+    assert got == [Mention(name="Foo", url=kept)]

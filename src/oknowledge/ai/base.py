@@ -207,6 +207,21 @@ def sent_text(text: str, limit: int = DEFAULT_LIMIT) -> str:
     return text[:limit]
 
 
+def _trim_prose(url: str) -> str:
+    """Drop the punctuation a sentence puts after a URL: , ; : ! ? and one .
+
+    Done before the guard's substring test, not after: the guard then judges
+    the string we would actually keep, and a URL whose comma was only prose
+    cannot pass on the strength of the comma being in `sent`. The trimmed
+    string is a prefix of the original, so a URL that was in the video still
+    is. `)` is left alone: Wikipedia URLs really end with one.
+    """
+    url = url.rstrip(",;:!?")
+    if url.endswith("."):
+        url = url[:-1]
+    return url
+
+
 def to_mentions(data: dict, sent: str) -> list[Mention]:
     """The mentions in an answer, with every URL checked against the video.
 
@@ -243,7 +258,7 @@ def to_mentions(data: dict, sent: str) -> list[Mention]:
         if not name or _is_placeholder(name):
             continue
         raw = row.get("url")
-        raw = raw.strip() if isinstance(raw, str) else ""
+        raw = _trim_prose(raw.strip()) if isinstance(raw, str) else ""
         real = (raw.startswith(("http://", "https://")) and bool(urlsplit(raw).netloc)
                 and raw in sent)
         candidate = Mention(name=name, url=raw if real else search_url(name))
