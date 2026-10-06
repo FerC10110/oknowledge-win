@@ -1046,12 +1046,20 @@ def backfill_mentions(cfg: Config, limit: int | None = None,
                 written = update_note(cfg, note.id, cfg.language,
                                       mentions=found_mentions)
         except AllEnginesFailed as error:
-            # Same shape as import_links' _once(): trouble that is the same for
-            # every video is reported once, not once per video. Where _once()
-            # can carry on and stay quiet, this has to stop, because carrying
-            # on costs an extraction (yt-dlp, the network) per video to learn
-            # the same thing. Nothing is written, so every video stays a
-            # candidate and the next run, with an engine back, picks them up.
+            if error.answered:
+                # An engine replied and the reply was no use: this video's
+                # problem. The next one is independent and may answer well; a
+                # bad answer already spent its call, so going on costs nothing
+                # extra. No counter, no threshold.
+                results.append(Result(
+                    id=note.id, url=note.url, path=None, status="failed",
+                    error=f"the answer could not be used: {_reason(error)}"))
+                continue
+            # Nothing answered: the chain is down. Same shape as import_links'
+            # _once() -- trouble that is the same for every video is reported
+            # once -- except this stops, because carrying on costs an
+            # extraction (yt-dlp, the network) per video to learn the same
+            # thing. Nothing is written, so every video stays a candidate.
             left = len(todo) - index - 1
             reason = _reason(error)
             if left:

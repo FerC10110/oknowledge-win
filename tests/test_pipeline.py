@@ -2024,3 +2024,52 @@ def test_a_dead_engine_chain_stops_the_run_after_the_first_video(videos):
     # Nothing was written: both stay candidates for the next run.
     assert find_note(cfg, "never-asked")[1].mentions is None
     assert find_note(cfg, "the-newest")[1].mentions is None
+
+
+def _scripted(*answers):
+    """A callable `replies` that plays `answers` in order across engines."""
+    queue = iter(answers)
+
+    def reply(prompt):
+        return next(queue)
+    return reply
+
+
+def test_an_unusable_answer_costs_that_video_and_not_the_run(videos):
+    """The model answered, with prose: that is about this video. The next two
+    are asked and written."""
+    third = Note(id="third", url="https://youtu.be/third", title="third",
+                 category="Redes", tags=["x"], type="youtube", source="youtu.be",
+                 saved="2026-09-01", summary="Resumen.", points=["uno"],
+                 content="full", body="probamos opencode, esta en https://opencode.ai",
+                 mentions=None)
+    write_note(videos, third, "es")
+    cfg = dataclasses.replace(videos, engines={"fake": {"replies": _scripted(
+        "I cannot do that, sorry.", MENTIONS_ANSWER, MENTIONS_ANSWER)}})
+
+    done = backfill_mentions(cfg)
+
+    assert [r.id for r in done] == ["the-newest", "never-asked", "third"]
+    assert [r.status for r in done] == ["failed", "ok", "ok"]
+    assert "stopped" not in done[0].error
+    assert "answer could not be used" in done[0].error
+    assert find_note(cfg, "the-newest")[1].mentions is None
+
+
+def test_a_partly_working_chain_carries_on(videos):
+    """First engine unreachable, second answers badly: something answered, so
+    the failure belongs to the video."""
+    from oknowledge.ai.base import EngineError
+
+    def err(prompt):
+        return EngineError("refused")
+
+    cfg = dataclasses.replace(
+        videos, chain=("fake", "fake"),
+        engines={"fake": {"replies": _scripted(
+            err(None), "prose", err(None), MENTIONS_ANSWER)}})
+
+    done = backfill_mentions(cfg)
+
+    assert [r.status for r in done] == ["failed", "ok"]
+    assert "stopped" not in done[0].error

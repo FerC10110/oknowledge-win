@@ -8,7 +8,16 @@ from .base import Analysis, AnalysisError, Engine, EngineError, analyze, mention
 
 
 class AllEnginesFailed(Exception):
-    """No engine in the chain could analyse the page."""
+    """No engine in the chain could analyse the page.
+
+    `answered` says whether any engine actually replied: False means none even
+    got that far (the chain is down), True means at least one answered and its
+    answer was no use (this page's problem). Set only by mentions_with_chain.
+    """
+
+    def __init__(self, *args, answered: bool = False):
+        super().__init__(*args)
+        self.answered = answered
 
 
 def build_engine(name: str, cfg: Config) -> Engine:
@@ -67,10 +76,16 @@ def mentions_with_chain(cfg: Config, text: str, meta: dict) -> list[Mention]:
     if not cfg.chain:
         raise AllEnginesFailed("no engine is enabled: [ai] chain is empty")
     failures = []
+    answered = False
     for name in cfg.chain:
         try:
             return mentions_only(build_engine(name, cfg), text, meta,
                                  cfg.language, cfg.mentions)
-        except (EngineError, AnalysisError) as error:
+        except AnalysisError as error:
+            # The engine replied; what it said was no use.
+            answered = True
             failures.append(f"{name}: {error}")
-    raise AllEnginesFailed("every engine failed: " + "; ".join(failures))
+        except EngineError as error:
+            failures.append(f"{name}: {error}")
+    raise AllEnginesFailed("every engine failed: " + "; ".join(failures),
+                           answered=answered)
