@@ -186,7 +186,9 @@ answer is empty, so running it again only looks at videos it never asked. A
 note saved with its full text reuses it, so most of a run needs no network.
 `--limit N` stops after N videos, newest first, and the exit code describes
 those videos and not the backlog behind them. It spends model calls on your
-library, so it runs only when you type it, never by itself.
+library, so it runs only when you type it, never by itself. A note whose
+`## Menciones` heading has nothing under it was asked and the video named
+nothing; that is not a broken note.
 
 ### Exit codes
 

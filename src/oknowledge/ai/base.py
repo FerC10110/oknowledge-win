@@ -10,10 +10,10 @@ from __future__ import annotations
 import json
 import re
 import unicodedata
-from urllib.parse import urlsplit
 from dataclasses import dataclass, field
 from importlib.resources import files
 from typing import Protocol
+from urllib.parse import urlsplit
 
 from ..model import Mention
 from ..urls import is_search_url, search_url
@@ -297,7 +297,8 @@ def render_prompt(text: str, meta: dict, known, language: str, limit: int = DEFA
     return re.sub(r"\{\{([A-Z]+)\}\}", lambda m: values.get(m.group(1), m.group(0)), template)
 
 
-def render_mentions_prompt(text: str, meta: dict, language: str, mode: str) -> str:
+def render_mentions_prompt(text: str, meta: dict, language: str, mode: str,
+                           limit: int = DEFAULT_LIMIT) -> str:
     """The mentions-only prompt, cut at the same limit as the full one.
 
     Both sides use sent_text(), so the text the guard compares URLs against is
@@ -307,8 +308,8 @@ def render_mentions_prompt(text: str, meta: dict, language: str, mode: str) -> s
     # Same order as render_prompt: conditionals first, then one values pass, so
     # nothing from the transcript is ever resolved.
     template = _conditionals(template, {})
-    body = sent_text(text)
-    if len(text) > DEFAULT_LIMIT:
+    body = sent_text(text, limit)
+    if len(text) > limit:
         body += "\n" + TRUNCATION_MARKER
     values = {
         "LANGUAGE": LANGUAGE_NAMES.get(language, language),
@@ -321,14 +322,14 @@ def render_mentions_prompt(text: str, meta: dict, language: str, mode: str) -> s
 
 
 def mentions_only(engine: Engine, text: str, meta: dict, language: str,
-                  mode: str) -> list[Mention]:
+                  mode: str, limit: int = DEFAULT_LIMIT) -> list[Mention]:
     """Ask for the mentions and nothing else.
 
     Shares to_mentions() with the full analysis, so there is one definition of
     "nothing is invented" and not two.
     """
-    sent = sent_text(text)
-    prompt = render_mentions_prompt(text, meta, language, mode)
+    sent = sent_text(text, limit)
+    prompt = render_mentions_prompt(text, meta, language, mode, limit)
     return to_mentions(extract_json(engine.complete(prompt)), sent)
 
 

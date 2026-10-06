@@ -1162,6 +1162,9 @@ def test_deleting_from_a_note_nobody_asked_leaves_none(setup):
     assert find_note(cfg, "a1")[1].mentions is None
 
 
+# The one that can fail. Its vault-level twin, test_dropping_an_empty_name_is_a_no_op
+# in test_vault_edit.py, is decorative on its own: it never sees a missing
+# field. Keep both.
 def test_a_delete_with_no_name_field_at_all_deletes_nothing(video):
     """The route defaults a missing name to "". If an absent name ever meant
     "all", a crafted post would wipe a whole list in silence."""

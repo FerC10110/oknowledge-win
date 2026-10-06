@@ -463,6 +463,9 @@ def test_dropping_a_name_that_is_not_there_changes_nothing(tmp_path):
     assert read_note(path).mentions == TWO
 
 
+# Decorative: update_note() never sees a missing field. The test that can fail
+# is test_a_delete_with_no_name_field_at_all_deletes_nothing in test_web_write.py,
+# because the route defaults a missing name to "". Keep both.
 def test_dropping_an_empty_name_is_a_no_op(tmp_path):
     cfg, path = video(tmp_path, TWO)
     update_note(cfg, "a1", "es", drop_mention="")

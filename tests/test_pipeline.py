@@ -1,7 +1,6 @@
 """The pipeline: a URL in, a note out, and never a lost link."""
 
 import dataclasses
-import dataclasses
 import datetime as dt
 import json
 import os

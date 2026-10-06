@@ -94,6 +94,8 @@ STRINGS = {
             "¿Reprocesar? El título, el resumen, los puntos, la categoría, las "
             "etiquetas y las menciones se reemplazan por la respuesta nueva.",
         "Mentions": "Menciones",
+        # Not the same key as "Search" above: that one is the nav label, this
+        # is the badge on a mention whose link is a search. Case is the difference.
         "search": "búsqueda",
         "Remove": "Quitar",
         "%1 notes moved, %2 could not be written. "
