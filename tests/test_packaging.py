@@ -8,6 +8,7 @@ dependency tree for nothing (F7).
 import pathlib
 import re
 import tomllib
+from fnmatch import fnmatch
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
@@ -32,3 +33,17 @@ def test_every_dev_dependency_is_one_the_repo_uses():
 def test_the_dev_extra_is_not_empty_either():
     """So the test above cannot pass by the list disappearing."""
     assert "pytest" in dev_dependencies()
+
+
+def test_every_prompt_the_code_loads_is_declared_as_package_data():
+    """An editable install finds a file the wheel would not ship. This is the
+    only place that difference shows up before a user hits it."""
+    data = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    globs = data["tool"]["setuptools"]["package-data"]["oknowledge"]
+    prompts = (ROOT / "src" / "oknowledge" / "prompts").rglob("*.txt")
+
+    missing = [str(p) for p in prompts
+               if not any(fnmatch(str(p.relative_to(ROOT / "src" / "oknowledge")), g)
+                          for g in globs)]
+
+    assert missing == [], f"loaded at runtime, shipped by nothing: {missing}"

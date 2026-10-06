@@ -164,23 +164,44 @@ def canonical_category(category: str, known, language: str = "es") -> str:
     return first or clean
 
 
-def render_prompt(text: str, meta: dict, known, language: str, limit: int = DEFAULT_LIMIT) -> str:
+def _conditionals(template: str, flags: dict[str, bool]) -> str:
+    """Resolve {{IF_NAME}}...{{ELSE}}...{{END}} regions against named flags.
+
+    This runs before the values pass, and that order is the point: a region
+    written inside the page text is never resolved, because by the time the
+    page text is substituted this pass is over. The ELSE half is optional --
+    a region with nothing to say when the flag is false just disappears.
+    """
+    return re.sub(
+        r"\{\{IF_(\w+)\}\}\n(.*?)(?:\{\{ELSE\}\}\n(.*?))?\{\{END\}\}\n",
+        lambda m: m.group(2) if flags.get(m.group(1)) else (m.group(3) or ""),
+        template,
+        flags=re.S,
+    )
+
+
+def _mention_scope(mode: str) -> str:
+    # Flat file names on purpose: package-data is the single-level glob
+    # "prompts/*.txt", so a subdirectory would work editable and not in a wheel.
+    return files("oknowledge").joinpath(f"prompts/mentions-{mode}.txt").read_text(
+        encoding="utf-8").strip()
+
+
+def render_prompt(text: str, meta: dict, known, language: str, limit: int = DEFAULT_LIMIT,
+                  mentions: str | None = None) -> str:
     template = files("oknowledge").joinpath("prompts/analyze.txt").read_text(encoding="utf-8")
     categories = [c for c in (known or [])][:MAX_KNOWN_CATEGORIES]
     # The template's own conditional goes first, so nothing from the page can
     # reach it; then one pass for the values, so a placeholder-looking string
     # in the page text or title is never substituted a second time.
-    template = re.sub(
-        r"\{\{IF_KNOWN\}\}\n(.*?)\{\{ELSE\}\}\n(.*?)\{\{END\}\}\n",
-        lambda m: m.group(1) if categories else m.group(2),
-        template,
-        flags=re.S,
-    )
+    template = _conditionals(template, {"KNOWN": bool(categories),
+                                        "MENTIONS": bool(mentions)})
     body = text[:limit]
     if len(text) > limit:
         body += "\n" + TRUNCATION_MARKER
     values = {
         "LANGUAGE": LANGUAGE_NAMES.get(language, language),
+        "SCOPE": _mention_scope(mentions) if mentions else "",
         "CATEGORIES": "\n".join(f"- {c}" for c in categories),
         "URL": meta.get("url") or "",
         "TITLE": meta.get("title") or "",

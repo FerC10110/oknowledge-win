@@ -4,6 +4,9 @@ Respondé ÚNICAMENTE con un objeto JSON, sin texto antes ni después, con esta 
 (lo que está entre <> es lo que tenés que reemplazar por tu respuesta):
 
 {
+{{IF_MENTIONS}}
+  "mentions": [{"name": "<lo que el video nombra>", "url": "<la URL sólo si aparece en el video; si no, cadena vacía>"}],
+{{END}}
   "title": "<el título real de la página, limpio, sin el nombre del sitio>",
   "summary": "<un solo párrafo, sin saltos de línea, de 5 a 10 líneas, que cuente lo que dice la página, no lo que es>",
   "points": ["<una idea concreta>", "<otra idea concreta, 3 a 6 en total>"],
@@ -17,6 +20,16 @@ aunque la página esté en otro idioma.
 El resumen cuenta el contenido: qué afirma, qué compara, a qué conclusión llega.
 No escribas "este artículo trata sobre"; escribí directamente lo que dice.
 
+{{IF_MENTIONS}}
+Además, el contenido es la transcripción de un video. Devolvé en "mentions" lo
+que el video nombra, con esta regla sobre la URL, que no admite excepciones:
+poné una URL SÓLO si esa URL aparece escrita en el contenido que te di. Si el
+video nombra algo sin dar su dirección, dejá "url" como cadena vacía y no la
+completes de memoria. Una dirección inventada es peor que ninguna.
+
+{{SCOPE}}
+
+{{END}}
 El contenido puede venir cortado: si es así, termina con una marca que lo dice.
 Resumí sólo lo que te di, sin suponer cómo sigue ni cómo termina.
 
