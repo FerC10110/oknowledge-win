@@ -494,13 +494,20 @@ guión bajo exige ensanchar esa expresión; `SCOPE` no exige nada.
 
 - [ ] **Step 4: las dos regiones en `analyze.txt`**
 
-En el esquema, después de la línea de `tags`:
+En el esquema, como **primera** clave del objeto, justo después del `{`:
 
 ```
 {{IF_MENTIONS}}
-  ,"mentions": [{"name": "<lo que el video nombra>", "url": "<la URL sólo si aparece en el video; si no, cadena vacía>"}]
+  "mentions": [{"name": "<lo que el video nombra>", "url": "<la URL sólo si aparece en el video; si no, cadena vacía>"}],
 {{END}}
 ```
+
+Primera y no última a propósito. El condicional es por líneas, así que una clave
+agregada al final necesitaría la coma al principio de su propia línea — JSON
+válido, pero formato raro justo en el ejemplo del que un modelo chico copia la
+forma. Como primera clave la coma va al final, donde se espera, y la línea de
+`tags` no hay que duplicarla en las dos ramas. El orden de las claves en un
+objeto JSON no significa nada.
 
 Y después del párrafo del resumen:
 
