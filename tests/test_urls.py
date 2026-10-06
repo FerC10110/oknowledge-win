@@ -1,4 +1,4 @@
-from oknowledge.urls import link_id, normalize
+from oknowledge.urls import is_search_url, link_id, normalize, search_url
 
 
 def test_tracking_fragment_and_case_do_not_change_the_id():
@@ -101,3 +101,17 @@ def test_hostname_with_port_and_tracking_params():
     assert normalized == "https://example.com:8080/path?id=7"
     # The tracking-param-free version should have the same ID
     assert link_id(url) == link_id("example.com:8080/path?id=7")
+
+
+def test_a_search_url_is_built_from_the_name():
+    assert search_url("opencode") == "https://duckduckgo.com/?q=opencode"
+
+
+def test_a_name_with_spaces_and_accents_is_encoded():
+    assert search_url("Peso Pesado & Café") == (
+        "https://duckduckgo.com/?q=Peso+Pesado+%26+Caf%C3%A9")
+
+
+def test_a_search_url_knows_itself_and_a_real_one_does_not():
+    assert is_search_url(search_url("opencode"))
+    assert not is_search_url("https://opencode.ai")

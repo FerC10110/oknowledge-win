@@ -1,9 +1,10 @@
 import pytest
 
 from oknowledge.config import Config
-from oknowledge.model import Note
+from oknowledge.model import Mention, Note
+from oknowledge.urls import search_url
 from oknowledge.vault import (
-    ProtectedNote, note_path, read_front, read_note, slug, write_note,
+    ProtectedNote, note_path, read_front, read_note, render, slug, write_note,
 )
 
 
@@ -329,3 +330,82 @@ def test_a_note_is_flushed_and_so_is_its_directory(tmp_path, monkeypatch):
     write_note(cfg, make_note(), "es")
 
     assert True in synced and False in synced      # a directory and a file
+
+
+def note_with(mentions):
+    return Note(id="a1", url="https://youtu.be/x", title="Un video",
+                category="Redes", tags=["x"], type="youtube", source="youtu.be",
+                saved="2026-10-05", summary="Resumen.", points=["uno"],
+                mentions=mentions)
+
+
+def test_a_note_keeps_its_mentions_through_a_write_and_a_read(tmp_path):
+    path = tmp_path / "n.md"
+    note = note_with([Mention(name="opencode", url="https://opencode.ai"),
+                      Mention(name="Railway", url=search_url("Railway"))])
+
+    path.write_text(render(note, "es"), encoding="utf-8")
+
+    assert read_note(path).mentions == note.mentions
+
+
+def test_a_note_that_was_never_asked_reads_none(tmp_path):
+    path = tmp_path / "n.md"
+    path.write_text(render(note_with(None), "es"), encoding="utf-8")
+
+    assert read_note(path).mentions is None
+
+
+def test_a_note_asked_with_nothing_found_reads_an_empty_list(tmp_path):
+    """Not None: this one was asked. That is what stops the backfill from
+    spending a model call on it again."""
+    path = tmp_path / "n.md"
+    path.write_text(render(note_with([]), "es"), encoding="utf-8")
+
+    assert read_note(path).mentions == []
+
+
+def test_a_bracket_in_a_name_survives(tmp_path):
+    path = tmp_path / "n.md"
+    note = note_with([Mention(name="Algo [raro]", url="https://e.com")])
+
+    path.write_text(render(note, "es"), encoding="utf-8")
+
+    assert read_note(path).mentions == note.mentions
+
+
+def test_a_hand_written_bullet_with_no_link_becomes_a_search(tmp_path):
+    """This section gets hand-edited. Nothing written in it is thrown away."""
+    path = tmp_path / "n.md"
+    path.write_text(render(note_with([]), "es").replace(
+        "## Menciones\n", "## Menciones\n\n- Caddy\n"), encoding="utf-8")
+
+    assert read_note(path).mentions == [Mention(name="Caddy", url=search_url("Caddy"))]
+
+
+def test_a_mentions_heading_inside_the_original_content_is_not_a_section(tmp_path):
+    """A transcript can say anything, '## Menciones' included."""
+    path = tmp_path / "n.md"
+    note = note_with(None)
+    note.body = "El video dice:\n\n## Menciones\n\n- no soy una seccion\n"
+    path.write_text(render(note, "es"), encoding="utf-8")
+
+    read = read_note(path)
+
+    assert read.mentions is None
+    assert "## Menciones" in read.body
+
+
+def test_the_original_content_still_parses_with_mentions_in_between(tmp_path):
+    """HEADINGS grew a middle element: the content heading moved from h[1] to
+    h[2], and reading the body back is where getting that wrong shows up."""
+    path = tmp_path / "n.md"
+    note = note_with([Mention(name="opencode", url="https://opencode.ai")])
+    note.body = "El texto del video."
+    path.write_text(render(note, "es"), encoding="utf-8")
+
+    read = read_note(path)
+
+    assert read.body == "El texto del video."
+    assert read.points == ["uno"]
+    assert read.mentions == note.mentions

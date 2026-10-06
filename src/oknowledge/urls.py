@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import re
-from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+from urllib.parse import parse_qsl, quote_plus, urlencode, urlsplit, urlunsplit
 
 TRACKING_PREFIXES = ("utm_",)
 TRACKING_EXACT = frozenset({
@@ -98,3 +98,22 @@ def normalize(url: str) -> str:
 
 def link_id(url: str) -> str:
     return hashlib.sha256(normalize(url).encode("utf-8")).hexdigest()[:12]
+
+
+SEARCH = "https://duckduckgo.com/?q="
+
+
+def search_url(name: str) -> str:
+    """Where to go to find out about something a video only named out loud.
+
+    A video says "probá opencode" and the URL exists nowhere in it. Searching
+    for the name is the one answer that cannot be wrong, which is why nothing
+    in this project ever guesses the address instead.
+    """
+    return SEARCH + quote_plus(name)
+
+
+def is_search_url(url: str) -> bool:
+    """True for a URL this module built, so the interface can mark it as a
+    search rather than a link that came out of the video."""
+    return url.startswith(SEARCH)

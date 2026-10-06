@@ -6,6 +6,19 @@ from dataclasses import dataclass, field
 
 
 @dataclass
+class Mention:
+    """Something a video named, and a place to go about it.
+
+    `url` is never empty: it is either a URL that appeared in the video or a
+    search for the name. A mention with nowhere to go does not serve the one
+    thing it exists for.
+    """
+
+    name: str
+    url: str
+
+
+@dataclass
 class Note:
     """A saved link, as it ends up in the vault."""
 
@@ -25,6 +38,12 @@ class Note:
     published: str | None = None     # YYYY-MM-DD
     cover: str | None = None         # path relative to the note
     body: str | None = None          # the extracted text, if content == "full"
+    mentions: list[Mention] | None = None
+    """Tri-state, on purpose. None: nobody asked this note for its mentions.
+    []: it was asked and the video names nothing. A list: what it names. The
+    difference between None and [] is what makes `oknowledge mentions`
+    idempotent -- without it, a video that truly mentions nothing becomes a
+    candidate again on every run and spends a model call to find nothing."""
 
 
 @dataclass

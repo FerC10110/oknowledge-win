@@ -26,7 +26,8 @@ import yaml
 from .ai.base import MAX_CATEGORY_LENGTH, UNSAFE_IN_A_NAME, normalize_tags
 from .atomic import atomic_write
 from .config import Config
-from .model import Note
+from .model import Mention, Note
+from .urls import search_url
 from .queue import Locked
 
 MARKER = "oknowledge"
@@ -34,8 +35,8 @@ MARKER_VERSION = 1
 TRASH = "trash"
 
 HEADINGS = {
-    "es": ("Puntos clave", "Contenido original"),
-    "en": ("Key points", "Original content"),
+    "es": ("Puntos clave", "Menciones", "Contenido original"),
+    "en": ("Key points", "Mentions", "Original content"),
 }
 
 FRONTMATTER_ORDER = (
@@ -84,7 +85,8 @@ def slug(text: str, fallback: str) -> str:
 
 
 def render(note: Note, language: str) -> str:
-    points_heading, content_heading = HEADINGS.get(language, HEADINGS["en"])
+    points_heading, mentions_heading, content_heading = HEADINGS.get(
+        language, HEADINGS["en"])
 
     front = {
         "url": note.url,
@@ -109,9 +111,25 @@ def render(note: Note, language: str) -> str:
     if note.points:
         bullets = "\n".join(f"- {p}" for p in note.points)
         parts.append(f"## {points_heading}\n\n{bullets}\n")
+    if note.mentions is not None:
+        bullets = "\n".join(f"- [{_escape_name(m.name)}]({m.url})"
+                            for m in note.mentions)
+        # The heading alone when there is nothing: the section's presence is
+        # what says this note was already asked.
+        parts.append(f"## {mentions_heading}\n\n{bullets}\n" if bullets
+                     else f"## {mentions_heading}\n")
     if note.content == "full" and note.body:
         parts.append(f"## {content_heading}\n\n{note.body.strip()}\n")
     return "\n".join(parts)
+
+
+def _escape_name(name: str) -> str:
+    """So a bracket in a name cannot break the link it sits in."""
+    return name.replace("\\", "\\\\").replace("[", "\\[").replace("]", "\\]")
+
+
+def _unescape_name(name: str) -> str:
+    return re.sub(r"\\([\[\]\\])", r"\1", name)
 
 
 def _read_marked(path: Path) -> tuple[dict, str] | None:
@@ -141,11 +159,31 @@ def read_front(path: Path) -> dict | None:
 
 
 _POINTS_HEADINGS = {f"## {h[0]}" for h in HEADINGS.values()}
-_CONTENT_HEADINGS = {f"## {h[1]}" for h in HEADINGS.values()}
+_MENTIONS_HEADINGS = {f"## {h[1]}" for h in HEADINGS.values()}
+_CONTENT_HEADINGS = {f"## {h[2]}" for h in HEADINGS.values()}
+_BULLET = re.compile(r"^\[(?P<name>.*)\]\((?P<url>[^)]*)\)$")
 
 
-def _split_body(body: str) -> tuple[str, list[str], str | None]:
-    """Return (summary, points, original content) from a body written by render().
+def _mention(text: str) -> Mention:
+    """One bullet, however it was written.
+
+    The generated form first; then a bare name, which is what a hand-edit
+    leaves; and anything else is kept verbatim as the name. A line in this
+    section is never dropped -- the user's own words are not ours to delete.
+    """
+    match = _BULLET.match(text)
+    if match:
+        name = _unescape_name(match.group("name")).strip()
+        url = match.group("url").strip()
+        if name and url:
+            return Mention(name=name, url=url)
+    return Mention(name=text, url=search_url(text))
+
+
+def _split_body(
+    body: str,
+) -> tuple[str, list[str], list[Mention] | None, str | None]:
+    """Return (summary, points, mentions, original content) from a body written by render().
 
     Sections are recognized by their heading text, not by position, so a missing
     section never shifts the others. The content section runs to end of file, so
@@ -155,12 +193,15 @@ def _split_body(body: str) -> tuple[str, list[str], str | None]:
     start = next((i + 1 for i, line in enumerate(lines) if line.startswith("# ")), 0)
     summary: list[str] = []
     points: list[str] = []
+    mentions: list[Mention] | None = None
     original: list[str] = []
     mode = "summary"
     for line in lines[start:]:
         marker = line.rstrip()
         if mode != "content" and marker in _CONTENT_HEADINGS:
             mode = "content"
+        elif mode != "content" and marker in _MENTIONS_HEADINGS:
+            mode, mentions = "mentions", []
         elif mode == "summary" and marker in _POINTS_HEADINGS:
             mode = "points"
         elif mode == "summary":
@@ -168,10 +209,13 @@ def _split_body(body: str) -> tuple[str, list[str], str | None]:
         elif mode == "points":
             if line.startswith("- "):
                 points.append(line[2:].strip())
+        elif mode == "mentions":
+            if line.startswith("- "):
+                mentions.append(_mention(line[2:].strip()))
         else:
             original.append(line)
     content = "\n".join(original).strip()
-    return "\n".join(summary).strip(), points, content or None
+    return "\n".join(summary).strip(), points, mentions, content or None
 
 
 _REQUIRED_TEXT = ("id", "url", "title", "category", "type", "source")
@@ -201,7 +245,7 @@ def read_note(path: Path) -> Note | None:
     for key in ("author", "cover"):
         if front.get(key) is not None and not isinstance(front[key], str):
             return None
-    summary, points, body = _split_body(rest)
+    summary, points, mentions, body = _split_body(rest)
     return Note(
         id=required["id"],
         url=required["url"],
@@ -219,6 +263,7 @@ def read_note(path: Path) -> Note | None:
         published=str(front["published"]) if front.get("published") else None,
         cover=front.get("cover"),
         body=body,
+        mentions=mentions,
     )
 
 
