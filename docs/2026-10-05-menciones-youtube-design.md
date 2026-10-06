@@ -250,8 +250,12 @@ elegir buscador.
 `ConfigError` nombrando los tres válidos, como el resto de la validación de este
 archivo, que el usuario escribe a mano.
 
-En la página de ajustes, un `select` con los tres, etiquetas en castellano vía
-`i18n`. Default `tools`: es el modo que corresponde a los dos ejemplos que dio el
+En la página de ajustes, los tres con etiquetas en castellano vía `i18n`.
+**Corrección sobre lo escrito acá:** se implementó como tres radios y no como
+un `select`, porque `settings.html` no tiene ni un `select` y sus otras dos
+opciones (idioma de la interfaz, qué guardar por defecto) son grupos de radios.
+El control es presentación; lo que este spec fija es que se pueda elegir entre
+los tres modos. Default `tools`: es el modo que corresponde a los dos ejemplos que dio el
 usuario (opencode, GitHub) y el que produce listas que no hay que podar.
 
 Para comparar modos se reprocesa el mismo video y se miran las dos listas. Eso ya
@@ -308,7 +312,7 @@ por `saved` descendente (las más nuevas primero, como `retry`), hasta `--limit`
 ser candidata, incluso si la respuesta fue vacía (para eso existe el tri-estado).
 
 **Es una pasada de solo-menciones, no un reproceso.** Un prompt propio
-(`prompts/mentions-only.txt`) que devuelve únicamente la lista, y la escritura
+(`prompts/mentions.txt`) que devuelve únicamente la lista, y la escritura
 toca únicamente la sección de menciones: el título, el resumen y los puntos que
 el usuario ya leyó no se reescriben. Un comando cuyo trabajo es agregar una lista
 no tiene por qué cambiar un resumen.
