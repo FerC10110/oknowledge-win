@@ -305,7 +305,11 @@ def _unescape_name(name: str) -> str:
 - [ ] **Step 9: implementar la lectura**
 
 ```python
-_BULLET = re.compile(r"^\[(?P<name>.*)\]\((?P<url>[^)]*)\)$")
+# Both groups greedy, with the $ anchor: `name` backtracks to the last "](",
+# and a URL that contains ")" -- a parenthesised Wikipedia address, say --
+# still round-trips. A "](" cannot appear unescaped inside a name, because
+# _escape_name escapes both brackets.
+_BULLET = re.compile(r"^\[(?P<name>.*)\]\((?P<url>.*)\)$")
 
 
 def _mention(text: str) -> Mention:
@@ -347,8 +351,9 @@ lista en cuanto se ve el encabezado:
             if line.startswith("- "):
                 points.append(line[2:].strip())
         elif mode == "mentions":
-            if line.startswith("- "):
-                mentions.append(_mention(line[2:].strip()))
+            text = line[2:].strip() if line.startswith("- ") else ""
+            if text:
+                mentions.append(_mention(text))
         else:
             original.append(line)
     content = "\n".join(original).strip()
