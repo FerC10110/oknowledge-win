@@ -143,6 +143,10 @@ STRINGS = {
             "o en la variable de entorno que ese campo nombre.",
         "Shared with my other Omarchy plugins, so this changes all of them at once.":
             "Es compartido con mis otros plugins de Omarchy: los cambia a todos juntos.",
+        "Mentions of a video": "Menciones de un video",
+        "Tools and companies": "Herramientas y empresas",
+        "Everything named": "Todo lo nombrado",
+        "Only what it discusses": "Sólo lo que discute",
     },
 }
 

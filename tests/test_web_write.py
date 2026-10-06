@@ -341,6 +341,22 @@ def test_a_saved_config_can_be_read_back(setup, config_path):
     assert reloaded.default_content == "summary"
 
 
+def test_the_settings_page_saves_the_mention_mode(setup, config_path):
+    _, client = setup
+    client.post("/settings", data={"mentions": "discussed"})
+    saved = tomllib.loads(config_path.read_text(encoding="utf-8"))
+    assert saved["ai"]["mentions"] == "discussed"
+
+
+def test_a_mention_mode_that_is_not_one_leaves_what_was_there(setup, config_path):
+    """Every value is checked in the route, because config.load() would refuse
+    the file afterwards and the whole tool would stop reading its own config."""
+    cfg, client = setup
+    client.post("/settings", data={"mentions": "../../etc"})
+    saved = tomllib.loads(config_path.read_text(encoding="utf-8"))
+    assert saved["ai"]["mentions"] == cfg.mentions
+
+
 # --- the origin check (ruling 6) --------------------------------------------
 
 @pytest.mark.parametrize("path,data", WRITE_ROUTES)

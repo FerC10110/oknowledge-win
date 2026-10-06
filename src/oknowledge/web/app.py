@@ -27,7 +27,7 @@ from fastapi.templating import Jinja2Templates
 from starlette.datastructures import Headers
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from ..config import CONFIG_PATH, CONTENT_MODES, ENGINE_NAMES, Config
+from ..config import CONFIG_PATH, CONTENT_MODES, ENGINE_NAMES, MENTION_MODES, Config
 from ..config import save as save_config
 from ..i18n import LANGUAGES, set_ui_language, translator, ui_language
 from ..pipeline import add as add_link
@@ -593,7 +593,7 @@ def create_app(cfg: Config) -> FastAPI:
 
     @app.post("/settings")
     def save_settings(chain: list[str] = Form([]), language: str = Form(""),
-                      default_content: str = Form(""),
+                      default_content: str = Form(""), mentions: str = Form(""),
                       interface: str = Form("", alias="ui_language"),
                       opencode_model: str = Form(""), ollama_model: str = Form(""),
                       api_model: str = Form("")):
@@ -617,6 +617,7 @@ def create_app(cfg: Config) -> FastAPI:
             language=language if language in LANGUAGES else saved.language,
             default_content=(default_content if default_content in CONTENT_MODES
                              else saved.default_content),
+            mentions=mentions if mentions in MENTION_MODES else saved.mentions,
             engines=engines,
         )
         try:

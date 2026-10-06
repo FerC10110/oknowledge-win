@@ -16,6 +16,7 @@ from .atomic import atomic_write
 CONFIG_PATH = Path.home() / ".config" / "oknowledge" / "config.toml"
 ENGINE_NAMES = ("opencode", "ollama", "api", "fake")
 CONTENT_MODES = ("full", "summary")
+MENTION_MODES = ("tools", "all", "discussed")
 
 
 class ConfigError(Exception):
@@ -34,6 +35,9 @@ class Config:
     default_content: str = "full"
     chain: tuple[str, ...] = ("opencode",)
     language: str = "es"
+    mentions: str = "tools"
+    """Which mentions to ask a video for: tools | all | discussed. Only videos
+    are asked at all -- see the design doc."""
     engines: dict[str, dict] = field(default_factory=dict)
     port: int = 8787
     idle_timeout: int = 900
@@ -125,6 +129,11 @@ def load(path: Path = CONFIG_PATH) -> Config:
     if not isinstance(language, str):
         raise ConfigError(f"ai.language must be text in quotes, not {language!r}")
 
+    mentions = ai.get("mentions", "tools")
+    if mentions not in MENTION_MODES:
+        raise ConfigError(f"ai.mentions must be one of "
+                          f"{', '.join(MENTION_MODES)}, not {mentions!r}")
+
     engines = {name: dict(value) for name, value in ai.items() if isinstance(value, dict)}
     web = _table(data, "web", "web")
 
@@ -134,6 +143,7 @@ def load(path: Path = CONFIG_PATH) -> Config:
         default_content=content,
         chain=chain,
         language=language,
+        mentions=mentions,
         engines=engines,
         port=_integer(web, "port", 8787, "web.port"),
         idle_timeout=_integer(web, "idle_timeout", 900, "web.idle_timeout"),
@@ -163,6 +173,7 @@ def save(cfg: Config, path: Path | None = None) -> Path:
         "folder": cfg.folder,
         "default_content": cfg.default_content,
         "ai": {"chain": list(cfg.chain), "language": cfg.language,
+               "mentions": cfg.mentions,
                **{name: dict(options) for name, options in cfg.engines.items()}},
         "web": {"port": cfg.port, "idle_timeout": cfg.idle_timeout},
     }

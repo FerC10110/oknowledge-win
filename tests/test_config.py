@@ -219,3 +219,46 @@ def test_the_isolated_config_path_does_not_exist_until_something_writes_it():
     from oknowledge import config
 
     assert not config.CONFIG_PATH.exists()
+
+
+# --- mention modes ---------------------------------------------------------
+
+def vault_at(tmp_path):
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    return vault
+
+
+def test_the_default_mention_mode_is_tools(tmp_path):
+    path = write_config(tmp_path, f'vault = "{vault_at(tmp_path)}"\n')
+
+    assert load(path).mentions == "tools"
+
+
+@pytest.mark.parametrize("mode", ["tools", "all", "discussed"])
+def test_every_mention_mode_loads(tmp_path, mode):
+    path = write_config(
+        tmp_path, f'vault = "{vault_at(tmp_path)}"\n[ai]\nmentions = "{mode}"\n')
+
+    assert load(path).mentions == mode
+
+
+@pytest.mark.parametrize("value", ['"nope"', "3", "true", "[]"])
+def test_a_mention_mode_we_do_not_know_names_the_ones_we_do(tmp_path, value):
+    """This is the file the user hand-writes, so the answer says what is valid.
+    A value that is not even a string lands in the same message, not a
+    TypeError, because the check is membership in the tuple."""
+    path = write_config(
+        tmp_path, f'vault = "{vault_at(tmp_path)}"\n[ai]\nmentions = {value}\n')
+
+    with pytest.raises(ConfigError, match="discussed"):
+        load(path)
+
+
+def test_a_saved_config_loads_again_with_its_mode(tmp_path):
+    """save() only writes what load() accepts, and that has to include this."""
+    path = write_config(
+        tmp_path, f'vault = "{vault_at(tmp_path)}"\n[ai]\nmentions = "all"\n')
+    again = save(load(path), tmp_path / "again.toml")
+
+    assert load(again).mentions == "all"

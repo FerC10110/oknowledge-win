@@ -36,6 +36,14 @@
     <label><input type="radio" name="default_content" value="summary"
                   {% if cfg.default_content == 'summary' %}checked{% endif %}> {{ t('Summary') }}</label>
 
+    <h2>{{ t('Mentions of a video') }}</h2>
+    <label><input type="radio" name="mentions" value="tools"
+                  {% if cfg.mentions == 'tools' %}checked{% endif %}> {{ t('Tools and companies') }}</label>
+    <label><input type="radio" name="mentions" value="all"
+                  {% if cfg.mentions == 'all' %}checked{% endif %}> {{ t('Everything named') }}</label>
+    <label><input type="radio" name="mentions" value="discussed"
+                  {% if cfg.mentions == 'discussed' %}checked{% endif %}> {{ t('Only what it discusses') }}</label>
+
     <p><button type="submit" class="button">{{ t('Save') }}</button></p>
   </form>
 {% endblock %}
