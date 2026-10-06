@@ -409,8 +409,13 @@ def test_a_prompt_for_anything_but_a_video_is_the_one_we_already_sent():
     assert "{{" not in plain
 
 
+# Cada aguja es una frase que está de verdad en su fragmento y en ninguno de
+# los otros dos, así el test discrimina entre modos y no sólo comprueba que
+# entró "algo".
 @pytest.mark.parametrize("mode,needle", [
-    ("tools", "herramientas"), ("all", "todo lo que"), ("discussed", "discute"),
+    ("tools", "se pueden abrir en un navegador"),
+    ("all", "todo lo que el video nombre"),
+    ("discussed", "explica, compara o recomienda"),
 ])
 def test_each_mode_puts_its_own_wording_in(mode, needle):
     prompt = render_prompt("texto", {"url": "https://youtu.be/x"}, [], "es",
