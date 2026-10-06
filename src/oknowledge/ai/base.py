@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import re
 import unicodedata
+from urllib.parse import urlsplit
 from dataclasses import dataclass, field
 from importlib.resources import files
 from typing import Protocol
@@ -23,6 +24,8 @@ MAX_CATEGORY_LENGTH = 80
 MAX_TAG_LENGTH = 40
 MAX_TAGS = 8
 MAX_POINTS = 6
+MAX_MENTIONS = 30
+MAX_MENTION_NAME = 80
 LANGUAGE_NAMES = {"es": "español", "en": "inglés"}
 # Same mechanism as the index boilerplate in vault.py: by content language,
 # English for anything that is not Spanish.
@@ -195,10 +198,6 @@ def _mention_scope(mode: str) -> str:
         encoding="utf-8").strip()
 
 
-MAX_MENTIONS = 30
-MAX_MENTION_NAME = 80
-
-
 def sent_text(text: str, limit: int = DEFAULT_LIMIT) -> str:
     """The slice of the content that travels in the prompt.
 
@@ -216,6 +215,10 @@ def to_mentions(data: dict, sent: str) -> list[Mention]:
     remembered, a near miss, the schema's own example. The user's decision was
     that nothing is invented, and this comparison is what keeps it; the
     prompt's wording only asks.
+
+    Only http and https URLs with a host are considered, and the match is a
+    plain substring test against `sent`: a prefix of a URL the video said is
+    accepted, which is fine, since it is still a string the video said.
 
     A row that is a bare string is a name: small models answer this way more
     often than with objects, and dropping those would empty the list on
@@ -239,14 +242,16 @@ def to_mentions(data: dict, sent: str) -> list[Mention]:
             continue
         raw = row.get("url")
         raw = raw.strip() if isinstance(raw, str) else ""
-        real = raw.startswith(("http://", "https://")) and raw in sent
+        real = (raw.startswith(("http://", "https://")) and bool(urlsplit(raw).netloc)
+                and raw in sent)
         candidate = Mention(name=name, url=raw if real else search_url(name))
         key = _fold(name)
         current = best.get(key)
         if current is None:
-            if len(best) >= MAX_MENTIONS:
-                break
-            best[key] = candidate
+            # Past the cap a new name is skipped, but the scan goes on: a later
+            # row may still carry the real URL of a name already kept.
+            if len(best) < MAX_MENTIONS:
+                best[key] = candidate
         elif real and is_search_url(current.url):
             best[key] = candidate
     return list(best.values())
@@ -330,7 +335,7 @@ def _items(data: dict, key: str) -> list:
     return value
 
 
-def _to_analysis(data: dict, known, meta: dict, language: str, sent: str = "") -> Analysis:
+def _to_analysis(data: dict, known, meta: dict, language: str, sent: str | None = None) -> Analysis:
     missing = [k for k in REQUIRED if k not in data]
     if missing:
         raise AnalysisError(f"the answer is missing: {', '.join(missing)}")
@@ -348,13 +353,14 @@ def _to_analysis(data: dict, known, meta: dict, language: str, sent: str = "") -
         points=points[:MAX_POINTS],
         category=canonical_category(_text(data, "category"), known, language),
         tags=normalize_tags(_items(data, "tags")),
-        mentions=to_mentions(data, sent),
+        # sent is None when the prompt never asked for mentions
+        mentions=[] if sent is None else to_mentions(data, sent),
     )
 
 
 def analyze(engine: Engine, text: str, meta: dict, known, language: str,
             mentions: str | None = None) -> Analysis:
-    sent = sent_text(text)
+    sent = sent_text(text) if mentions else None
     prompt = render_prompt(text, meta, known, language, mentions=mentions)
     request = prompt
     for attempt in range(2):

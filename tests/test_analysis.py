@@ -711,10 +711,63 @@ def test_a_long_name_is_cut():
     assert len(got[0].name) == MAX_MENTION_NAME
 
 
-def test_no_more_than_thirty():
+def test_no_more_than_thirty_and_the_first_thirty_are_the_ones_kept():
     rows = [{"name": f"n{i}"} for i in range(50)]
 
-    assert len(to_mentions({"mentions": rows}, "")) == MAX_MENTIONS
+    got = to_mentions({"mentions": rows}, "")
+
+    assert [m.name for m in got] == [f"n{i}" for i in range(MAX_MENTIONS)]
+
+
+def test_a_duplicate_of_the_first_row_at_position_thirty_one_breaks_nothing():
+    rows = [{"name": f"n{i}"} for i in range(MAX_MENTIONS)] + [{"name": "N0"}]
+
+    got = to_mentions({"mentions": rows}, "")
+
+    assert [m.name for m in got] == [f"n{i}" for i in range(MAX_MENTIONS)]
+
+
+def test_past_the_cap_a_real_url_for_a_kept_name_still_lands():
+    rows = ([{"name": f"n{i}"} for i in range(MAX_MENTIONS)]
+            + [{"name": "extra"}, {"name": "n3", "url": "https://n3.dev"}])
+
+    got = to_mentions({"mentions": rows}, "https://n3.dev")
+
+    assert len(got) == MAX_MENTIONS
+    assert Mention(name="n3", url="https://n3.dev") in got
+    assert "extra" not in [m.name for m in got]
+
+
+def test_a_real_url_is_not_overwritten_by_a_later_search_row():
+    data = {"mentions": [{"name": "opencode", "url": "https://opencode.ai"},
+                         {"name": "opencode"}]}
+
+    got = to_mentions(data, "https://opencode.ai")
+
+    assert got == [Mention(name="opencode", url="https://opencode.ai")]
+
+
+def test_names_that_differ_only_by_an_accent_are_one_mention():
+    got = to_mentions({"mentions": ["Café", "Cafe"]}, "")
+
+    assert [m.name for m in got] == ["Café"]
+
+
+@pytest.mark.parametrize("bare", ["https://", "http://"])
+def test_a_bare_scheme_is_not_a_url_even_inside_the_video(bare):
+    data = {"mentions": [{"name": "algo", "url": bare}]}
+
+    got = to_mentions(data, "mirá http://e.com y https://e.com")
+
+    assert got == [Mention(name="algo", url=search_url("algo"))]
+
+
+def test_a_video_answer_volunteering_mentions_nobody_asked_for_is_ignored():
+    answer = {**GOOD, "mentions": ["opencode"]}
+
+    analysis = analyze(FakeEngine([json.dumps(answer)]), "t", {}, [], "es")
+
+    assert analysis.mentions == []
 
 
 def test_an_answer_with_no_mentions_key_is_not_a_failure():
