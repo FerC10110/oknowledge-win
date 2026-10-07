@@ -72,7 +72,7 @@
                    anything that cannot see it, and a title for anyone who
                    does not know what it means yet. #}
                 <button type="submit" title="{{ t('Analyse it') }}"
-                        aria-label="{{ t('Analyse it') }}">🔄</button>
+                        aria-label="{{ t('Analyse it') }}">{% include "icon-redo.html" %}</button>
               </form>
             {% endif %}
           </div>
@@ -97,7 +97,7 @@
               <input type="hidden" name="q" value="{{ query }}">
               <input type="hidden" name="page" value="{{ page }}">
               <button type="submit" title="{{ t('Analyse it') }}"
-                      aria-label="{{ t('Analyse it') }}">🔄</button>
+                      aria-label="{{ t('Analyse it') }}">{% include "icon-redo.html" %}</button>
             </form>
           {% endif %}
         </li>

@@ -1,0 +1,15 @@
+{# The re-analyse glyph, drawn rather than typed.
+
+   It was 🔄 and it rendered as nothing: the page's font is Liberation Sans,
+   which has no such character, and whether the browser reaches an emoji font
+   for it depends on a fontconfig fallback that is not ours to count on. A path
+   needs no font at all. currentColor keeps it the colour of the text around
+   it, in either theme, so nothing here depends on telling two colours apart.
+
+   Sized in em so it follows the button's font-size, and aria-hidden because
+   the button already carries the words. #}
+<svg class="icon" viewBox="0 0 16 16" width="1em" height="1em" aria-hidden="true" focusable="false">
+  <path d="M13.2 8A5.2 5.2 0 1 1 9.69 3.08" fill="none" stroke="currentColor"
+        stroke-width="1.4" stroke-linecap="round"/>
+  <path d="M9.18 5.46 14.37 5.23 11.21 1.11Z" fill="currentColor"/>
+</svg>

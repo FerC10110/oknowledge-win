@@ -223,9 +223,12 @@ progress::-moz-progress-bar { background: var(--accent); }
    row -- out of the way of a result the user is reading down. The emoji keeps
    its own colours, which is why nothing here sets one. */
 .redo { margin: 0; }
-.redo button { background: none; border: 0; padding: 0.15rem 0.3rem;
-               font-size: 1.05rem; line-height: 1; border-radius: 8px; }
+.redo button { background: none; border: 0; padding: 0.25rem; line-height: 0;
+               font-size: 1.25rem; color: var(--fg); border-radius: 8px; }
+.redo button:hover, .redo button:focus-visible { color: var(--fg); }
 .redo button:hover, .redo button:focus-visible { background: var(--line); }
+/* The glyph draws itself, so it needs no emoji font and no colour of its own. */
+.redo .icon { display: block; }
 .card .redo { margin-top: 0.4rem; }
 .hits li { position: relative; }
 .hits .redo { position: absolute; top: 0.9rem; right: 0; }

@@ -509,16 +509,33 @@ def test_a_search_with_nothing_to_search_for_is_not_a_destination(cards, monkeyp
     assert answer.headers["location"] == "/item/waiting?notice=queued"
 
 
-def test_the_button_is_a_glyph_with_a_name_for_what_cannot_see_it(cards):
-    """A button whose whole text is an emoji has no accessible name, and a
-    tooltip is how anyone else learns what it does."""
+@pytest.mark.parametrize("path", ["/", "/search?q=Twaiting"])
+def test_the_button_is_a_drawn_glyph_with_a_name_for_what_cannot_see_it(cards, path):
+    """It was an emoji and it rendered as nothing: the page's font has no such
+    character, and whether the browser reaches an emoji font for it is a
+    fontconfig fallback nobody here controls. A path needs no font.
+
+    The words stay in title and aria-label: a button whose whole content is a
+    picture has no accessible name, and nobody is born knowing what it means.
+    """
+    cfg, client = cards
+
+    body = client.get(path).text
+
+    assert '<svg class="icon"' in body
+    assert "currentColor" in body          # the colour of the text, in either theme
+    assert 'aria-label="Analyse it"' in body
+    assert 'title="Analyse it"' in body
+
+
+def test_the_button_s_glyph_is_not_a_character_a_font_has_to_have(cards):
+    """The defect this replaced, pinned: an emoji in the markup is a glyph the
+    page is hoping some font on the machine will draw."""
     cfg, client = cards
 
     body = client.get("/").text
 
-    assert "\U0001f504</button>" in body
-    assert 'aria-label="Analyse it"' in body
-    assert 'title="Analyse it"' in body
+    assert not [ch for ch in body if ord(ch) > 0xFFFF]
 
 
 @pytest.mark.parametrize("path", ["/", "/settings", "/categories", "/retry"])
