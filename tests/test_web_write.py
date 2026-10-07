@@ -36,6 +36,9 @@ WRITE_ROUTES = [
     # cross-site POST here is refused without the file these would need.
     ("/import", {}),
     ("/import/confirm", {"token": "0" * 32}),
+    # Starting a batch of re-analysis. A cross-site POST here would spend the
+    # user's model quota, which is the kind of thing an origin check is for.
+    ("/retry", {}),
 ]
 
 

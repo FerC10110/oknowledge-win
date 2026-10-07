@@ -1,0 +1,49 @@
+{# How a batch of re-analysis is going.
+
+   The bar is the native <progress>, and the page comes back on its own with a
+   meta refresh: no JavaScript, so what it shows is what the server said, and
+   closing the tab costs nothing. It lives apart from Settings on purpose --
+   reloading that page every few seconds would wipe a form the user is
+   halfway through filling in. #}
+{% extends "base.html" %}
+{% block title %}{{ t('Analyse the links that are waiting') }} - oknowledge{% endblock %}
+{% block head %}
+  {# To /retry and not to this URL: a reload of this URL would bring the notice
+     back with it, every ten seconds, forever. #}
+  {% if batch.running %}<meta http-equiv="refresh" content="{{ refresh }}; url=/retry">{% endif %}
+{% endblock %}
+{% block main %}
+  <h1>{{ t('Analyse the links that are waiting') }}</h1>
+
+  {% if batch.running %}
+    <div class="batch-running">
+      <p>{{ t('Analysed so far: %1 of %2', batch.done, batch.total) }}</p>
+      <progress value="{{ batch.done }}" max="{{ batch.total }}">{{ batch.done }}/{{ batch.total }}</progress>
+      {% if batch.failed %}
+        <p class="warn">{{ t('Could not be finished: %1', batch.failed) }}</p>
+      {% endif %}
+      <p class="meta">{{ t('This page comes back on its own. You can close it: the run keeps going until it is done or the server stops.') }}</p>
+    </div>
+  {% else %}
+    {% if batch.total %}
+      {# The run can end under its total: an entry only the bookkeeping thought
+         was owed is settled without a model call, and costs no step. #}
+      <p>{{ t('Last run: %1 analysed of %2', batch.done, batch.total) }}{% if batch.failed %} · {{ t('Could not be finished: %1', batch.failed) }}{% endif %}</p>
+    {% endif %}
+    {% if batch.error %}
+      <p class="warn-block batch-problem">{{ batch.error }}</p>
+    {% endif %}
+    <p>{{ t('Waiting to be analysed: %1', owed) }}</p>
+    {% if owed %}
+      <form action="/retry" method="post">
+        <button type="submit">{% if size == 1 %}{{ t('Analyse 1 link') }}{% else %}{{ t('Analyse %1 links', size) }}{% endif %}</button>
+      </form>
+      <p class="meta">{{ t('Each link is one model call, so this takes a while. How many at a time is in Settings.') }}</p>
+    {% else %}
+      <p class="meta">{{ t('Every link has been analysed.') }}</p>
+    {% endif %}
+  {% endif %}
+
+  <p><a class="button" href="/settings">{{ t('Settings') }}</a>
+     <a class="button" href="/">{{ t('Library') }}</a></p>
+{% endblock %}

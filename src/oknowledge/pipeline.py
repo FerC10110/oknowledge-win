@@ -17,6 +17,7 @@ from __future__ import annotations
 import datetime as dt
 import os
 import secrets
+from collections.abc import Callable
 from contextlib import ExitStack
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -886,8 +887,47 @@ def import_links(cfg: Config, items: list[Imported],
     return result
 
 
+def owed(queue: Queue | None = None) -> tuple[list[QueueEntry], list[str]]:
+    """Every link retry() would work on, de-duplicated, and what could not be read.
+
+    retry() walks this, and so does the page that offers to process a batch, so
+    the number the user is shown and the work a run does cannot drift apart.
+
+    Each listing can fail as a whole -- an unreadable lock file, say -- and must
+    not stop the other, nor lose the links already found. The wording comes back
+    as a string rather than raising: a caller counting links shows it, and
+    retry() turns it into a failed Result of its own.
+    """
+    q = queue or Queue()
+    found: dict[str, QueueEntry] = {}
+    problems: list[str] = []
+    for listing in (q.unfinished, q.orphaned):
+        try:
+            for entry in listing():
+                found.setdefault(entry.id, entry)
+        except Exception as error:
+            problems.append(f"could not list the queue ({_typed(error)})")
+    return list(found.values()), problems
+
+
+def _announce(hook: Callable[[Result], None] | None, result: Result) -> None:
+    """Tell a watcher a link is done, and never let the telling cost a link.
+
+    The link is written and the queue is settled by the time this runs, so a
+    hook that raises -- a browser gone, a bar with a bug -- has nothing left
+    to damage, and the rest of the run is worth more than the bar.
+    """
+    if hook is None:
+        return
+    try:
+        hook(result)
+    except Exception:
+        pass
+
+
 def retry(cfg: Config, queue: Queue | None = None,
-          limit: int | None = None) -> list[Result]:
+          limit: int | None = None,
+          on_step: Callable[[Result], None] | None = None) -> list[Result]:
     """Finish every link the queue still owes, newest first, and settle the
     ones only the bookkeeping thinks are owed.
 
@@ -895,6 +935,11 @@ def retry(cfg: Config, queue: Queue | None = None,
     entry that turns out to be already settled does not use up the quota,
     because reconciling bookkeeping is not work. That is what lets an imported
     batch be analysed 50 a day without a day going to stale entries.
+
+    `on_step` is called with each link's Result as it finishes, for a caller
+    drawing a progress bar: once per unit of work, on the same count `limit`
+    spends, so a bar's steps and its total are the same number twice over.
+    A settled entry does not call it, for the same reason it costs no quota.
 
     unfinished() is partial and failed only. A process that died between
     enqueue and its final set_status leaves its entry pending, and no retry
@@ -907,17 +952,9 @@ def retry(cfg: Config, queue: Queue | None = None,
     user may have written themselves, and a retry is not a request for that.
     """
     q = queue or Queue()
-    owed: dict[str, QueueEntry] = {}
-    results: list[Result] = []
-    for listing in (q.unfinished, q.orphaned):
-        # Each listing can fail as a whole (an unreadable lock file, say) and
-        # must not stop the other, nor the links already found.
-        try:
-            for entry in listing():
-                owed.setdefault(entry.id, entry)
-        except Exception as error:
-            results.append(Result(id="queue", url="", path=None, status="failed",
-                                  error=f"could not list the queue ({_typed(error)})"))
+    entries, problems = owed(q)
+    results = [Result(id="queue", url="", path=None, status="failed", error=problem)
+               for problem in problems]
     # Newest first, within groups. The date is not in the queue -- `updated` is
     # when the entry was written, so an import runs oldest message first -- and
     # it comes from the note's `saved`: one scan per run, not one per link. An
@@ -937,7 +974,7 @@ def retry(cfg: Config, queue: Queue | None = None,
         # With no dates the order below is arbitrary, which costs a run of
         # the wrong links first and never a link: every entry is still owed.
         dates = {}
-    ordered = sorted(owed.values(), key=lambda e: dates.get(e.id, "9999-99-99"),
+    ordered = sorted(entries, key=lambda e: dates.get(e.id, "9999-99-99"),
                      reverse=True)
     ordered.sort(key=lambda e: _last_worked(e, dates))   # stable: date decides inside
     done = 0
@@ -952,6 +989,7 @@ def retry(cfg: Config, queue: Queue | None = None,
             results.append(add(cfg, entry.url, content=entry.content,
                                reprocess=True, queue=q))
             done += 1
+            _announce(on_step, results[-1])
         except Exception as error:
             # One link that cannot be written -- a full disk, or a note file the
             # user replaced with one of their own -- must not take the rest of
@@ -959,6 +997,7 @@ def retry(cfg: Config, queue: Queue | None = None,
             # nothing is lost whichever way this goes.
             results.append(_failed(q, entry, error))
             done += 1                     # trying and failing is work too
+            _announce(on_step, results[-1])
     return results
 
 

@@ -1562,6 +1562,59 @@ def _three_partials(cfg, q, monkeypatch, dates):
         _backdate(cfg, f"e{n}.com", when)
 
 
+# --- What is still owed, as a number the user can be shown --------------------
+
+def test_owed_lists_both_the_unfinished_and_the_abandoned(cfg, q, monkeypatch):
+    """The Settings page offers to process what is left, and its count has to
+    be retry()'s own idea of what is left -- not a second one that drifts."""
+    from oknowledge.pipeline import owed
+
+    q.enqueue("a1", "https://e1.com/x", "full")
+    q.set_status("a1", "partial")
+    q.enqueue("a2", "https://e2.com/x", "full")      # pending: nobody is on it
+    q.enqueue("a3", "https://e3.com/x", "full")
+    q.set_status("a3", "ok")
+
+    entries, problems = owed(q)
+
+    assert sorted(e.id for e in entries) == ["a1", "a2"]
+    assert problems == []
+
+
+def test_owed_counts_a_link_once_even_if_both_listings_name_it(cfg, q, monkeypatch):
+    """Offering to process 100 links and finishing after 50 looks like it gave
+    up halfway."""
+    from oknowledge.pipeline import owed
+
+    q.enqueue("a1", "https://e1.com/x", "full")
+    q.set_status("a1", "partial")
+    monkeypatch.setattr(q, "orphaned", q.unfinished)      # the same entry twice
+
+    entries, problems = owed(q)
+
+    assert [e.id for e in entries] == ["a1"]
+
+
+def test_owed_over_an_unreadable_listing_keeps_the_other_one(cfg, q, monkeypatch):
+    """A lock file nobody can read must not make the page say there is nothing
+    to do when there are a thousand links waiting."""
+    from oknowledge.pipeline import owed
+
+    q.enqueue("a1", "https://e1.com/x", "full")
+    q.set_status("a1", "partial")
+
+    def boom():
+        raise PermissionError("locks/x.lock")
+
+    monkeypatch.setattr(q, "orphaned", boom)
+
+    entries, problems = owed(q)
+
+    assert [e.id for e in entries] == ["a1"]
+    assert len(problems) == 1
+    assert "could not list the queue" in problems[0]
+
+
 def test_retry_with_a_limit_stops_after_that_many(cfg, q, monkeypatch):
     _three_partials(cfg, q, monkeypatch, ["2019-01-01", "2021-01-01", "2025-01-01"])
     extraction(monkeypatch, PAGE)
@@ -1617,6 +1670,98 @@ def test_an_entry_already_settled_does_not_use_up_the_quota(cfg, q, monkeypatch)
 
     analysed = [r for r in results if r.engine]
     assert [r.url for r in analysed] == ["https://e2.com/x"]
+
+
+def test_retry_reports_each_link_as_it_finishes(cfg, q, monkeypatch):
+    """Without this a caller only learns anything when the whole run is over,
+    which for fifty links is an hour of a progress bar that cannot move."""
+    _three_partials(cfg, q, monkeypatch, ["2019-01-01", "2021-01-01", "2025-01-01"])
+    extraction(monkeypatch, PAGE)
+    cfg.engines["fake"]["replies"] = [ANSWER] * 3
+    seen = []
+
+    results = retry(cfg, queue=q, on_step=seen.append)
+
+    assert [r.url for r in seen] == [r.url for r in results]
+    assert len(seen) == 3
+
+
+def test_a_link_reported_as_it_finishes_is_reported_once(cfg, q, monkeypatch):
+    """A step per unit of work, so a bar's count and its total are the same
+    number twice over -- not one link counted on both of retry's two paths."""
+    _three_partials(cfg, q, monkeypatch, ["2019-01-01", "2021-01-01", "2025-01-01"])
+    extraction(monkeypatch, PAGE)
+    cfg.engines["fake"]["replies"] = [ANSWER] * 3
+    seen = []
+
+    retry(cfg, queue=q, on_step=seen.append)
+
+    assert len(seen) == len({r.id for r in seen})
+
+
+def test_bookkeeping_is_not_reported_as_a_step(cfg, q, monkeypatch):
+    """A settled entry spends no quota, so it must not move a bar either: the
+    bar would reach its total before the links were done."""
+    extraction(monkeypatch, PAGE)
+    no_pictures(monkeypatch)
+    done = add(cfg, "https://settled.com/x", queue=q)
+    _backdate(cfg, "settled.com", "2030-01-01")
+    q.set_status(done.id, "partial")          # the queue lies, the note is fine
+    _three_partials(cfg, q, monkeypatch, ["2019-01-01", "2021-01-01", "2025-01-01"])
+    extraction(monkeypatch, PAGE)
+    cfg.engines["fake"]["replies"] = [ANSWER] * 4
+    seen = []
+
+    retry(cfg, queue=q, limit=1, on_step=seen.append)
+
+    assert [r.url for r in seen] == ["https://e2.com/x"]
+
+
+def test_a_link_that_blows_up_is_reported_as_it_finishes_too(cfg, q, monkeypatch):
+    """A bar that only counts the links retry finished normally stalls on the
+    first one that raises, and never reaches its total.
+
+    A link retry absorbs through _failed is the one that needs a write to
+    blow up: an unreadable page is an ordinary partial result, not a raise.
+    """
+    import oknowledge.pipeline as pipeline
+
+    extraction(monkeypatch, PAGE)
+    no_pictures(monkeypatch)
+    urls = ["https://arstechnica.com/a", "https://arstechnica.com/b"]
+    for url in urls:
+        q.enqueue(link_id(url), url, "full")
+    broken = link_id(urls[0])
+    real_write = pipeline.write_note
+
+    def picky(config, note, language, path=None):
+        if note.id == broken:
+            raise OSError("no space left on device")
+        return real_write(config, note, language, path=path)
+
+    monkeypatch.setattr(pipeline, "write_note", picky)
+    cfg.engines["fake"]["replies"] = [ANSWER] * 2
+    seen = []
+
+    retry(cfg, queue=q, on_step=seen.append)
+
+    assert {r.id: r.status for r in seen} == {broken: "failed",
+                                              link_id(urls[1]): "ok"}
+
+
+def test_a_hook_that_raises_does_not_cost_the_run(cfg, q, monkeypatch):
+    """The hook belongs to a caller drawing a bar. A bar is worth no links."""
+    _three_partials(cfg, q, monkeypatch, ["2019-01-01", "2021-01-01", "2025-01-01"])
+    extraction(monkeypatch, PAGE)
+    cfg.engines["fake"]["replies"] = [ANSWER] * 3
+
+    def explode(result):
+        raise RuntimeError("the bar broke")
+
+    results = retry(cfg, queue=q, on_step=explode)
+
+    assert [r.status for r in results] == ["ok", "ok", "ok"]
+    assert not q.unfinished()
 
 
 def test_a_second_limited_retry_works_on_links_the_first_did_not(cfg, q, monkeypatch):

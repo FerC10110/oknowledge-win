@@ -201,3 +201,24 @@ button { cursor: pointer; }
 .import-skipped li, .import-failed li { color: var(--dim); font-size: 0.9rem; }
 .import-preview h3, .import-result h3 { margin-bottom: 0.2rem; }
 .import-preview input[type="file"] { font: inherit; }
+
+/* The batch page and the button on an unanalysed card.
+
+   <progress> is the browser's own bar, so there is no JavaScript keeping a div
+   in sync with a number. Styling it needs the two vendor pseudo-elements and
+   `appearance: none`, and `color` is what Firefox fills it with. No colour
+   carries meaning here: the bar means the same thing to someone who cannot
+   tell it from the track, because the number is written above it. */
+progress { appearance: none; width: 100%; max-width: 32rem; height: 0.9rem;
+           border: 1px solid var(--line); border-radius: 999px; overflow: hidden;
+           background: var(--bg); color: var(--accent); }
+progress::-webkit-progress-bar { background: var(--bg); }
+progress::-webkit-progress-value { background: var(--accent); }
+progress::-moz-progress-bar { background: var(--accent); }
+.batch-running .meta { margin-top: 0.6rem; }
+.batch-problem { margin-bottom: 1rem; }
+
+/* Pinned to the bottom of the card so it lines up across a row, whatever the
+   summary above it is doing. */
+.card .redo { margin: 0.4rem 0 0; }
+.card .redo button { font-size: 0.85rem; padding: 0.25rem 0.6rem; }

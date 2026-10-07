@@ -103,6 +103,43 @@ STRINGS = {
         "search": "búsqueda",
         "Remove": "Quitar",
 
+        # Analysing a batch of what an import left unanalysed.
+        "Analyse the links that are waiting": "Analizar los links que esperan",
+        "Waiting to be analysed: %1": "Esperando an\u00e1lisis: %1",
+        "Analyse 1 link": "Analizar 1 link",
+        # On a card whose note was saved but never analysed.
+        "Analyse it": "Analizarlo",
+        "Analyse %1 links": "Analizar %1 links",
+        "Analysed so far: %1 of %2": "Analizados hasta ahora: %1 de %2",
+        "Last run: %1 analysed of %2": "\u00daltima corrida: %1 analizados de %2",
+        "Could not be finished: %1": "No se pudieron terminar: %1",
+        "This page comes back on its own. You can close it: the run keeps "
+        "going until it is done or the server stops.":
+            "Esta p\u00e1gina vuelve sola. Pod\u00e9s cerrarla: la corrida sigue "
+            "hasta terminar o hasta que se apague el servidor.",
+        "Each link is one model call, so this takes a while. "
+        "How many at a time is in Settings.":
+            "Cada link es una llamada al modelo, as\u00ed que tarda un rato. "
+            "Cu\u00e1ntos de una vez se configura en Ajustes.",
+        "Every link has been analysed.": "Todos los links est\u00e1n analizados.",
+        "Links to analyse at a time": "Links a analizar por vez",
+        "How many": "Cu\u00e1ntos",
+        "What the button at the end of this page processes each time. "
+        "Save first: the button uses the saved number.":
+            "Lo que procesa cada vez el bot\u00f3n del final de esta p\u00e1gina. "
+            "Guard\u00e1 primero: el bot\u00f3n usa el n\u00famero guardado.",
+        "As many as the box above says, newest first. Each one is a model "
+        "call, so it takes a while and it runs in the background.":
+            "Tantos como diga la casilla de arriba, los m\u00e1s nuevos primero. "
+            "Cada uno es una llamada al modelo, as\u00ed que tarda un rato y "
+            "corre en segundo plano.",
+        "Analysing. This page comes back on its own; you can close it.":
+            "Analizando. Esta p\u00e1gina vuelve sola; pod\u00e9s cerrarla.",
+        "A batch is already running. This page shows how it is going.":
+            "Ya hay una corrida en curso. Esta p\u00e1gina muestra c\u00f3mo va.",
+        "Every link has been analysed. Nothing to do.":
+            "Todos los links est\u00e1n analizados. No hay nada que hacer.",
+
         # Importing a WhatsApp export from the browser.
         "Import a WhatsApp export": "Importar un export de WhatsApp",
         "Turns the links people shared in a chat into notes, "

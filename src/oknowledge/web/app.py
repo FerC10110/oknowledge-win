@@ -31,7 +31,7 @@ from ..config import CONFIG_PATH, CONTENT_MODES, ENGINE_NAMES, MENTION_MODES, Co
 from ..config import save as save_config
 from ..i18n import LANGUAGES, NATIVE_NAMES, set_ui_language, translator, ui_language
 from ..pipeline import add as add_link
-from ..pipeline import icon_path, import_links, is_domain
+from ..pipeline import icon_path, import_links, is_domain, owed
 from ..queue import Locked, Queue
 from ..urls import is_search_url, link_id, normalize
 from ..vault import (
@@ -39,6 +39,8 @@ from ..vault import (
     rename_category, update_note,
 )
 from ..whatsapp import BadExport, parse as parse_export
+from .batch import Batch
+from .batch import run as run_batch
 from .import_file import BadUpload, drop, stage, staged, text_of
 from .index import PER_PAGE, Library, read_full, terms
 
@@ -92,7 +94,15 @@ NOTICES = {
     "language-not-saved": "The settings were saved, but the interface language is "
                           "shared with my other plugins and that file could not be "
                           "written.",
+    "batch-started": "Analysing. This page comes back on its own; you can close it.",
+    "batch-running": "A batch is already running. This page shows how it is going.",
+    "nothing-owed": "Every link has been analysed. Nothing to do.",
 }
+
+# How long the running batch page waits before coming back. A link is tens of
+# seconds of model call, so this is about a bar that moves, not a live one, and
+# every reload is a queue listing.
+REFRESH = 10
 
 # Which `renamed-partial` to use: (one note moved, one note failed).
 PARTIAL = {
@@ -250,13 +260,54 @@ def preview_of(scan, known: set[str]) -> dict:
 
 
 def see_other(path: str, **params) -> RedirectResponse:
-    """The answer to every write: 303 to a page that reads the result back."""
+    """The answer to every write: 303 to a page that reads the result back.
+
+    `path` may already carry a query -- a card's button goes back to the
+    library view it was clicked on -- so the join is & in that case. A second
+    "?" would make the notice part of the value before it instead.
+    """
     query = urlencode({k: v for k, v in params.items() if v not in (None, "")})
-    return RedirectResponse(path + ("?" + query if query else ""), status_code=303)
+    if not query:
+        return RedirectResponse(path, status_code=303)
+    join = "&" if "?" in path else "?"
+    return RedirectResponse(path + join + query, status_code=303)
 
 
 def item_url(link_id: str) -> str:
     return "/item/" + quote(link_id, safe="")
+
+
+def listing_url(category: str, tag: str, number: str) -> str:
+    """The library view a card was clicked on, rebuilt rather than echoed.
+
+    The path is always "/" and the query is built here out of the three things
+    the library route understands, so a form made by hand can send the user
+    back to this app's own library and to nowhere else at all. A page that is
+    not a page number is dropped: a wrong number costs the user their place,
+    and page 1 needs no number anyway.
+    """
+    params = {}
+    for name, value in (("category", category), ("tag", tag)):
+        if value.strip():
+            params[name] = value.strip()[:200]
+    if number.isdigit() and int(number) > 1:
+        params["page"] = number
+    query = urlencode(params)
+    return "/" + ("?" + query if query else "")
+
+
+def batch_size(raw: str, saved: int) -> int:
+    """A batch size from a form, or the saved one if that is not a size.
+
+    Refused rather than clamped: config.load() refuses a 0, so saving one would
+    leave a file the whole tool stops reading, and a number the user did not
+    type is no better a guess than the one already saved.
+    """
+    try:
+        size = int(raw)          # int() ignores the whitespace around a number
+    except ValueError:
+        return saved
+    return size if size >= 1 else saved
 
 
 def model_name(raw: str) -> str | None:
@@ -343,6 +394,10 @@ def create_app(cfg: Config) -> FastAPI:
     # The settings page can change the engine chain while the server runs. The
     # vault paths it cannot change, so the library stays valid either way.
     current = {"cfg": cfg}
+    # One batch at a time, in memory. A run only exists while this process
+    # does, so there is nothing to resume after a restart and no stale file to
+    # explain -- the queue on disk is the record of what is still owed.
+    progress = Batch()
     templates = Jinja2Templates(directory=str(WEB.joinpath("templates")))
     templates.env.filters["plain"] = plain
     templates.env.filters["slug"] = lambda value: quote(str(value), safe="")
@@ -571,7 +626,9 @@ def create_app(cfg: Config) -> FastAPI:
         return see_other(where, notice=result.notice)
 
     @app.post("/item/{link_id}/reprocess")
-    def reprocess(background: BackgroundTasks, link_id: str, engine: str = Form("")):
+    def reprocess(background: BackgroundTasks, link_id: str, engine: str = Form(""),
+                  back: str = Form(""), category: str = Form(""),
+                  tag: str = Form(""), page: str = Form("")):
         library.refresh()                 # a note deleted from Obsidian since the
         note = library.by_id(link_id)     # page was drawn must not be rewritten
 
@@ -582,7 +639,11 @@ def create_app(cfg: Config) -> FastAPI:
             raise HTTPException(status_code=400, detail="unknown engine")
         # After the response, not before it: see reanalyze().
         background.add_task(reanalyze, current["cfg"], note.url, name)
-        return see_other(item_url(link_id), notice="queued")
+        # Two destinations and no third: the note's own page, or the library
+        # view the card was on. Anything else in `back` means the note page.
+        where = (listing_url(category, tag, page) if back == "library"
+                 else item_url(link_id))
+        return see_other(where, notice="queued")
 
     @app.get("/categories", response_class=HTMLResponse)
     def category_page(request: Request):
@@ -641,8 +702,12 @@ def create_app(cfg: Config) -> FastAPI:
         saved = current["cfg"]
         order = [name for name in saved.chain if name in WEB_ENGINES]
         order += [name for name in WEB_ENGINES if name not in order]
+        waiting = len(owed(Queue())[0])
         return page(request, "settings.html", cfg=saved, ui=ui_language(),
                     engines=order, config_path=config_file(),
+                    # What the Procesar button would do, which is the saved
+                    # size unless fewer links than that are left.
+                    owed=waiting, size=min(saved.batch, waiting),
                     # Both language pickers are built from this one order. They
                     # used to be written out by hand and had drifted into
                     # opposite orders, which is a way to pick English while
@@ -652,6 +717,7 @@ def create_app(cfg: Config) -> FastAPI:
     @app.post("/settings")
     def save_settings(chain: list[str] = Form([]), language: str = Form(""),
                       default_content: str = Form(""), mentions: str = Form(""),
+                      batch: str = Form(""),
                       interface: str = Form("", alias="ui_language"),
                       opencode_model: str = Form(""), ollama_model: str = Form(""),
                       api_model: str = Form("")):
@@ -676,6 +742,7 @@ def create_app(cfg: Config) -> FastAPI:
             default_content=(default_content if default_content in CONTENT_MODES
                              else saved.default_content),
             mentions=mentions if mentions in MENTION_MODES else saved.mentions,
+            batch=batch_size(batch, saved.batch),
             engines=engines,
         )
         try:
@@ -695,6 +762,34 @@ def create_app(cfg: Config) -> FastAPI:
             log.warning("the shared language file could not be written: %s", error)
             return see_other("/settings", notice="language-not-saved")
         return see_other("/settings", notice="saved")
+
+    # --- analysing a batch of what the import left ---------------------------
+    #
+    # An imported chat leaves a thousand notes saved and none analysed: each
+    # one is a model call, and running a thousand of them is a night. The
+    # button here runs as many as the settings say, and this page draws it.
+
+    @app.get("/retry", response_class=HTMLResponse)
+    def retry_page(request: Request):
+        live = current["cfg"]
+        waiting = len(owed(Queue())[0])
+        return page(request, "retry.html", batch=progress.snapshot(),
+                    owed=waiting, size=min(live.batch, waiting), refresh=REFRESH)
+
+    @app.post("/retry")
+    def start_batch(background: BackgroundTasks):
+        live = current["cfg"]
+        # The same listing retry() walks, so the bar's total cannot promise
+        # work the run will not find.
+        waiting = len(owed(Queue())[0])
+        if not waiting:
+            return see_other("/retry", notice="nothing-owed")
+        if not progress.start(min(live.batch, waiting)):
+            # Two runs would reach for the same links and pay twice for each.
+            return see_other("/retry", notice="batch-running")
+        # After the response, not before it: a batch of fifty is an hour.
+        background.add_task(run_batch, live, progress, live.batch)
+        return see_other("/retry", notice="batch-started")
 
     # --- importing a WhatsApp export ---------------------------------------
     #
@@ -753,4 +848,5 @@ def create_app(cfg: Config) -> FastAPI:
     app.state.library = library
     app.state.cfg = cfg               # the vault config: paths never change here
     app.state.settings = current      # the live one, which the settings page edits
+    app.state.batch = progress
     return app

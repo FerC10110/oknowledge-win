@@ -41,6 +41,12 @@
     <label><input type="radio" name="default_content" value="summary"
                   {% if cfg.default_content == 'summary' %}checked{% endif %}> {{ t('Summary') }}</label>
 
+    <h2>{{ t('Links to analyse at a time') }}</h2>
+    <label>{{ t('How many') }}
+      <input type="number" name="batch" min="1" step="1" value="{{ cfg.batch }}">
+    </label>
+    <p class="meta">{{ t('What the button at the end of this page processes each time. Save first: the button uses the saved number.') }}</p>
+
     <h2>{{ t('Mentions of a video') }}</h2>
     <label><input type="radio" name="mentions" value="tools"
                   {% if cfg.mentions == 'tools' %}checked{% endif %}> {{ t('Tools and companies') }}</label>
@@ -52,8 +58,19 @@
     <p><button type="submit" class="button">{{ t('Save') }}</button></p>
   </form>
 
-  {# Outside the settings form on purpose: it is an action, not a preference,
+  {# Outside the settings form on purpose: these are actions, not preferences,
      and nesting a second form inside this one is not legal HTML anyway. #}
+  <h2>{{ t('Analyse the links that are waiting') }}</h2>
+  <p>{{ t('Waiting to be analysed: %1', owed) }}</p>
+  {% if owed %}
+    <form action="/retry" method="post">
+      <button type="submit">{% if size == 1 %}{{ t('Analyse 1 link') }}{% else %}{{ t('Analyse %1 links', size) }}{% endif %}</button>
+    </form>
+    <p class="meta">{{ t('As many as the box above says, newest first. Each one is a model call, so it takes a while and it runs in the background.') }}</p>
+  {% else %}
+    <p class="meta">{{ t('Every link has been analysed.') }}</p>
+  {% endif %}
+
   <h2>{{ t('Import a WhatsApp export') }}</h2>
   <p class="meta">{{ t('Turns the links people shared in a chat into notes, with the date each one was sent.') }}</p>
   <p><a class="button" href="/import">{{ t('Import a WhatsApp export') }}</a></p>

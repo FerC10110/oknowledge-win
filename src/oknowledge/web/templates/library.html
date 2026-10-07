@@ -58,6 +58,19 @@
               {# Refusing to link it must not mean hiding it. #}
               <p class="meta raw" dir="auto">{{ note.url }}</p>
             {% endif %}
+            {% if note.status != 'ok' %}
+              {# Saved but never analysed, which is how a whole imported chat
+                 arrives. It asks nothing before running: there is no analysis
+                 in this note yet to write over. The note page's version of
+                 this button does ask, because there it usually is one. #}
+              <form action="/item/{{ note.id|slug }}/reprocess" method="post" class="redo">
+                <input type="hidden" name="back" value="library">
+                <input type="hidden" name="category" value="{{ category or '' }}">
+                <input type="hidden" name="tag" value="{{ tag or '' }}">
+                <input type="hidden" name="page" value="{{ page }}">
+                <button type="submit">{{ t('Analyse it') }}</button>
+              </form>
+            {% endif %}
           </div>
         </li>
       {% endfor %}

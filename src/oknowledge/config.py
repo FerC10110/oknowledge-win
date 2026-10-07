@@ -33,6 +33,10 @@ class Config:
     vault: Path
     folder: str = "oknowledge"
     default_content: str = "full"
+    batch: int = 10
+    """How many links one press of Process takes, and what `retry --limit`
+    defaults to from the web. Ten rather than fifty: a run is minutes per link,
+    so this is the number somebody waits through once before deciding."""
     chain: tuple[str, ...] = ("opencode",)
     language: str = "es"
     mentions: str = "tools"
@@ -115,6 +119,12 @@ def load(path: Path = CONFIG_PATH) -> Config:
     if content not in CONTENT_MODES:
         raise ConfigError(f"default_content must be full or summary, not {content!r}")
 
+    # A batch of none is not a batch, and the button that runs it would do
+    # nothing while looking like it worked.
+    batch = _integer(data, "batch", 10, "batch")
+    if batch < 1:
+        raise ConfigError(f"batch must be at least 1, not {batch!r}")
+
     ai = _table(data, "ai", "ai")
     raw_chain = ai.get("chain", ("opencode",))
     if not isinstance(raw_chain, (list, tuple)) or not all(isinstance(n, str) for n in raw_chain):
@@ -141,6 +151,7 @@ def load(path: Path = CONFIG_PATH) -> Config:
         vault=vault,
         folder=folder,
         default_content=content,
+        batch=batch,
         chain=chain,
         language=language,
         mentions=mentions,
@@ -172,6 +183,7 @@ def save(cfg: Config, path: Path | None = None) -> Path:
         "vault": str(cfg.vault),
         "folder": cfg.folder,
         "default_content": cfg.default_content,
+        "batch": cfg.batch,
         "ai": {"chain": list(cfg.chain), "language": cfg.language,
                "mentions": cfg.mentions,
                **{name: dict(options) for name, options in cfg.engines.items()}},

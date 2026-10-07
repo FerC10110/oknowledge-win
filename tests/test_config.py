@@ -12,6 +12,38 @@ def write_config(tmp_path, body):
     return path
 
 
+def test_the_batch_size_is_read_and_defaults_to_ten(tmp_path):
+    """How many links one press of Process takes. Ten rather than fifty: a run
+    is minutes per link, and the number people pick first is the one they wait
+    through once before deciding."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+
+    assert load(write_config(tmp_path, f'vault = "{vault}"\n')).batch == 10
+    assert load(write_config(tmp_path, f'vault = "{vault}"\nbatch = 50\n')).batch == 50
+
+
+@pytest.mark.parametrize("value", ["0", "-5", '"50"', "true", "2.5"])
+def test_a_batch_size_that_is_not_one_is_refused_by_name(tmp_path, value):
+    """It is the file the user hand-writes, so the answer says what is wrong."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    path = write_config(tmp_path, f'vault = "{vault}"\nbatch = {value}\n')
+
+    with pytest.raises(ConfigError, match="batch"):
+        load(path)
+
+
+def test_saving_keeps_the_batch_size(tmp_path):
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    out = tmp_path / "out.toml"
+
+    save(Config(vault=vault, batch=25), out)
+
+    assert load(out).batch == 25
+
+
 def test_load_reads_the_values(tmp_path):
     vault = tmp_path / "vault"
     vault.mkdir()

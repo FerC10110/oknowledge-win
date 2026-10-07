@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}oknowledge{% endblock %}</title>
   <link rel="stylesheet" href="/static/style.css">
+  {% block head %}{% endblock %}
 </head>
 <body class="{% block body_class %}{% endblock %}" data-close="{{ t('Close') }}">
   <header>

@@ -46,6 +46,7 @@ required; everything else has a default:
 vault = "/home/you/Documents/obsidian"   # notes go to <vault>/oknowledge/
 folder = "oknowledge"                    # the folder inside the vault
 default_content = "full"                 # "full" keeps the original text, "summary" does not
+batch = 10                               # links the web UI analyses per Analyse click
 
 [ai]
 chain = ["opencode"]                     # engines to try, in order
@@ -218,7 +219,8 @@ to stderr and, with `--open`, opens the browser. Screens: Library (cards, filter
 by category and tag), Search (title, summary, points, tags, what a video
 mentioned and full text, with the matching fragment), Item (change category, edit tags, reprocess, delete),
 Categories (rename and merge, rewriting the affected notes and indexes),
-Import (a WhatsApp export, previewed before it is written) and Settings.
+Import (a WhatsApp export, previewed before it is written), Analyse (a batch of
+the links that are still waiting, with a bar) and Settings.
 
 - It shuts itself down after `idle_timeout` seconds without requests (default
   900; `0` means never). The watchdog polls every 5 seconds, so the shutdown
@@ -228,6 +230,18 @@ Import (a WhatsApp export, previewed before it is written) and Settings.
 - If the port is taken it exits with code 2 and suggests setting `web.port`.
 - **Delete moves the note to `<vault>/oknowledge/trash/`**, so you can recover
   it from Obsidian. Nothing in this project unlinks a note.
+- **A card whose note was never analysed has an *Analyse it* button**, and it
+  does not stop to ask: there is no analysis in that note yet to write over.
+  The button on the note's own page does ask, because there usually is one.
+  Either way the work happens after the answer is sent, so the browser does
+  not wait for a model.
+- **The Analyse page runs a batch of them.** `batch` in the config says how
+  many (default 10), the page draws a `<progress>` bar and comes back on its
+  own every 10 seconds; closing the tab does not stop the run. One batch at a
+  time: a second click while one is in flight is refused rather than starting
+  a second run over the same links. The progress is held in memory, so a
+  server that restarts mid-batch loses the bar and no links -- what is still
+  owed is in the queue on disk, and the next run picks it up.
 - **Saving settings rewrites the config file.** Comments and keys it does not
   know are not preserved; the previous file is kept as `config.toml.bak`.
   Settings are always saved to `~/.config/oknowledge/config.toml`, whatever

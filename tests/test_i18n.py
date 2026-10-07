@@ -167,3 +167,27 @@ def test_every_translated_string_is_one_the_code_asks_for():
 
     unused = [key for key in i18n.STRINGS["es"] if squeezed(key) not in blob]
     assert unused == [], f"declared and never asked for: {unused}"
+
+
+def test_every_string_a_template_asks_for_has_a_spanish_translation():
+    """The mirror of the test above, and the one that catches the defect that
+    actually happens: a string added to a page in English and never translated.
+
+    conftest pins the interface to English for the whole suite, so no other
+    test renders a Spanish page and a missing translation is invisible --
+    until the user switches language and finds half a page still in English.
+    Only literal keys are checked: a t() over a variable cannot be read here.
+    """
+    import pathlib
+    import re
+
+    root = pathlib.Path(i18n.__file__).resolve().parent
+    asked = set()
+    for path in root.rglob("*.html"):
+        text = path.read_text(encoding="utf-8")
+        for match in re.finditer(r"""\bt\(\s*'((?:[^'\\]|\\.)*)'""", text, re.S):
+            asked.add(match.group(1).replace("\\'", "'"))
+
+    assert asked, "no t('...') call was found at all: the pattern is wrong"
+    missing = sorted(key for key in asked if key not in i18n.STRINGS["es"])
+    assert missing == [], f"asked for and never translated: {missing}"
