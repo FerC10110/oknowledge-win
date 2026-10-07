@@ -230,11 +230,20 @@ the links that are still waiting, with a bar) and Settings.
 - If the port is taken it exits with code 2 and suggests setting `web.port`.
 - **Delete moves the note to `<vault>/oknowledge/trash/`**, so you can recover
   it from Obsidian. Nothing in this project unlinks a note.
-- **A card whose note was never analysed has an *Analyse it* button**, and it
-  does not stop to ask: there is no analysis in that note yet to write over.
-  The button on the note's own page does ask, because there usually is one.
-  Either way the work happens after the answer is sent, so the browser does
-  not wait for a model.
+- **A card whose note was never analysed carries a re-analyse glyph**, on the
+  library and in the search results. It does not stop to ask: there is no
+  analysis in that note yet to write over. The button on the note's own page
+  does ask, because there usually is one. Either way the work happens after the
+  answer is sent, so the browser never waits for a model.
+  - With JavaScript it keeps the page exactly where it is, and the glyph spins
+    until the work is done — the server is asked every few seconds whether
+    anything still holds that link, so the spin stops when the work does, and
+    the glyph goes away if the link came back analysed. Reloading the page
+    forgets which cards were spinning; the work carries on regardless, and
+    clicking a link that is already being worked on costs nothing (the second
+    run finds the lock taken and leaves).
+  - Without JavaScript it is an ordinary form post that comes back to the
+    listing it was clicked on, at the top of it.
 - **The Analyse page runs a batch of them.** `batch` in the config says how
   many (default 10), the page draws a `<progress>` bar and comes back on its
   own every 10 seconds; closing the tab does not stop the run. One batch at a
