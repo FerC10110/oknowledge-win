@@ -560,3 +560,75 @@ def test_a_rejected_mention_url_is_still_shown_as_text(tmp_path, bad):
         assert "Foo" in page, path
         assert bad in page.replace("&#39;", "'"), path
         assert f'href="{bad}"' not in page, path
+
+
+# --- the tag row, which grows without end ------------------------------------
+
+@pytest.fixture
+def many_tags(tmp_path):
+    """Thirty tags, each on a different number of notes, the way a library of a
+    thousand links ends up: the row of them grows longer than the screen."""
+    vault = tmp_path / "vault"
+    (vault / "oknowledge" / "links").mkdir(parents=True)
+    cfg = Config(vault=vault)
+    for n in range(30):
+        # Tag n goes on (30 - n) notes, so t00 is the most used and t29 the
+        # least: the order is known and nothing ties.
+        for copy in range(30 - n):
+            write_note(cfg, note(f"n{n}x{copy}", f"Nota {n}-{copy}", "Redes",
+                                 [f"t{n:02d}"], "Un resumen."), "es")
+    rebuild_indexes(cfg, "es")
+    return TestClient(create_app(cfg))
+
+
+def tag_chips(body):
+    """(the tags shown at once, the tags behind the disclosure)."""
+    head, _, tail = body.partition("<details")
+    found = lambda part: re.findall(r'class="chip small[^"]*">#([^<]+)</a>', part)
+    return found(head), found(tail)
+
+
+def test_only_the_most_used_tags_are_shown_at_once(many_tags):
+    """A row of ninety-five chips pushes the cards themselves off the screen,
+    and the answer to "what did I save" should not be below the fold.
+
+    The twelve is written out rather than taken from TAGS_SHOWN: a test that
+    builds what it expects out of the number it is checking agrees with any
+    number at all, and this one is a judgement about a screen.
+    """
+    shown, _ = tag_chips(many_tags.get("/").text)
+
+    assert len(shown) == 12
+    assert shown == [f"t{n:02d}" for n in range(12)]      # most used first
+
+
+def test_the_rest_of_the_tags_are_one_click_away_and_not_gone(many_tags):
+    """Dropping them would make a tag on four notes unreachable from the page
+    whose whole job is finding things."""
+    shown, hidden = tag_chips(many_tags.get("/").text)
+
+    assert hidden == [f"t{n:02d}" for n in range(12, 30)]
+    assert sorted(shown + hidden) == sorted(f"t{n:02d}" for n in range(30))
+
+
+def test_the_tag_being_filtered_by_is_shown_however_rare_it_is(many_tags):
+    """Otherwise the page gives no sign of what it is filtered by: the one chip
+    that would say so is behind the fold."""
+    body = many_tags.get("/?tag=t29").text
+    shown, hidden = tag_chips(body)
+
+    assert "t29" in shown
+    assert "t29" not in hidden        # twice on a page is one of them wrong
+    assert 'class="chip small on">#t29</a>' in body
+
+
+def test_pulling_a_rare_tag_forward_does_not_push_a_common_one_out(many_tags):
+    """The row is already the length it was; the filtered tag is one more."""
+    shown, _ = tag_chips(many_tags.get("/?tag=t29").text)
+
+    assert shown == [f"t{n:02d}" for n in range(12)] + ["t29"]
+
+
+def test_a_short_tag_row_gets_no_more_at_all(client):
+    """Two tags behind a disclosure is a disclosure that hides nothing."""
+    assert "<details" not in client.get("/").text

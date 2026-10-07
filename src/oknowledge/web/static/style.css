@@ -32,7 +32,16 @@ header nav a:hover { color: var(--fg); }
 main { max-width: var(--measure); margin: 0 auto; padding: 0 1rem 5rem; }
 
 .chips { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 0.6rem; }
-.chips.tags { margin-bottom: 2rem; }
+.chips.tags { margin-bottom: 1rem; }
+
+/* The tags that did not fit. A disclosure rather than a taller row: it is the
+   browser's own, so it needs no script, and closed it costs one line. */
+.more-tags { margin: 0 0 1.5rem; }
+.more-tags summary { display: inline-block; cursor: pointer; font-size: 0.78rem;
+                     color: var(--dim); padding: 0.1rem 0.3rem; border-radius: 999px; }
+.more-tags summary:hover, .more-tags summary:focus-visible { color: var(--fg); }
+.more-tags[open] summary { margin-bottom: 0.5rem; }
+.more-tags .chips.tags { margin-bottom: 0; }
 .chip {
   padding: 0.25rem 0.7rem; border: 1px solid var(--line); border-radius: 999px;
   text-decoration: none; color: var(--dim); font-size: 0.85rem; background: var(--card);

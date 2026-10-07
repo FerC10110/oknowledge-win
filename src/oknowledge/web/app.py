@@ -100,6 +100,11 @@ NOTICES = {
     "nothing-owed": "Every link has been analysed. Nothing to do.",
 }
 
+# How many tag chips the library shows before the rest go behind a disclosure.
+# A thousand notes make hundreds of tags, and a row of them pushes the cards --
+# the thing the page is for -- off the bottom of the screen.
+TAGS_SHOWN = 12
+
 # How long the running batch page waits before coming back. A link is tens of
 # seconds of model call, so this is about a bar that moves, not a live one, and
 # every reload is a queue listing.
@@ -272,6 +277,21 @@ def see_other(path: str, **params) -> RedirectResponse:
         return RedirectResponse(path, status_code=303)
     join = "&" if "?" in path else "?"
     return RedirectResponse(path + join + query, status_code=303)
+
+
+def tag_chips(tags: dict[str, int], active: str | None) -> tuple[dict, dict]:
+    """(the tags to show at once, the ones to put behind "more").
+
+    They arrive most-used first and there is no natural end to them. The one
+    being filtered by is always in the first group, whatever its rank: it is
+    the only chip that says what the page is filtered by, and a filter that
+    hides its own name leaves no way back out of it.
+    """
+    shown = dict(list(tags.items())[:TAGS_SHOWN])
+    if active in tags and active not in shown:
+        shown[active] = tags[active]
+    rest = {name: count for name, count in tags.items() if name not in shown}
+    return shown, rest
 
 
 def item_url(link_id: str) -> str:
@@ -464,7 +484,9 @@ def create_app(cfg: Config) -> FastAPI:
         number = page_number(request.query_params.get("page", "1"), pages)
         params = {k: v for k, v in (("category", category), ("tag", tag)) if v}
         shown = notes[(number - 1) * PER_PAGE:number * PER_PAGE]
+        first, rest = tag_chips(library.tags(), tag)
         return page(request, "library.html", notes=shown, category=category, tag=tag,
+                    tags=first, more_tags=rest,
                     filtered=bool(category or tag), **pager("/", params, number, pages))
 
     @app.get("/search", response_class=HTMLResponse)

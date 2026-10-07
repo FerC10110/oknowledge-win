@@ -108,6 +108,8 @@ STRINGS = {
         "Analyse the links that are waiting": "Analizar los links que esperan",
         "Waiting to be analysed: %1": "Esperando an\u00e1lisis: %1",
         "Analyse 1 link": "Analizar 1 link",
+        "%1 more tags": "%1 etiquetas m\u00e1s",
+
         # On a card whose note was saved but never analysed.
         "Analyse it": "Analizarlo",
         "It could not be analysed. Try again.":
