@@ -229,6 +229,18 @@ progress::-moz-progress-bar { background: var(--accent); }
 .redo button:hover, .redo button:focus-visible { background: var(--line); }
 /* The glyph draws itself, so it needs no emoji font and no colour of its own. */
 .redo .icon { display: block; }
+
+/* While the link is being analysed. The spin is driven by what the server says
+   is still holding that link, not by a timer, so it stops when the work does. */
+@keyframes redo-spin { to { transform: rotate(1turn); } }
+.redo.working .icon { animation: redo-spin 1.1s linear infinite; }
+.redo.working button { cursor: default; }
+.redo button[disabled] { opacity: 1; }      /* it is busy, not unavailable */
+@media (prefers-reduced-motion: reduce) {
+  /* Asked for no motion: the same thing said by fading instead of turning. */
+  @keyframes redo-pulse { 50% { opacity: 0.25; } }
+  .redo.working .icon { animation: redo-pulse 1.4s ease-in-out infinite; }
+}
 .card .redo { margin-top: 0.4rem; }
 .hits li { position: relative; }
 .hits .redo { position: absolute; top: 0.9rem; right: 0; }

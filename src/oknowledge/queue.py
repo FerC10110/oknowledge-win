@@ -149,7 +149,7 @@ class Queue:
             if entry.status != "pending":
                 continue
             try:
-                held = self._held(entry.id)
+                held = self.held(entry.id)
             except OSError:
                 # A lock file we cannot probe (root-owned after a sudo run, say)
                 # leaves us not knowing whether a process holds it. Calling it
@@ -163,7 +163,13 @@ class Queue:
     def _lock_path(self, link_id: str) -> Path:
         return self.root / "locks" / f"{_check_id(link_id)}.lock"
 
-    def _held(self, link_id: str) -> bool:
+    def held(self, link_id: str) -> bool:
+        """Whether some live process is working on this link right now.
+
+        flock belongs to the open file and the kernel drops it when the holder
+        dies, so a true here is never stale: there is no timeout to guess at
+        and no crashed run left looking busy forever.
+        """
         try:
             fd = os.open(self._lock_path(link_id), os.O_RDONLY)
         except FileNotFoundError:

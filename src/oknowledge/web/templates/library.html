@@ -1,7 +1,8 @@
 {% extends "base.html" %}
 {% block title %}{% if query %}{{ query }} - oknowledge{% else %}oknowledge{% endif %}{% endblock %}
 {% block body_class %}{% if notes is not none %}wide{% endif %}{% endblock %}
-{% block scripts %}<script src="/static/popup.js" defer></script>{% endblock %}
+{% block scripts %}<script src="/static/popup.js" defer></script>
+<script src="/static/redo.js" defer></script>{% endblock %}
 {% block main %}
   {% if notes is not none %}
     <div class="chips">
@@ -63,7 +64,8 @@
                  arrives. It asks nothing before running: there is no analysis
                  in this note yet to write over. The note page's version of
                  this button does ask, because there it usually is one. #}
-              <form action="/item/{{ note.id|slug }}/reprocess" method="post" class="redo">
+              <form action="/item/{{ note.id|slug }}/reprocess" method="post"
+                    class="redo" data-link="{{ note.id }}">
                 <input type="hidden" name="back" value="library">
                 <input type="hidden" name="category" value="{{ category or '' }}">
                 <input type="hidden" name="tag" value="{{ tag or '' }}">
@@ -92,7 +94,8 @@
           {% if hit.note.status != 'ok' %}
             {# Beside the link and not inside it: a form inside an <a> is not
                legal HTML, and this whole row is one link. #}
-            <form action="/item/{{ hit.note.id|slug }}/reprocess" method="post" class="redo">
+            <form action="/item/{{ hit.note.id|slug }}/reprocess" method="post"
+                  class="redo" data-link="{{ hit.note.id }}">
               <input type="hidden" name="back" value="search">
               <input type="hidden" name="q" value="{{ query }}">
               <input type="hidden" name="page" value="{{ page }}">

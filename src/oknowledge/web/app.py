@@ -20,7 +20,8 @@ from urllib.parse import quote, urlencode
 from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.exception_handlers import http_exception_handler
 from fastapi.responses import (
-    FileResponse, HTMLResponse, PlainTextResponse, RedirectResponse, Response,
+    FileResponse, HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse,
+    Response,
 )
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -644,9 +645,10 @@ def create_app(cfg: Config) -> FastAPI:
         return see_other(where, notice=result.notice)
 
     @app.post("/item/{link_id}/reprocess")
-    def reprocess(background: BackgroundTasks, link_id: str, engine: str = Form(""),
-                  back: str = Form(""), category: str = Form(""),
-                  tag: str = Form(""), q: str = Form(""), page: str = Form("")):
+    def reprocess(request: Request, background: BackgroundTasks, link_id: str,
+                  engine: str = Form(""), back: str = Form(""),
+                  category: str = Form(""), tag: str = Form(""),
+                  q: str = Form(""), page: str = Form("")):
         library.refresh()                 # a note deleted from Obsidian since the
         note = library.by_id(link_id)     # page was drawn must not be rewritten
 
@@ -656,10 +658,21 @@ def create_app(cfg: Config) -> FastAPI:
         if name is not None and name not in ENGINE_NAMES:
             raise HTTPException(status_code=400, detail="unknown engine")
         # After the response, not before it: see reanalyze().
+        # Pending now, not when the task gets round to it: the card that was
+        # clicked polls for "is this being worked on", and between the answer
+        # and the task starting there is no lock to find. It is also what the
+        # note page has always said happens -- made true when it says it.
+        with contextlib.suppress(OSError, ValueError):
+            Queue().set_status(link_id, "pending")
         background.add_task(reanalyze, current["cfg"], note.url, name)
         # Three destinations and no fourth: the listing the card was on --
         # the library or the search results -- or else the note's own page,
         # which is where the button on that page sends you back to.
+        if request.headers.get("x-requested-with") == "redo":
+            # The card's own script asked, and it is staying on the page it is
+            # on: there is nothing to redirect it to and nothing to draw. A 204
+            # says exactly that, and leaves no browser behaviour to assume.
+            return Response(status_code=204)
         where = return_url(back, category, tag, q, page) or item_url(link_id)
         return see_other(where, notice="queued")
 
@@ -780,6 +793,28 @@ def create_app(cfg: Config) -> FastAPI:
             log.warning("the shared language file could not be written: %s", error)
             return see_other("/settings", notice="language-not-saved")
         return see_other("/settings", notice="saved")
+
+    @app.get("/item/{link_id}/state")
+    def link_state(link_id: str):
+        """Whether this link is being worked on, for the card drawing a spinner.
+
+        The queue and never the vault: every card the user clicked asks this
+        every few seconds, and re-reading a thousand notes for it would be
+        absurd. The lock is the honest half of the answer -- it dies with the
+        process that held it, so nothing here can be stale -- and `pending`
+        covers the moment between the click and the task reaching that lock.
+        """
+        q = Queue()
+        try:
+            entry = q.get(link_id)
+            working = entry is not None and (entry.status == "pending"
+                                             or q.held(link_id))
+        except (OSError, ValueError):
+            # An unreadable state tree. "Nobody is working on it" stops a
+            # spinner; claiming work nobody is doing never stops one.
+            return JSONResponse({"working": False, "status": "unknown"})
+        return JSONResponse({"working": working,
+                             "status": entry.status if entry else "unknown"})
 
     # --- analysing a batch of what the import left ---------------------------
     #

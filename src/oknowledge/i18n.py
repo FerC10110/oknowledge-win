@@ -110,6 +110,8 @@ STRINGS = {
         "Analyse 1 link": "Analizar 1 link",
         # On a card whose note was saved but never analysed.
         "Analyse it": "Analizarlo",
+        "It could not be analysed. Try again.":
+            "No se pudo analizar. Prob\u00e1 de nuevo.",
         "Analyse %1 links": "Analizar %1 links",
         "Analysed so far: %1 of %2": "Analizados hasta ahora: %1 de %2",
         "Last run: %1 analysed of %2": "\u00daltima corrida: %1 analizados de %2",

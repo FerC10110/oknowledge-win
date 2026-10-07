@@ -98,7 +98,11 @@ def test_a_url_that_is_not_a_web_address_is_never_linked(tmp_path, url):
 
     assert f'href="{url}"' not in body
     assert "<script>" not in body
-    assert "<script" not in body.replace('<script src="/static/popup.js" defer>', "")
+    # Our own <script src="/static/*.js" defer> tags come out first, by shape:
+    # a new one of those is a file somebody wrote, and anything else at all in
+    # here came out of the note.
+    import re
+    assert "<script" not in re.sub(r'<script src="/static/[a-z]+\.js" defer>', "", body)
 
 
 def test_a_hand_edited_url_is_still_shown_even_when_it_is_not_a_link(tmp_path):

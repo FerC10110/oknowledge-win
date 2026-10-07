@@ -64,3 +64,33 @@ def test_every_prompt_the_code_loads_is_declared_as_package_data():
                if not shipped(p.relative_to(package).as_posix(), globs)]
 
     assert missing == [], f"loaded at runtime, shipped by nothing: {missing}"
+
+
+# --- the browser's half, which Python never runs -----------------------------
+
+# Captured at import, before conftest's autouse fixture replaces them for every
+# test. run() reaches Popen, so both halves have to be the real ones, and they
+# are put back for this one test only -- the way that fixture says to.
+import shutil  # noqa: E402
+import subprocess  # noqa: E402
+
+import pytest  # noqa: E402
+
+_REAL = {name: getattr(subprocess, name) for name in ("run", "Popen")}
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="node is not installed")
+@pytest.mark.parametrize("name", ["popup.js", "redo.js"])
+def test_the_scripts_the_pages_load_are_valid_javascript(name, monkeypatch):
+    """Nothing else in this suite runs these files. A typo in one of them is a
+    button that silently does nothing in the browser and nothing at all here,
+    which is the worst way for a page to break: no error, no test, no sign.
+    """
+    for attribute, real in _REAL.items():
+        monkeypatch.setattr(subprocess, attribute, real)
+    path = ROOT / "src" / "oknowledge" / "web" / "static" / name
+
+    done = subprocess.run(["node", "--check", str(path)],
+                          capture_output=True, text=True)
+
+    assert done.returncode == 0, done.stderr

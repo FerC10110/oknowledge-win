@@ -363,8 +363,13 @@ def cards(tmp_path):
     vault = tmp_path / "vault"
     (vault / "oknowledge" / "links").mkdir(parents=True)
     cfg = Config(vault=vault)
-    write_note(cfg, note("done", "ok"), "es")
-    write_note(cfg, note("waiting", "partial"), "es")
+    q = Queue()
+    for link, status in (("done", "ok"), ("waiting", "partial")):
+        write_note(cfg, note(link, status), "es")
+        # An import leaves an entry for every link it writes, so a note with a
+        # queue entry is the state these pages are actually looked at in.
+        q.enqueue(link, f"https://e.com/{link}", "full")
+        q.set_status(link, status)
     rebuild_indexes(cfg, "es")
     return cfg, TestClient(create_app(cfg))
 
@@ -448,7 +453,7 @@ def test_the_card_s_own_button_is_the_one_that_comes_back(cards, monkeypatch):
     cfg, client = cards
 
     body = client.get("/?category=Redes").text
-    form_html = re.search(r'<form action="([^"]+)"[^>]*class="redo">(.*?)</form>',
+    form_html = re.search(r'<form action="([^"]+)"[^>]*class="redo"[^>]*>(.*?)</form>',
                           body, re.S)
     assert form_html, "the card rendered no button to press"
     fields = dict(re.findall(r'name="([^"]+)" value="([^"]*)"', form_html.group(2)))
@@ -487,7 +492,7 @@ def test_the_hit_s_own_button_comes_back_to_the_same_search(cards, monkeypatch):
     cfg, client = cards
 
     body = client.get("/search?q=Twaiting").text
-    form_html = re.search(r'<form action="([^"]+)"[^>]*class="redo">(.*?)</form>',
+    form_html = re.search(r'<form action="([^"]+)"[^>]*class="redo"[^>]*>(.*?)</form>',
                           body, re.S)
     assert form_html, "the hit rendered no button to press"
     fields = dict(re.findall(r'name="([^"]+)" value="([^"]*)"', form_html.group(2)))
@@ -565,3 +570,155 @@ def test_the_nav_counts_nothing_when_no_batch_is_running(setup):
     body = client.get("/categories").text
 
     assert "<b>0/0</b>" not in body
+
+
+# --- Clicking without losing the page -----------------------------------------
+
+def test_a_link_being_worked_on_says_so(cards, monkeypatch):
+    """What the spinning card polls. The queue and never the vault: every card
+    the user clicked asks this every few seconds."""
+    monkeypatch.setattr(module, "reanalyze", lambda cfg, url, engine: None)
+    cfg, client = cards
+
+    client.post("/item/waiting/reprocess", data={"back": "library"},
+                follow_redirects=False)
+
+    assert client.get("/item/waiting/state").json() == {"working": True,
+                                                        "status": "pending"}
+
+
+def test_a_link_nobody_is_working_on_says_so(cards):
+    cfg, client = cards
+
+    assert client.get("/item/waiting/state").json() == {"working": False,
+                                                        "status": "partial"}
+
+
+def test_a_link_with_no_entry_at_all_is_not_working(cards):
+    """A note whose queue entry was deleted. The card stops spinning rather
+    than spinning for ever over something nobody will ever finish."""
+    cfg, client = cards
+
+    assert client.get("/item/nosuchlink/state").json()["working"] is False
+
+
+@pytest.mark.parametrize("bad", ["not an id", "ZZZZ!", "a" * 400, "....."])
+def test_the_state_of_a_link_whose_id_is_nonsense_is_an_answer_not_a_crash(cards, bad):
+    """The id reaches the queue straight from a URL. A malformed one names no
+    entry, which is an answer; it must not reach the filesystem as a path.
+
+    "." and ".." are not in the list because they never arrive: the router
+    resolves them away and the request is a 404 before any of this runs.
+    """
+    cfg, client = cards
+
+    answer = client.get(f"/item/{bad}/state")
+
+    assert answer.status_code == 200
+    assert answer.json() == {"working": False, "status": "unknown"}
+
+
+def test_the_click_marks_the_link_pending_before_it_answers(cards, monkeypatch):
+    """Not when the background task gets round to it: between the two the card
+    would poll, be told nobody is working, and stop spinning at once.
+
+    It is also what the note page has always claimed -- "the note stays pending
+    until it finishes" -- made true at the moment it says it.
+    """
+    from oknowledge.queue import Queue
+
+    seen = {}
+    monkeypatch.setattr(module, "reanalyze",
+                        lambda cfg, url, engine: seen.update(
+                            status=Queue().get("waiting").status))
+
+    cfg, client = cards
+
+    client.post("/item/waiting/reprocess", follow_redirects=False)
+
+    assert seen["status"] == "pending"
+
+
+def test_the_card_carries_what_the_script_needs_to_poll(cards):
+    """The id is in the form's action and nowhere else a script can read it
+    without parsing a URL."""
+    cfg, client = cards
+
+    body = client.get("/").text
+
+    assert 'data-link="waiting"' in body
+
+
+def test_the_library_loads_the_script_that_keeps_the_page_still(cards):
+    cfg, client = cards
+
+    body = client.get("/").text
+
+    assert "/static/redo.js" in body
+
+
+def test_the_script_s_click_gets_no_page_back(cards, monkeypatch):
+    """The whole point: the user stays where they were. A redirect here would
+    make the browser fetch the library again and the script would have to
+    throw it away -- or, worse, follow it."""
+    monkeypatch.setattr(module, "reanalyze", lambda cfg, url, engine: None)
+    cfg, client = cards
+
+    answer = client.post("/item/waiting/reprocess", data={"back": "library"},
+                         headers={"X-Requested-With": "redo"},
+                         follow_redirects=False)
+
+    assert answer.status_code == 204
+    assert "location" not in answer.headers
+    assert answer.content == b""
+
+
+def test_a_click_without_the_script_still_gets_its_page(cards, monkeypatch):
+    """The same route serves both: with JavaScript off the form posts plainly
+    and the browser has to be sent somewhere."""
+    monkeypatch.setattr(module, "reanalyze", lambda cfg, url, engine: None)
+    cfg, client = cards
+
+    answer = client.post("/item/waiting/reprocess", data={"back": "library"},
+                         follow_redirects=False)
+
+    assert answer.status_code == 303
+    assert answer.headers["location"] == "/?notice=queued"
+
+
+def test_the_quiet_answer_still_queues_the_work(cards, monkeypatch):
+    """A 204 that did nothing would be the quietest bug in the program."""
+    seen = []
+    monkeypatch.setattr(module, "reanalyze",
+                        lambda cfg, url, engine: seen.append(url))
+    cfg, client = cards
+
+    client.post("/item/waiting/reprocess", headers={"X-Requested-With": "redo"},
+                follow_redirects=False)
+
+    assert seen == ["https://e.com/waiting"]
+
+
+def test_a_link_someone_holds_the_lock_on_is_working_whatever_the_queue_says(cards):
+    """The two halves answer different moments, and this is the one that holds
+    while the model runs: the entry only turns `pending` if the queue could be
+    written, and a read-only state tree must not stop a card from spinning
+    over work that is really happening.
+    """
+    cfg, client = cards
+    assert Queue().get("waiting").status == "partial"      # not pending
+
+    with Queue().lock("waiting"):
+        answer = client.get("/item/waiting/state").json()
+
+    assert answer == {"working": True, "status": "partial"}
+
+
+def test_the_lock_being_let_go_ends_the_spin(cards):
+    """The other side of the same test: a lock nobody holds is not work."""
+    cfg, client = cards
+
+    with Queue().lock("waiting"):
+        pass
+
+    assert client.get("/item/waiting/state").json()["working"] is False

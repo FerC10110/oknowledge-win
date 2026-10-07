@@ -7,7 +7,8 @@
   <link rel="stylesheet" href="/static/style.css">
   {% block head %}{% endblock %}
 </head>
-<body class="{% block body_class %}{% endblock %}" data-close="{{ t('Close') }}">
+<body class="{% block body_class %}{% endblock %}" data-close="{{ t('Close') }}"
+      data-redo-failed="{{ t('It could not be analysed. Try again.') }}">
   <header>
     <a class="brand" href="/">oknowledge</a>
     <form action="/search" method="get" role="search">
