@@ -198,6 +198,7 @@ class Library:
         self._ids: dict[str, Entry] = {}
         self._categories: dict[str, int] = {}
         self._tags: dict[str, int] = {}
+        self._tag_home: dict[str, str] = {}
         self.refresh()
 
     @property
@@ -226,7 +227,7 @@ class Library:
         except OSError as exc:
             self.entries, self.unreadable = [], 0
             self._fingerprint, self._cache, self._ids = None, {}, {}
-            self._categories, self._tags = {}, {}
+            self._categories, self._tags, self._tag_home = {}, {}, {}
             self.error = str(exc)
             return
         entries = [e for _, e in cache.values() if e is not None]
@@ -234,11 +235,16 @@ class Library:
         entries.sort(key=lambda e: (e.note.saved, e.mtime_ns, e.note.title), reverse=True)
         categories: dict[str, int] = {}
         tags: dict[str, int] = {}
+        # Where each tag is used, so the chips can sit beside the ones they
+        # are about instead of in one alphabetical wall.
+        homes: dict[str, dict[str, int]] = {}
         ids: dict[str, Entry] = {}
         for entry in entries:
             categories[entry.note.category] = categories.get(entry.note.category, 0) + 1
             for tag in entry.note.tags:
                 tags[tag] = tags.get(tag, 0) + 1
+                seen = homes.setdefault(tag, {})
+                seen[entry.note.category] = seen.get(entry.note.category, 0) + 1
             ids.setdefault(entry.note.id, entry)
         # Publish everything together, after the work that can fail.
         self.error = None
@@ -247,6 +253,11 @@ class Library:
         self.entries, self._ids = entries, ids
         self._categories = dict(sorted(categories.items()))
         self._tags = dict(sorted(tags.items(), key=lambda kv: (-kv[1], kv[0])))
+        # Most used wins, and the category name breaks a tie: a chip that moved
+        # between groups on every reload, for a reason nobody could see, would
+        # be worse than no grouping at all.
+        self._tag_home = {tag: min(seen, key=lambda name: (-seen[name], name))
+                          for tag, seen in homes.items()}
 
     def entry(self, link_id: str) -> Entry | None:
         return self._ids.get(link_id)
@@ -268,6 +279,10 @@ class Library:
 
     def tags(self) -> dict[str, int]:
         return self._tags
+
+    def tag_home(self) -> dict[str, str]:
+        """The category each tag is most used under."""
+        return self._tag_home
 
     def search(self, query: str, page: int = 1, per_page: int = PER_PAGE
                ) -> tuple[list[Hit], int]:

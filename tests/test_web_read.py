@@ -632,3 +632,89 @@ def test_pulling_a_rare_tag_forward_does_not_push_a_common_one_out(many_tags):
 def test_a_short_tag_row_gets_no_more_at_all(client):
     """Two tags behind a disclosure is a disclosure that hides nothing."""
     assert "<details" not in client.get("/").text
+
+
+def test_a_tag_belongs_to_the_category_it_is_used_in_most(tmp_path):
+    """Half the tags are used under two categories. Each chip is one chip, so
+    it has to sit in one group, and the one it is mostly about is that group."""
+    vault = tmp_path / "vault"
+    (vault / "oknowledge" / "links").mkdir(parents=True)
+    cfg = Config(vault=vault)
+    for n in range(3):
+        write_note(cfg, note(f"r{n}", f"Red {n}", "Redes", ["python"], "x"), "es")
+    write_note(cfg, note("c1", "Cocina 1", "Cocina", ["python"], "x"), "es")
+    rebuild_indexes(cfg, "es")
+    library = web.index.Library(cfg)
+    library.refresh()
+
+    assert library.tag_home()["python"] == "Redes"
+
+
+def test_a_tag_used_evenly_lands_in_the_same_group_every_time(tmp_path):
+    """A tie decided by whichever note was read first would move the chip
+    around between page loads, for no reason the user could ever see."""
+    vault = tmp_path / "vault"
+    (vault / "oknowledge" / "links").mkdir(parents=True)
+    cfg = Config(vault=vault)
+    write_note(cfg, note("z1", "Zeta", "Zeta", ["python"], "x"), "es")
+    write_note(cfg, note("a1", "Alfa", "Alfa", ["python"], "x"), "es")
+    rebuild_indexes(cfg, "es")
+    library = web.index.Library(cfg)
+    library.refresh()
+
+    assert library.tag_home()["python"] == "Alfa"      # by name, not by luck
+
+
+def grouped_fixture(tmp_path):
+    """Three categories, each with its own tags, plus counts that put them in
+    a known order when everything is flattened by use."""
+    vault = tmp_path / "vault"
+    (vault / "oknowledge" / "links").mkdir(parents=True)
+    cfg = Config(vault=vault)
+    plan = {"Redes": [("vpn", 5), ("dns", 3), ("ssh", 1)],
+            "Cocina": [("pan", 4), ("masa", 2)],
+            "Audio": [("mpv", 6), ("flac", 1)]}
+    n = 0
+    for category, tags in plan.items():
+        for tag, count in tags:
+            for _ in range(count):
+                n += 1
+                write_note(cfg, note(f"n{n}", f"Nota {n}", category, [tag], "x"), "es")
+    rebuild_indexes(cfg, "es")
+    return TestClient(create_app(cfg))
+
+
+def test_the_visible_row_keeps_tags_of_a_category_next_to_each_other(tmp_path):
+    """Pegadas, not titled: a title per group turns a one-line row into eight
+    lines, which is the thing that was just fixed."""
+    client = grouped_fixture(tmp_path)
+
+    shown, _ = tag_chips(client.get("/").text)
+
+    # mpv(6) leads Audio, vpn(5) leads Redes, pan(4) leads Cocina.
+    assert shown == ["mpv", "flac", "vpn", "dns", "ssh", "pan", "masa"]
+
+
+def test_the_hidden_half_is_grouped_under_the_category_names(tmp_path):
+    """There is room in a disclosure for the titles there is no room for in
+    the row, and eighty chips without them are a wall again."""
+    client = grouped_fixture(tmp_path)
+    body = client.get("/").text
+
+    assert '<p class="group">Redes</p>' not in body      # nothing hidden yet
+    assert "<details" not in body
+
+
+def test_a_long_tag_list_is_grouped_by_name_inside_the_disclosure(many_tags):
+    body = many_tags.get("/").text
+
+    assert "<details" in body
+    assert '<p class="group">' in body
+
+
+def test_the_disclosure_counts_tags_and_not_groups(many_tags):
+    """The groups inside it are a way of reading the list, not the list: a
+    drawer that says "1 more tags" over eighteen chips is lying about them."""
+    body = many_tags.get("/").text
+
+    assert "18 more tags" in body

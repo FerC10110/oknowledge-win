@@ -12,23 +12,28 @@
            class="chip {% if category == name %}on{% endif %}">{{ name }} <b>{{ count }}</b></a>
       {% endfor %}
     </div>
-    {# The most used tags only. The rest are a click away rather than a screen
-       of chips between the user and their own cards. #}
+    {# The most used tags only, sitting next to the others of their category.
+       The rest are a click away rather than a screen of chips between the
+       user and their own cards, and they get the titles there is no room for
+       up here: a title per group turns this one line into one line each. #}
     <div class="chips tags">
-      {% for name, count in tags.items() %}
+      {% for name, count in tags %}
         <a href="/?tag={{ name|urlencode }}"
            class="chip small {% if tag == name %}on{% endif %}">#{{ name }}</a>
       {% endfor %}
     </div>
-    {% if more_tags %}
+    {% if tag_groups %}
       <details class="more-tags">
-        <summary>{{ t('%1 more tags', more_tags|length) }}</summary>
-        <div class="chips tags">
-          {% for name, count in more_tags.items() %}
-            <a href="/?tag={{ name|urlencode }}"
-               class="chip small {% if tag == name %}on{% endif %}">#{{ name }}</a>
-          {% endfor %}
-        </div>
+        <summary>{{ t('%1 more tags', hidden_tags) }}</summary>
+        {% for group, names in tag_groups.items() %}
+          {% if group %}<p class="group">{{ group }}</p>{% endif %}
+          <div class="chips tags">
+            {% for name, count in names %}
+              <a href="/?tag={{ name|urlencode }}"
+                 class="chip small {% if tag == name %}on{% endif %}">#{{ name }}</a>
+            {% endfor %}
+          </div>
+        {% endfor %}
       </details>
     {% endif %}
     {% if not notes %}<p class="empty">{% if filtered %}{{ t('Nothing in this category') if category else t('Nothing matches that filter') }}{% else %}{{ t('Nothing saved yet') }}{% endif %}</p>{% endif %}

@@ -279,19 +279,40 @@ def see_other(path: str, **params) -> RedirectResponse:
     return RedirectResponse(path + join + query, status_code=303)
 
 
-def tag_chips(tags: dict[str, int], active: str | None) -> tuple[dict, dict]:
-    """(the tags to show at once, the ones to put behind "more").
+def _clustered(tags: dict[str, int], home: dict[str, str]) -> list[tuple[str, int]]:
+    """The same tags, reordered so the ones about the same thing are adjacent.
+
+    Clusters lead with their most used tag and are ordered by it, so the row
+    still opens with the tag the library uses most and nothing jumps about
+    between page loads. No titles: a title per cluster turns a one-line row
+    into one line per category, which is what the shortened row was for.
+    """
+    order: dict[str, list[tuple[str, int]]] = {}
+    for tag, count in tags.items():                 # already most-used first
+        order.setdefault(home.get(tag, ""), []).append((tag, count))
+    return [pair for group in order.values() for pair in group]
+
+
+def tag_chips(tags: dict[str, int], home: dict[str, str], active: str | None
+              ) -> tuple[list[tuple[str, int]], dict[str, list[tuple[str, int]]]]:
+    """(the tags to show at once, the rest grouped under their category).
 
     They arrive most-used first and there is no natural end to them. The one
     being filtered by is always in the first group, whatever its rank: it is
     the only chip that says what the page is filtered by, and a filter that
     hides its own name leaves no way back out of it.
+
+    What is hidden gets the titles the row has no room for -- eighty chips in
+    a drawer, in one run, are the wall this was meant to undo.
     """
-    shown = dict(list(tags.items())[:TAGS_SHOWN])
-    if active in tags and active not in shown:
-        shown[active] = tags[active]
-    rest = {name: count for name, count in tags.items() if name not in shown}
-    return shown, rest
+    first = dict(list(tags.items())[:TAGS_SHOWN])
+    if active in tags and active not in first:
+        first[active] = tags[active]
+    rest: dict[str, list[tuple[str, int]]] = {}
+    for tag, count in tags.items():
+        if tag not in first:
+            rest.setdefault(home.get(tag, ""), []).append((tag, count))
+    return _clustered(first, home), rest
 
 
 def item_url(link_id: str) -> str:
@@ -484,9 +505,10 @@ def create_app(cfg: Config) -> FastAPI:
         number = page_number(request.query_params.get("page", "1"), pages)
         params = {k: v for k, v in (("category", category), ("tag", tag)) if v}
         shown = notes[(number - 1) * PER_PAGE:number * PER_PAGE]
-        first, rest = tag_chips(library.tags(), tag)
+        first, rest = tag_chips(library.tags(), library.tag_home(), tag)
         return page(request, "library.html", notes=shown, category=category, tag=tag,
-                    tags=first, more_tags=rest,
+                    tags=first, tag_groups=rest,
+                    hidden_tags=sum(map(len, rest.values())),
                     filtered=bool(category or tag), **pager("/", params, number, pages))
 
     @app.get("/search", response_class=HTMLResponse)
