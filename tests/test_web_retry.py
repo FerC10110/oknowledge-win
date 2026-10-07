@@ -463,6 +463,26 @@ def test_the_card_s_own_button_is_the_one_that_comes_back(cards, monkeypatch):
     assert answer.headers["location"] == "/?category=Redes&notice=queued"
 
 
+def test_the_card_in_a_collection_comes_back_to_that_collection(cards, monkeypatch):
+    """A collection is a listing like any other, and the whole point of this
+    button is not losing the place you pressed it from."""
+    import re
+
+    monkeypatch.setattr(module, "reanalyze", lambda cfg, url, engine: None)
+    cfg, client = cards
+    client.post("/collections/add", data={"name": "Casa", "id": ["waiting"]})
+
+    body = client.get("/?collection=Casa").text
+    form_html = re.search(r'<form action="([^"]+)"[^>]*class="redo"[^>]*>(.*?)</form>',
+                          body, re.S)
+    assert form_html, "the card rendered no button to press"
+    fields = dict(re.findall(r'name="([^"]+)" value="([^"]*)"', form_html.group(2)))
+
+    answer = client.post(form_html.group(1), data=fields, follow_redirects=False)
+
+    assert answer.headers["location"] == "/?collection=Casa&notice=queued"
+
+
 # --- The same button in the search results, and in the nav --------------------
 
 def test_a_search_hit_for_an_unanalysed_note_offers_to_analyse_it(cards):

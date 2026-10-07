@@ -533,3 +533,69 @@ def test_dropping_survives_a_round_trip_with_awkward_names(tmp_path):
     cfg, _ = video(tmp_path, awkward)
     update_note(cfg, "a1", "es", drop_mention="gone")
     assert find_note(cfg, "a1")[1].mentions == awkward[:2]
+
+
+# --- colecciones: del usuario, y en ningún índice ---------------------------
+
+def test_adding_a_collection_normalizes_it(tmp_path):
+    cfg = make(tmp_path)
+    path = write_note(cfg, note("a1", "WireGuard", "Redes"), "es")
+    update_note(cfg, "a1", "es", add_collection="  Casa   nueva ")
+    assert read_note(path).collections == ["Casa nueva"]
+
+
+def test_a_collections_only_edit_does_not_rebuild_the_indexes(tmp_path, monkeypatch):
+    """No index file in the vault names a collection, so rebuilding the whole
+    library to add one is work nobody asked for -- and adding thirty notes to
+    a project would do it thirty times."""
+    cfg = make(tmp_path)
+    path = write_note(cfg, note("a1", "WireGuard", "Redes"), "es")
+    break_reindex(monkeypatch)
+
+    update_note(cfg, "a1", "es", add_collection="Casa")
+
+    assert read_note(path).collections == ["Casa"]
+
+
+def test_adding_a_collection_keeps_the_ones_the_note_already_had(tmp_path):
+    cfg = make(tmp_path)
+    one = note("a1", "WireGuard", "Redes")
+    one.collections = ["Casa"]
+    path = write_note(cfg, one, "es")
+
+    update_note(cfg, "a1", "es", add_collection="Trabajo")
+
+    assert read_note(path).collections == ["Casa", "Trabajo"]
+
+
+def test_adding_a_collection_a_note_is_already_in_changes_nothing(tmp_path):
+    cfg = make(tmp_path)
+    one = note("a1", "WireGuard", "Redes")
+    one.collections = ["Casa"]
+    path = write_note(cfg, one, "es")
+
+    update_note(cfg, "a1", "es", add_collection="casa")
+
+    assert read_note(path).collections == ["Casa"]
+
+
+def test_dropping_a_collection_leaves_the_others(tmp_path):
+    cfg = make(tmp_path)
+    one = note("a1", "WireGuard", "Redes")
+    one.collections = ["Casa", "Trabajo"]
+    path = write_note(cfg, one, "es")
+
+    update_note(cfg, "a1", "es", drop_collection="Casa")
+
+    assert read_note(path).collections == ["Trabajo"]
+
+
+def test_dropping_a_collection_the_note_is_not_in_leaves_it_alone(tmp_path):
+    cfg = make(tmp_path)
+    one = note("a1", "WireGuard", "Redes")
+    one.collections = ["Casa"]
+    path = write_note(cfg, one, "es")
+
+    update_note(cfg, "a1", "es", drop_collection="Trabajo")
+
+    assert read_note(path).collections == ["Casa"]

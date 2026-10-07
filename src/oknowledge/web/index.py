@@ -125,7 +125,9 @@ def _mention_text(note: Note) -> str:
 
 def _entry(path: Path, note: Note, mtime_ns: int) -> Entry:
     tiers = (
-        "\n".join([note.title, *note.tags]),
+        # The collections share the top tier with the title and the tags:
+        # they are the only words in a note the user chose themselves.
+        "\n".join([note.title, *note.tags, *note.collections]),
         "\n".join([note.category, note.summary, *note.points]),
         # What the video talked about: weaker than the summary, which says what
         # the note IS about, and stronger than one word passing by in a
@@ -199,6 +201,7 @@ class Library:
         self._categories: dict[str, int] = {}
         self._tags: dict[str, int] = {}
         self._tag_home: dict[str, str] = {}
+        self._collections: dict[str, int] = {}
         self.refresh()
 
     @property
@@ -228,6 +231,7 @@ class Library:
             self.entries, self.unreadable = [], 0
             self._fingerprint, self._cache, self._ids = None, {}, {}
             self._categories, self._tags, self._tag_home = {}, {}, {}
+            self._collections = {}
             self.error = str(exc)
             return
         entries = [e for _, e in cache.values() if e is not None]
@@ -238,9 +242,12 @@ class Library:
         # Where each tag is used, so the chips can sit beside the ones they
         # are about instead of in one alphabetical wall.
         homes: dict[str, dict[str, int]] = {}
+        collections: dict[str, int] = {}
         ids: dict[str, Entry] = {}
         for entry in entries:
             categories[entry.note.category] = categories.get(entry.note.category, 0) + 1
+            for name in entry.note.collections:
+                collections[name] = collections.get(name, 0) + 1
             for tag in entry.note.tags:
                 tags[tag] = tags.get(tag, 0) + 1
                 seen = homes.setdefault(tag, {})
@@ -252,6 +259,10 @@ class Library:
         self.unreadable = sum(1 for _, e in cache.values() if e is None)
         self.entries, self._ids = entries, ids
         self._categories = dict(sorted(categories.items()))
+        # By name, like the categories: these are the user's own buckets, and
+        # one that moved every time they filed something would be a bucket
+        # they have to look for.
+        self._collections = dict(sorted(collections.items()))
         self._tags = dict(sorted(tags.items(), key=lambda kv: (-kv[1], kv[0])))
         # Most used wins, and the category name breaks a tie: a chip that moved
         # between groups on every reload, for a reason nobody could see, would
@@ -266,12 +277,15 @@ class Library:
         entry = self.entry(link_id)
         return entry.note if entry else None
 
-    def filter(self, category: str | None = None, tag: str | None = None) -> list[Note]:
+    def filter(self, category: str | None = None, tag: str | None = None,
+               collection: str | None = None) -> list[Note]:
         found = self.notes
         if category:
             found = [n for n in found if n.category == category]
         if tag:
             found = [n for n in found if tag in n.tags]
+        if collection:
+            found = [n for n in found if collection in n.collections]
         return found
 
     def categories(self) -> dict[str, int]:
@@ -279,6 +293,10 @@ class Library:
 
     def tags(self) -> dict[str, int]:
         return self._tags
+
+    def collections(self) -> dict[str, int]:
+        """The user's own groupings, and how many notes each one holds."""
+        return self._collections
 
     def tag_home(self) -> dict[str, str]:
         """The category each tag is most used under."""

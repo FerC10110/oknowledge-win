@@ -16,11 +16,12 @@ from oknowledge.web.app import create_app
 
 
 def note(id, title, category, tags, summary, body=None, saved="2026-10-03",
-         type="article", mentions=None):
+         type="article", mentions=None, collections=()):
     return Note(
         id=id, url=f"https://e.com/{id}", title=title, category=category, tags=list(tags),
         type=type, source="e.com", saved=saved, summary=summary,
         points=["un punto"], body=body, mentions=mentions,
+        collections=list(collections),
     )
 
 
@@ -718,3 +719,84 @@ def test_the_disclosure_counts_tags_and_not_groups(many_tags):
     body = many_tags.get("/").text
 
     assert "18 more tags" in body
+
+
+# --- colecciones -------------------------------------------------------------
+
+@pytest.fixture
+def collected(tmp_path):
+    """Three notes across two categories, two of them in one project."""
+    vault = tmp_path / "vault"
+    (vault / "oknowledge" / "links").mkdir(parents=True)
+    cfg = Config(vault=vault)
+    write_note(cfg, note("a1", "WireGuard", "Redes", ["vpn"], "Un resumen.",
+                         collections=["Casa nueva"]), "es")
+    write_note(cfg, note("b2", "Masa madre", "Cocina", ["pan"], "Otro resumen.",
+                         collections=["Casa nueva", "Leer después"]), "es")
+    write_note(cfg, note("c3", "Hyprland", "Redes", ["vpn"], "Y otro."), "es")
+    rebuild_indexes(cfg, "es")
+    return TestClient(create_app(cfg))
+
+
+def library_of(client):
+    return client.app.state.library
+
+
+def test_the_library_counts_how_many_notes_each_collection_has(collected):
+    assert library_of(collected).collections() == {"Casa nueva": 2, "Leer después": 1}
+
+
+def test_a_library_with_no_collections_has_none(client):
+    assert library_of(client).collections() == {}
+
+
+def test_filtering_by_collection_leaves_the_rest_out(collected):
+    found = library_of(collected).filter(collection="Casa nueva")
+    assert {n.id for n in found} == {"a1", "b2"}
+
+
+def test_a_collection_and_a_category_are_asked_together(collected):
+    found = library_of(collected).filter(category="Redes", collection="Casa nueva")
+    assert [n.id for n in found] == ["a1"]
+
+
+def test_the_page_filters_by_collection(collected):
+    body = collected.get("/?collection=Casa nueva").text
+    assert "WireGuard" in body and "Masa madre" in body
+    assert "Hyprland" not in body
+
+
+def test_searching_a_collection_name_finds_its_notes_first(collected):
+    """The only word in a note the user chose themselves: it outranks a
+    summary that happens to say the same thing."""
+    hits, total = library_of(collected).search("casa")
+    assert total == 2
+    assert {h.note.id for h in hits} == {"a1", "b2"}
+
+
+def test_the_collections_come_back_in_the_same_order_every_time(tmp_path):
+    """Alphabetical, like the categories: a bucket that moves every time you
+    file something into it is a bucket you have to go looking for."""
+    vault = tmp_path / "vault"
+    (vault / "oknowledge" / "links").mkdir(parents=True)
+    cfg = Config(vault=vault)
+    # Written in an order that is not the alphabet, and read back newest
+    # first, so a missing sort would show.
+    for n, names in enumerate([["Casa"], ["Mudanza"], ["Zapatos"]]):
+        write_note(cfg, note(f"n{n}", f"Nota {n}", "Redes", ["x"], "Un resumen.",
+                             collections=names), "es")
+    rebuild_indexes(cfg, "es")
+
+    found = TestClient(create_app(cfg)).app.state.library.collections()
+
+    assert list(found) == ["Casa", "Mudanza", "Zapatos"]
+
+
+def test_a_library_with_no_collections_draws_no_row_for_them(client):
+    """An empty row is still a row: the gap under it is paid by everyone who
+    never uses this."""
+    assert 'class="chips mine"' not in client.get("/").text
+
+
+def test_the_row_is_there_as_soon_as_there_is_one(collected):
+    assert 'class="chips mine"' in collected.get("/").text

@@ -1,16 +1,31 @@
 {% extends "base.html" %}
 {% block title %}{% if query %}{{ query }} - oknowledge{% else %}oknowledge{% endif %}{% endblock %}
-{% block body_class %}{% if notes is not none %}wide{% endif %}{% endblock %}
+{% block body_class %}{% if notes is not none %}wide{% endif %}{% if picking %} picking{% endif %}{% endblock %}
 {% block scripts %}<script src="/static/popup.js" defer></script>
 <script src="/static/redo.js" defer></script>{% endblock %}
 {% block main %}
   {% if notes is not none %}
+    {# The user's own groupings, above the model's: of the three rows this is
+       the one they made on purpose. Nothing at all until there is one. #}
+    {% if collections %}
+      <div class="chips mine">
+        {% for name, count in collections.items() %}
+          <a href="/?collection={{ name|urlencode }}"
+             class="chip {% if collection == name %}on{% endif %}">{{ name }} <b>{{ count }}</b></a>
+        {% endfor %}
+      </div>
+    {% endif %}
     <div class="chips">
-      <a href="/" class="chip {% if not category and not tag %}on{% endif %}">{{ t('All') }}</a>
+      <a href="/" class="chip {% if not category and not tag and not collection %}on{% endif %}">{{ t('All') }}</a>
       {% for name, count in categories.items() %}
         <a href="/?category={{ name|urlencode }}"
            class="chip {% if category == name %}on{% endif %}">{{ name }} <b>{{ count }}</b></a>
       {% endfor %}
+      {# On this row and not on one of its own: a line of its own is vertical
+         space on every page, paid by everyone, for a link most visits never
+         use. #}
+      <a class="pick-mode" href="{% if picking %}{{ cancel_url }}{% else %}{{ pick_url }}{% endif %}"
+         >{{ t('Cancel') if picking else t('Select') }}</a>
     </div>
     {# The most used tags only, sitting next to the others of their category.
        The rest are a click away rather than a screen of chips between the
@@ -44,6 +59,14 @@
            for the original. [data-popup] is picked up by popup.js; the href
            beside it is what happens without JavaScript. #}
         <li class="card{% if note.status != 'ok' %} partial{% endif %}">
+          {% if picking %}
+            {# Tied to the form below by id, not by nesting: the card already
+               holds the reprocess form, and a form inside a form is invalid
+               HTML that every browser undoes differently. #}
+            <label class="pick" title="{{ note.title }}">
+              <input type="checkbox" form="pick" name="id" value="{{ note.id }}">
+            </label>
+          {% endif %}
           {% if note.cover %}
             <a class="shot" href="/item/{{ note.id|slug }}" data-popup="/embed/{{ note.id|slug }}"
                tabindex="-1" aria-hidden="true">
@@ -87,6 +110,7 @@
                 <input type="hidden" name="back" value="library">
                 <input type="hidden" name="category" value="{{ category or '' }}">
                 <input type="hidden" name="tag" value="{{ tag or '' }}">
+                <input type="hidden" name="collection" value="{{ collection or '' }}">
                 <input type="hidden" name="page" value="{{ page }}">
                 {# The glyph is the whole button, so it carries a name for
                    anything that cannot see it, and a title for anyone who
@@ -99,6 +123,31 @@
         </li>
       {% endfor %}
     </ul>
+    {% if picking %}
+      {# After the cards, because it is what you do once you have picked
+         them, and sticky so it is still there at the bottom of a long page. #}
+      <form id="pick" class="bulk" action="/collections/add" method="post">
+        <input type="hidden" name="back" value="library">
+        <input type="hidden" name="category" value="{{ category or '' }}">
+        <input type="hidden" name="tag" value="{{ tag or '' }}">
+        <input type="hidden" name="collection" value="{{ collection or '' }}">
+        <input type="hidden" name="page" value="{{ page }}">
+        <input name="name" list="known-collections" required autocomplete="off"
+               aria-label="{{ t('Collection') }}"
+               placeholder="{{ t('Add to a collection') }}">
+        <datalist id="known-collections">
+          {% for name, count in collections.items() %}<option value="{{ name }}">{% endfor %}
+        </datalist>
+        <button type="submit">{{ t('Add') }}</button>
+        {% if collection %}
+          {# Its own field, not `name`: a submit button's value is sent only
+             when that button is the one pressed, and `name` already belongs
+             to the box next to it. #}
+          <button type="submit" formaction="/collections/remove" formnovalidate
+                  name="leave" value="{{ collection }}">{{ t('Take out of %1', collection) }}</button>
+        {% endif %}
+      </form>
+    {% endif %}
   {% else %}
     {% if not hits %}<p class="empty">{{ t('No results') }}</p>{% endif %}
     <ul class="hits">

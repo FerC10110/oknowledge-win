@@ -23,7 +23,9 @@ from pathlib import Path
 
 import yaml
 
-from .ai.base import MAX_CATEGORY_LENGTH, UNSAFE_IN_A_NAME, normalize_tags
+from .ai.base import (
+    MAX_CATEGORY_LENGTH, UNSAFE_IN_A_NAME, normalize_collections, normalize_tags,
+)
 from .atomic import atomic_write
 from .config import Config
 from .model import Mention, Note
@@ -567,12 +569,20 @@ def _finish(cfg: Config, language: str, done):
 def update_note(cfg: Config, link_id: str, language: str,
                 category: str | None = None, tags=None, mentions=None,
                 drop_mention: str | None = None,
+                add_collection: str | None = None,
+                drop_collection: str | None = None,
                 found: tuple[Path, Note] | None = None) -> Path | None:
     """Change one of our notes' classification and rebuild the indexes.
 
     `mentions` replaces the whole list. `drop_mention` removes the entries of
     that name, inside the same scan, so a caller never has to read the note
     itself (which would cost a second vault scan, and race with a re-analysis).
+
+    `add_collection` and `drop_collection` change one collection, for the same
+    reason `drop_mention` exists: a caller putting thirty notes into a project
+    should not have to read each of them twice.
+    The name arrives already spelled the way the library spells it -- which
+    collections exist is the index's business, not this module's.
 
     `found` is a (path, note) the caller already read, under its own lock, so
     this does not scan the vault a second time. Without it the note is looked up.
@@ -591,6 +601,12 @@ def update_note(cfg: Config, link_id: str, language: str,
         note.tags = normalize_tags(tags)
     if mentions is not None:
         note.mentions = list(mentions)
+    if add_collection:
+        note.collections = normalize_collections([*note.collections, add_collection])
+    if drop_collection:
+        # By the exact name: every button that sends one carries the spelling
+        # the note itself holds.
+        note.collections = [c for c in note.collections if c != drop_collection]
     if drop_mention is not None and note.mentions is not None:
         # `is not None`, not a truthiness test: a note nobody asked has None
         # here, and turning that into [] would tell the backfill this video
@@ -599,8 +615,9 @@ def update_note(cfg: Config, link_id: str, language: str,
     # In place: the name is a function of saved + title, which this never
     # changes, and an unlink here would be a note destroyed by a failed write.
     written = write_note(cfg, note, language, path=path)
-    # A mentions-only change skips the rebuild: no index names a mention, and
-    # rebuilding the whole library on a delete click buys nothing.
+    # A change to mentions or collections skips the rebuild: no index names
+    # either, and rebuilding the whole library on a delete click -- or once
+    # per note while thirty of them join a project -- buys nothing.
     if category is None and tags is None:
         return written
     return _finish(cfg, language, written)

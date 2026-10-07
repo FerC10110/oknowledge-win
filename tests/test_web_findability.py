@@ -16,11 +16,11 @@ from oknowledge.web.index import fold, fold_map
 
 def note(id, title, category="Misc", tags=(), summary="Resumen.", body=None,
          saved="2026-10-03", source="e.com", author=None, url=None, points=("p",),
-         type="article", mentions=None):
+         type="article", mentions=None, collections=()):
     return Note(id=id, url=url or f"https://e.com/{id}", title=title, category=category,
                 tags=list(tags), type=type, source=source, saved=saved,
                 summary=summary, points=list(points), author=author, body=body,
-                mentions=mentions)
+                mentions=mentions, collections=list(collections))
 
 
 def make_cfg(tmp_path):
@@ -162,6 +162,21 @@ def test_a_moved_vault_is_an_error_not_an_empty_library(tmp_path):
     assert "Nothing saved yet" not in response.text
     moved.rename(cfg.vault)
     assert client.get("/").status_code == 200
+
+
+def test_a_vanished_vault_leaves_nothing_behind_to_offer(tmp_path):
+    """Not only the cards: the chips are read out of what was there, and a
+    library that cannot be read has no categories, tags or collections to
+    offer -- least of all as a list to file something into."""
+    cfg, client = app_with(tmp_path, note("n1", "Uno", category="Redes", tags=["vpn"],
+                                          collections=["Casa"]))
+    library = client.app.state.library
+    assert library.collections() == {"Casa": 1}
+
+    cfg.vault.rename(tmp_path / "elsewhere")
+    library.refresh()
+
+    assert (library.categories(), library.tags(), library.collections()) == ({}, {}, {})
 
 
 def test_a_missing_vault_at_startup_is_an_error(tmp_path):

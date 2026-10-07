@@ -9,6 +9,7 @@ preference file other plugins write to.
 
 import json
 import os
+import re
 import tomllib
 from pathlib import Path
 
@@ -39,6 +40,9 @@ WRITE_ROUTES = [
     # Starting a batch of re-analysis. A cross-site POST here would spend the
     # user's model quota, which is the kind of thing an origin check is for.
     ("/retry", {}),
+    ("/collections/add", {"name": "Casa", "id": ["a1"]}),
+    ("/collections/remove", {"name": "Casa", "id": ["a1"]}),
+    ("/item/a1/collections", {"add": "Casa"}),
 ]
 
 
@@ -1230,3 +1234,198 @@ def test_deleting_a_mention_does_not_rebuild_the_indexes(video, monkeypatch):
                         lambda *a, **kw: pytest.fail("rebuilt for nothing"))
 
     client.post("/item/a1/mentions/delete", data={"name": "Railway"})
+
+
+# --- colecciones -------------------------------------------------------------
+
+def collected(client, link_id):
+    return client.get(f"/item/{link_id}").text
+
+
+def test_adding_a_collection_to_several_notes_writes_them_all(setup):
+    cfg, client = setup
+
+    client.post("/collections/add", data={"name": "Casa nueva", "id": ["a1", "b2"]})
+
+    assert find_note(cfg, "a1")[1].collections == ["Casa nueva"]
+    assert find_note(cfg, "b2")[1].collections == ["Casa nueva"]
+
+
+def test_the_form_the_library_draws_is_what_the_route_reads(setup):
+    """Posted field by field out of the rendered HTML: a hidden input dropped
+    from the template has to break a test, not a user's afternoon."""
+    cfg, client = setup
+    body = client.get("/?pick=1&category=Cocina").text
+    action = re.search(r'<form id="pick"[^>]*action="([^"]+)"', body).group(1)
+    fields = dict(re.findall(r'<input type="hidden" name="(\w+)" value="([^"]*)"', body))
+    ids = re.findall(r'<input type="checkbox" form="pick" name="id" value="([^"]+)"', body)
+
+    assert ids == ["b2"]                       # only the notes the filter shows
+    client.post(action, data={**fields, "name": "Casa", "id": ids})
+
+    assert find_note(cfg, "b2")[1].collections == ["Casa"]
+    assert find_note(cfg, "a1")[1].collections == []
+
+
+def test_a_collection_name_that_cleans_to_nothing_is_refused(setup, tmp_path):
+    _, client = setup
+    before = snapshot(tmp_path)
+
+    response = client.post("/collections/add", data={"name": " .. ", "id": ["a1"]},
+                           follow_redirects=False)
+
+    assert "notice=bad-collection" in response.headers["location"]
+    assert snapshot(tmp_path) == before
+
+
+def test_one_note_that_is_gone_does_not_stop_the_others(setup):
+    """Deleted from Obsidian between the page being drawn and the button being
+    pressed. The other twenty-nine still belong in the project."""
+    cfg, client = setup
+
+    response = client.post("/collections/add",
+                           data={"name": "Casa", "id": ["a1", "zzz"]},
+                           follow_redirects=False)
+
+    assert find_note(cfg, "a1")[1].collections == ["Casa"]
+    assert "notice=collect-partial" in response.headers["location"]
+    assert "n=1" in response.headers["location"] and "m=2" in response.headers["location"]
+
+
+def test_adding_with_nothing_selected_says_so_and_writes_nothing(setup, tmp_path):
+    _, client = setup
+    before = snapshot(tmp_path)
+
+    response = client.post("/collections/add", data={"name": "Casa"},
+                           follow_redirects=False)
+
+    assert "notice=nothing-picked" in response.headers["location"]
+    assert snapshot(tmp_path) == before
+
+
+def test_a_name_that_already_exists_keeps_the_spelling_it_has(setup):
+    """Otherwise the user ends up with "Casa" and "casa" side by side, which
+    is the mess this feature exists to undo."""
+    cfg, client = setup
+    client.post("/collections/add", data={"name": "Casa nueva", "id": ["a1"]})
+
+    client.post("/collections/add", data={"name": "casa NUEVA", "id": ["b2"]})
+
+    assert find_note(cfg, "b2")[1].collections == ["Casa nueva"]
+
+
+def test_taking_notes_out_of_a_collection_leaves_the_other_one(setup):
+    cfg, client = setup
+    client.post("/collections/add", data={"name": "Casa", "id": ["a1", "b2"]})
+
+    client.post("/collections/remove", data={"name": "Casa", "id": ["a1"]})
+
+    assert find_note(cfg, "a1")[1].collections == []
+    assert find_note(cfg, "b2")[1].collections == ["Casa"]
+
+
+def test_the_note_page_adds_and_drops_one_collection(setup):
+    cfg, client = setup
+
+    client.post("/item/a1/collections", data={"add": "Casa"})
+    client.post("/item/a1/collections", data={"add": "Trabajo"})
+    client.post("/item/a1/collections", data={"drop": "Casa"})
+
+    assert find_note(cfg, "a1")[1].collections == ["Trabajo"]
+
+
+def test_the_user_lands_back_on_the_listing_they_picked_from(setup):
+    _, client = setup
+
+    response = client.post(
+        "/collections/add",
+        data={"name": "Casa", "id": ["a1"], "back": "library",
+              "category": "Networking", "collection": "Vieja", "page": "3"},
+        follow_redirects=False)
+
+    where = response.headers["location"]
+    assert where.startswith("/?")
+    assert "category=Networking" in where and "collection=Vieja" in where
+    assert "page=3" in where
+
+
+def test_a_bulk_add_does_not_rebuild_the_indexes(setup, monkeypatch):
+    """No index names a collection. Thirty notes joining a project must not
+    rewrite the whole library thirty times."""
+    cfg, client = setup
+    monkeypatch.setattr("oknowledge.vault.rebuild_indexes",
+                        lambda cfg, language: pytest.fail("rebuilt the indexes"))
+
+    client.post("/collections/add", data={"name": "Casa", "id": ["a1", "b2"]})
+
+    assert find_note(cfg, "a1")[1].collections == ["Casa"]
+
+
+def test_the_button_says_which_collection_to_leave(setup):
+    """The box beside it is for joining one; the button is the one pressed,
+    and it carries the collection the page is filtered by."""
+    cfg, client = setup
+    client.post("/collections/add", data={"name": "Casa", "id": ["a1"]})
+    client.post("/collections/add", data={"name": "Trabajo", "id": ["a1"]})
+
+    client.post("/collections/remove",
+                data={"id": ["a1"], "leave": "Casa", "name": "Trabajo"})
+
+    assert find_note(cfg, "a1")[1].collections == ["Trabajo"]
+
+
+def test_the_remove_button_the_page_draws_takes_the_card_out(setup):
+    cfg, client = setup
+    client.post("/collections/add", data={"name": "Casa", "id": ["a1"]})
+    body = client.get("/?pick=1&collection=Casa").text
+    button = re.search(r'formaction="([^"]+)" formnovalidate\s+name="leave" value="([^"]+)"',
+                       body)
+    fields = dict(re.findall(r'<input type="hidden" name="(\w+)" value="([^"]*)"', body))
+
+    answer = client.post(button.group(1), follow_redirects=False,
+                         data={**fields, "leave": button.group(2), "id": ["a1"]})
+
+    assert find_note(cfg, "a1")[1].collections == []
+    # Back to the collection it was pressed in, which the form has to carry.
+    assert answer.headers["location"].startswith("/?collection=Casa&")
+
+
+def test_one_note_gets_a_sentence_and_two_get_a_count(setup):
+    """"1 notas quedaron en la colección" is a sentence a program writes and
+    a person never does."""
+    _, client = setup
+
+    one = client.post("/collections/add", data={"name": "Casa", "id": ["a1"]},
+                      follow_redirects=False)
+    assert "notice=collected-one" in one.headers["location"]
+
+    two = client.post("/collections/add", data={"name": "Trabajo", "id": ["a1", "b2"]},
+                      follow_redirects=False)
+    assert "notice=collected&" in two.headers["location"]
+
+    back = client.post("/collections/remove", data={"name": "Casa", "id": ["a1"]},
+                       follow_redirects=False)
+    assert "notice=uncollected-one" in back.headers["location"]
+
+    both = client.post("/collections/remove", data={"name": "Trabajo", "id": ["a1", "b2"]},
+                       follow_redirects=False)
+    assert "notice=uncollected&" in both.headers["location"]
+
+
+def test_the_note_page_draws_the_two_buttons_it_promises(setup):
+    """Posted out of the rendered page, both ways round: the chip that leaves
+    a collection and the box that joins one are the only way in or out for a
+    single note."""
+    cfg, client = setup
+    body = client.get("/item/a1").text
+    box = re.search(r'<form action="([^"]+)" method="post" class="row">\s*'
+                    r'<input name="(\w+)"[^>]*list="known-collections"', body)
+
+    client.post(box.group(1), data={box.group(2): "Casa"})
+
+    chip = re.search(r'<form action="([^"]+)" method="post">\s*<button[^>]*'
+                     r'name="(\w+)" value="([^"]*)"', client.get("/item/a1").text)
+    assert chip.group(3) == "Casa"
+    client.post(chip.group(1), data={chip.group(2): chip.group(3)})
+
+    assert find_note(cfg, "a1")[1].collections == []

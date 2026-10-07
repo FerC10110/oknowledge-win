@@ -28,6 +28,7 @@ from fastapi.templating import Jinja2Templates
 from starlette.datastructures import Headers
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from ..ai.base import normalize_collections
 from ..config import CONFIG_PATH, CONTENT_MODES, ENGINE_NAMES, MENTION_MODES, Config
 from ..config import save as save_config
 from ..i18n import LANGUAGES, NATIVE_NAMES, set_ui_language, translator, ui_language
@@ -98,6 +99,19 @@ NOTICES = {
     "batch-started": "Analysing. This page comes back on its own; you can close it.",
     "batch-running": "A batch is already running. This page shows how it is going.",
     "nothing-owed": "Every link has been analysed. Nothing to do.",
+    # A collection is never a file name, so the rule is only about a name
+    # that would be nothing at all once the spaces are taken out.
+    "bad-collection": "That name cannot be used as a collection: it has to be "
+                      "something other than spaces, dots and slashes.",
+    "nothing-picked": "No cards were selected, so nothing changed.",
+    "collected-one": "The note was added to the collection.",
+    "collected": "%1 notes added to the collection.",
+    "collect-partial": "%1 of %2 notes added to the collection. The rest could "
+                       "not be written; check the folder and try again.",
+    "uncollected-one": "The note was taken out of the collection.",
+    "uncollected": "%1 notes taken out of the collection.",
+    "uncollect-partial": "%1 of %2 notes taken out of the collection. The rest "
+                         "could not be written; check the folder and try again.",
 }
 
 # How many tag chips the library shows before the rest go behind a disclosure.
@@ -323,7 +337,8 @@ def item_url(link_id: str) -> str:
 RETURNS = {"library": "/", "search": "/search"}
 
 
-def return_url(back: str, category: str, tag: str, query: str, number: str) -> str | None:
+def return_url(back: str, category: str, tag: str, collection: str,
+               query: str, number: str) -> str | None:
     """The listing a card was clicked on, rebuilt rather than echoed.
 
     None means `back` named no listing of ours and the caller should use the
@@ -343,7 +358,8 @@ def return_url(back: str, category: str, tag: str, query: str, number: str) -> s
             return None            # a search with no terms is not a page to return to
         params["q"] = query.strip()[:200]
     else:
-        for name, value in (("category", category), ("tag", tag)):
+        for name, value in (("category", category), ("tag", tag),
+                            ("collection", collection)):
             if value.strip():
                 params[name] = value.strip()[:200]
     if number.isdigit() and int(number) > 1:
@@ -475,11 +491,13 @@ def create_app(cfg: Config) -> FastAPI:
         if library.error is not None:
             return templates.TemplateResponse(
                 request=request, name="error.html", status_code=503,
-                context={**base, "error": library.error, "categories": {}, "tags": {}})
+                context={**base, "error": library.error, "categories": {},
+                         "tags": {}, "collections": {}})
         return templates.TemplateResponse(
             request=request, name=name, status_code=status_code,
             context={**base, "categories": library.categories(), "tags": library.tags(),
-                     **context},
+                     "collections": library.collections(), "collection": None,
+                     "picking": False, **context},
         )
 
     def pager(path: str, params: dict, number: int, pages: int) -> dict:
@@ -498,18 +516,28 @@ def create_app(cfg: Config) -> FastAPI:
         return await http_exception_handler(request, exc)
 
     @app.get("/", response_class=HTMLResponse)
-    def home(request: Request, category: str | None = None, tag: str | None = None):
+    def home(request: Request, category: str | None = None, tag: str | None = None,
+             collection: str | None = None, pick: str | None = None):
         library.refresh()
-        notes = library.filter(category=category, tag=tag)
+        notes = library.filter(category=category, tag=tag, collection=collection)
         pages = -(-len(notes) // PER_PAGE)
         number = page_number(request.query_params.get("page", "1"), pages)
-        params = {k: v for k, v in (("category", category), ("tag", tag)) if v}
+        params = {k: v for k, v in (("category", category), ("tag", tag),
+                                    ("collection", collection)) if v}
         shown = notes[(number - 1) * PER_PAGE:number * PER_PAGE]
         first, rest = tag_chips(library.tags(), library.tag_home(), tag)
+        # Where the two selection links go: the same listing, on the same
+        # page, with the mode turned on or off. Built here because the
+        # template has no business assembling query strings.
+        here = {**params, **({"page": str(number)} if number > 1 else {})}
         return page(request, "library.html", notes=shown, category=category, tag=tag,
-                    tags=first, tag_groups=rest,
+                    collection=collection, picking=pick is not None,
+                    pick_url="/?" + urlencode({**here, "pick": "1"}),
+                    cancel_url="/" + ("?" + urlencode(here) if here else ""),
+                    place=here, tags=first, tag_groups=rest,
                     hidden_tags=sum(map(len, rest.values())),
-                    filtered=bool(category or tag), **pager("/", params, number, pages))
+                    filtered=bool(category or tag or collection),
+                    **pager("/", params, number, pages))
 
     @app.get("/search", response_class=HTMLResponse)
     def search(request: Request, q: str = ""):
@@ -692,7 +720,8 @@ def create_app(cfg: Config) -> FastAPI:
     def reprocess(request: Request, background: BackgroundTasks, link_id: str,
                   engine: str = Form(""), back: str = Form(""),
                   category: str = Form(""), tag: str = Form(""),
-                  q: str = Form(""), page: str = Form("")):
+                  collection: str = Form(""), q: str = Form(""),
+                  page: str = Form("")):
         library.refresh()                 # a note deleted from Obsidian since the
         note = library.by_id(link_id)     # page was drawn must not be rewritten
 
@@ -717,8 +746,81 @@ def create_app(cfg: Config) -> FastAPI:
             # on: there is nothing to redirect it to and nothing to draw. A 204
             # says exactly that, and leaves no browser behaviour to assume.
             return Response(status_code=204)
-        where = return_url(back, category, tag, q, page) or item_url(link_id)
+        where = return_url(back, category, tag, collection, q, page) or item_url(link_id)
         return see_other(where, notice="queued")
+
+    def collect(names, ids: list[str], add: bool, where: str):
+        """Put every picked note into one collection, or take it out of it.
+
+        One note failing does not stop the others: the twenty-nine that are
+        still there belong in the project whatever happened to the thirtieth.
+        The notice says how many of how many, because "saved" over a silent
+        loss is the one answer this project never gives.
+
+        No index is rebuilt. No file in the vault names a collection, so
+        thirty notes joining a project write thirty notes and nothing else.
+        """
+        picked = [one for one in ids if one]
+        if not picked:
+            return see_other(where, notice="nothing-picked")
+        # Spelled the way the library already spells it: which collections
+        # exist is the index's business, and only this layer can ask it.
+        wanted = normalize_collections(names, library.collections())
+        if not wanted:
+            return see_other(where, notice="bad-collection")
+        name = wanted[0]
+        done = 0
+        for link_id in picked:
+            change = (lambda cfg, language, link=link_id: update_note(
+                cfg, link, language,
+                **({"add_collection": name} if add else {"drop_collection": name})))
+            if edit(link_id, change, "saved", "indexes-stale").landed:
+                done += 1
+        kind = "collect" if add else "uncollect"
+        if done == len(picked):
+            notice = f"{kind}ed-one" if done == 1 else f"{kind}ed"
+        else:
+            notice = f"{kind}-partial"
+        return see_other(where, notice=notice, n=done, m=len(picked))
+
+    @app.post("/collections/add")
+    def add_to_collection(name: str = Form(""), id: list[str] = Form([]),
+                          back: str = Form(""), category: str = Form(""),
+                          tag: str = Form(""), collection: str = Form(""),
+                          q: str = Form(""), page: str = Form("")):
+        where = return_url(back, category, tag, collection, q, page) or "/"
+        return collect([name], id, True, where)
+
+    @app.post("/collections/remove")
+    def remove_from_collection(name: str = Form(""), leave: str = Form(""),
+                               id: list[str] = Form([]),
+                               back: str = Form(""), category: str = Form(""),
+                               tag: str = Form(""), collection: str = Form(""),
+                               q: str = Form(""), page: str = Form("")):
+        # `leave` is the button the user pressed, which names the collection
+        # they are looking at. `name` is the box beside it, which is there to
+        # join one; a form made by hand may still use it to say which to leave.
+        where = return_url(back, category, tag, collection, q, page) or "/"
+        return collect([leave or name], id, False, where)
+
+    @app.post("/item/{link_id}/collections")
+    def collections_of(link_id: str, add: str = Form(""), drop: str = Form("")):
+        """One note, one collection at a time: a chip with an x to leave one,
+        a box to join one. No list to re-type, and no separator to invent for
+        names that have spaces in them."""
+        if drop:
+            result = edit(link_id, lambda cfg, language: update_note(
+                cfg, link_id, language, drop_collection=drop), "saved", "indexes-stale")
+        else:
+            wanted = normalize_collections([add], library.collections())
+            if not wanted:
+                return see_other(item_url(link_id), notice="bad-collection")
+            result = edit(link_id, lambda cfg, language: update_note(
+                cfg, link_id, language, add_collection=wanted[0]),
+                "saved", "indexes-stale")
+        if result.notice == MISSING:
+            raise HTTPException(status_code=404, detail="no such link")
+        return see_other(item_url(link_id), notice=result.notice)
 
     @app.get("/categories", response_class=HTMLResponse)
     def category_page(request: Request):

@@ -145,6 +145,37 @@ STRINGS = {
         "Every link has been analysed. Nothing to do.":
             "Todos los links est\u00e1n analizados. No hay nada que hacer.",
 
+        # Las colecciones: lo \u00fanico de una nota que escribe el usuario.
+        "Select": "Seleccionar",
+        "Cancel": "Cancelar",
+        "Add to a collection": "Agregar a una colecci\u00f3n",
+        "Collection": "Colecci\u00f3n",
+        "Add": "Agregar",
+        "Take out of %1": "Sacar de %1",
+        "Leave the collection %1": "Sacar de la colecci\u00f3n %1",
+        "That name cannot be used as a collection: it has to be "
+        "something other than spaces, dots and slashes.":
+            "Ese nombre no sirve como colecci\u00f3n: tiene que ser algo m\u00e1s "
+            "que espacios, puntos y barras.",
+        "No cards were selected, so nothing changed.":
+            "No hab\u00eda ninguna tarjeta elegida, as\u00ed que no cambi\u00f3 nada.",
+        "The note was added to the collection.":
+            "La nota qued\u00f3 en la colecci\u00f3n.",
+        "%1 notes added to the collection.":
+            "%1 notas quedaron en la colecci\u00f3n.",
+        "%1 of %2 notes added to the collection. The rest could "
+        "not be written; check the folder and try again.":
+            "%1 de %2 notas quedaron en la colecci\u00f3n. Las otras no se "
+            "pudieron escribir; revis\u00e1 la carpeta y prob\u00e1 de nuevo.",
+        "The note was taken out of the collection.":
+            "La nota sali\u00f3 de la colecci\u00f3n.",
+        "%1 notes taken out of the collection.":
+            "%1 notas salieron de la colecci\u00f3n.",
+        "%1 of %2 notes taken out of the collection. The rest "
+        "could not be written; check the folder and try again.":
+            "%1 de %2 notas salieron de la colecci\u00f3n. Las otras no se "
+            "pudieron escribir; revis\u00e1 la carpeta y prob\u00e1 de nuevo.",
+
         # Importing a WhatsApp export from the browser.
         "Import a WhatsApp export": "Importar un export de WhatsApp",
         "Turns the links people shared in a chat into notes, "

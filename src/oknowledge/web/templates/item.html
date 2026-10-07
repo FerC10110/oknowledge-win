@@ -6,6 +6,23 @@
       {% if note.status != 'ok' %}<span class="warn">{{ t('Incomplete') }}</span>{% endif %}</p>
     <h1 dir="auto">{{ note.title }}</h1>
     <p class="tags">{% for tag in note.tags %}<a href="/?tag={{ tag|urlencode }}">#{{ tag }}</a>{% endfor %}</p>
+    {% if note.collections %}
+      {# One small form per chip, so leaving a collection is one click and
+         there is no list to re-type -- these names have spaces in them and
+         no separator would be safe. #}
+      <p class="chips mine">
+        {% for name in note.collections %}
+          <span class="chip">
+            <a href="/?collection={{ name|urlencode }}">{{ name }}</a>
+            <form action="/item/{{ note.id|slug }}/collections" method="post">
+              <button type="submit" name="drop" value="{{ name }}"
+                      title="{{ t('Leave the collection %1', name) }}"
+                      aria-label="{{ t('Leave the collection %1', name) }}">×</button>
+            </form>
+          </span>
+        {% endfor %}
+      </p>
+    {% endif %}
     <div class="summary" dir="auto">{{ note.summary }}</div>
     {% if note.points %}
       <h2>{{ t('Key points') }}</h2>
@@ -52,6 +69,15 @@
         <input name="tags" value="{{ note.tags|join(', ') }}"
                aria-label="{{ t('Edit tags') }}">
         <button type="submit">{{ t('Save') }}</button>
+      </form>
+      <form action="/item/{{ note.id|slug }}/collections" method="post" class="row">
+        <input name="add" list="known-collections" autocomplete="off"
+               aria-label="{{ t('Add to a collection') }}"
+               placeholder="{{ t('Add to a collection') }}">
+        <datalist id="known-collections">
+          {% for name, count in collections.items() %}<option value="{{ name }}">{% endfor %}
+        </datalist>
+        <button type="submit">{{ t('Add') }}</button>
       </form>
       <form action="/item/{{ note.id|slug }}/reprocess" method="post" class="row"
             data-ask="{{ t('Re-run the analysis? The title, summary, points, category, tags and mentions are replaced by the new answer.') }}">
