@@ -269,6 +269,29 @@ def test_settings_shows_the_chain_and_both_languages(setup):
     assert "Interface language" in body or "Idioma de la interfaz" in body
 
 
+def test_the_two_language_pickers_offer_the_same_order(setup):
+    """Two adjacent groups, both of them headed "language", had their options in
+    opposite order. Clicking the first of each -- the only sensible thing to do
+    -- set the summary to Spanish and the interface to English, and the page
+    looked right afterwards because each group showed its own choice ticked.
+
+    Rendered rather than read off the template: the order a browser lays out is
+    the rendered one.
+    """
+    import re
+
+    from oknowledge.i18n import LANGUAGES
+
+    _, client = setup
+    page = client.get("/settings").text
+
+    def offered(field):
+        return re.findall(rf'name="{field}"\s+value="([a-z]+)"', page)
+
+    assert offered("language") == list(LANGUAGES)
+    assert offered("ui_language") == offered("language")
+
+
 def test_settings_warns_that_saving_rewrites_the_file(setup):
     """Comments are not the only thing lost: any key load() does not read goes
     too, and the file is the one we tell the user to hand-write."""

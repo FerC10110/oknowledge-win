@@ -16,6 +16,10 @@ from .atomic import atomic_write
 
 SHARED_FILE = Path.home() / ".config" / "omarchy" / "plugin-language.json"
 LANGUAGES = ("en", "es")
+# Each language written in itself, which is how a language picker names them --
+# "Español", never "Spanish". Deliberately not in STRINGS: these are the one
+# piece of interface text that must not change with the interface language.
+NATIVE_NAMES = {"en": "English", "es": "Español"}
 
 STRINGS = {
     "es": {

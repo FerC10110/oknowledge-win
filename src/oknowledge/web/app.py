@@ -29,7 +29,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from ..config import CONFIG_PATH, CONTENT_MODES, ENGINE_NAMES, MENTION_MODES, Config
 from ..config import save as save_config
-from ..i18n import LANGUAGES, set_ui_language, translator, ui_language
+from ..i18n import LANGUAGES, NATIVE_NAMES, set_ui_language, translator, ui_language
 from ..pipeline import add as add_link
 from ..pipeline import icon_path, import_links, is_domain
 from ..queue import Locked, Queue
@@ -642,7 +642,12 @@ def create_app(cfg: Config) -> FastAPI:
         order = [name for name in saved.chain if name in WEB_ENGINES]
         order += [name for name in WEB_ENGINES if name not in order]
         return page(request, "settings.html", cfg=saved, ui=ui_language(),
-                    engines=order, config_path=config_file())
+                    engines=order, config_path=config_file(),
+                    # Both language pickers are built from this one order. They
+                    # used to be written out by hand and had drifted into
+                    # opposite orders, which is a way to pick English while
+                    # meaning Spanish.
+                    languages=LANGUAGES, language_names=NATIVE_NAMES)
 
     @app.post("/settings")
     def save_settings(chain: list[str] = Form([]), language: str = Form(""),

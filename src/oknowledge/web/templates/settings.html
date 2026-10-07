@@ -17,17 +17,22 @@
     {% endfor %}
     <p class="meta">{{ t('The API key is not written here: it goes in config.toml as key_env, or in the environment variable that field names.') }}</p>
 
+    {# Both groups loop over the same order. Written out by hand they had drifted
+       into opposite orders, so clicking the first option of each -- two groups
+       in a row, both headed "language" -- set one to Spanish and the other to
+       English, and each group then showed its own choice ticked, so the page
+       looked right. #}
     <h2>{{ t('Summary language') }}</h2>
-    <label><input type="radio" name="language" value="es"
-                  {% if cfg.language == 'es' %}checked{% endif %}> Español</label>
-    <label><input type="radio" name="language" value="en"
-                  {% if cfg.language == 'en' %}checked{% endif %}> English</label>
+    {% for code in languages %}
+      <label><input type="radio" name="language" value="{{ code }}"
+                    {% if cfg.language == code %}checked{% endif %}> {{ language_names[code] }}</label>
+    {% endfor %}
 
     <h2>{{ t('Interface language') }}</h2>
-    <label><input type="radio" name="ui_language" value="en"
-                  {% if ui == 'en' %}checked{% endif %}> English</label>
-    <label><input type="radio" name="ui_language" value="es"
-                  {% if ui == 'es' %}checked{% endif %}> Español</label>
+    {% for code in languages %}
+      <label><input type="radio" name="ui_language" value="{{ code }}"
+                    {% if ui == code %}checked{% endif %}> {{ language_names[code] }}</label>
+    {% endfor %}
     <p class="meta">{{ t('Shared with my other Omarchy plugins, so this changes all of them at once.') }}</p>
 
     <h2>{{ t('Keep by default') }}</h2>
