@@ -453,6 +453,52 @@ def test_a_search_link_is_marked_and_a_real_one_is_not(video):
     assert page.count('class="mention-search"') == 1
 
 
+def stylesheet() -> str:
+    from pathlib import Path
+
+    import oknowledge.web
+
+    return (Path(oknowledge.web.__file__).parent / "static" / "style.css").read_text()
+
+
+def rules_only() -> str:
+    """The stylesheet without its comments: what the browser acts on."""
+    import re
+
+    return re.sub(r"/\*.*?\*/", "", stylesheet(), flags=re.S)
+
+
+def rule_for(selector: str) -> str:
+    css = stylesheet()
+    start = css.index(selector)
+    return css[css.index("{", start):css.index("}", start)]
+
+
+@pytest.mark.parametrize("selector", [".mentions a", ".empty a"])
+def test_a_link_is_never_left_to_the_browsers_own_colours(selector):
+    """An <a> this stylesheet never claims falls through to the UA's blue and
+    its visited purple: a hue that moves under the reader, over a background
+    chosen here, and painful against the dark one. A mention's link and the
+    one on the not-found page were the last two.
+
+    The underline carries the meaning instead. It is the one signal that does
+    not depend on seeing a particular colour.
+    """
+    block = rule_for(selector)
+
+    assert "color:" in block
+    assert "underline" in block
+
+
+def test_nothing_makes_a_visited_link_look_different():
+    """Hue as the only difference between two states is exactly the cue a
+    colour blind reader cannot use, and it is why these links appeared to
+    change colour on their own. A non-colour :visited cue would be fine, but
+    it would have to be argued for here rather than arrive by accident.
+    """
+    assert ":visited" not in rules_only()
+
+
 def test_a_note_never_asked_shows_no_section(client):
     """The section's own class, not its heading: conftest points the shared
     language file at a path that does not exist, so every test here renders in

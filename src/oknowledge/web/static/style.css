@@ -4,8 +4,13 @@
   --measure: 46rem;
 }
 @media (prefers-color-scheme: dark) {
+  /* A saturated blue at this lightness halates against a near-black
+     background -- the eye focuses blue at a different depth, so the edges
+     glow and reading it is tiring. Dropping the saturation (93% -> 36%)
+     fixes that and still leaves 9.5:1 against the background, well past
+     what the light mode's accent manages. */
   :root { --bg: #15161a; --fg: #e9e9e6; --dim: #9a9a94; --line: #2a2c33;
-          --accent: #8da2fb; --card: #1c1e24; }
+          --accent: #a3b2d4; --card: #1c1e24; }
 }
 * { box-sizing: border-box; }
 body {
@@ -83,6 +88,19 @@ body.wide header form { max-width: 34rem; }
 .mention-search { color: var(--dim); border: 1px dashed var(--line); border-radius: 999px;
                   padding: 0 0.5rem; font-size: 0.75rem; }
 .mention-url { color: var(--dim); font-size: 0.8rem; }
+/* The two links this stylesheet never claimed. An unclaimed <a> takes the
+   browser's own blue and its visited purple: a hue that moves under the
+   reader, over colours chosen here, and that blue against the dark background
+   is painful to read. The underline carries the meaning instead -- the one
+   signal that does not depend on seeing a particular colour -- and the colour
+   stays put, visited or not, because an author rule beats the UA's a:visited.
+   Colour comes back only on hover and focus, where it is a second cue and
+   never the only one. */
+.mentions a, .empty a {
+  color: inherit; text-decoration: underline; text-underline-offset: 0.15em;
+}
+.mentions a:hover, .mentions a:focus-visible,
+.empty a:hover, .empty a:focus-visible { color: var(--accent); }
 .sum { margin: 0 0 0.6rem; font-size: 0.9rem; color: var(--fg); }
 /* The whole summary is here and the card never grows, so this box scrolls
    instead of clamping: the wheel reads the rest. No scrollbar is drawn --
