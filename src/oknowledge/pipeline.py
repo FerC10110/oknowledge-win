@@ -323,6 +323,7 @@ def _partial_note(cfg: Config, link: str, url: str, content: str,
         # an earlier run paid a model call for.
         mentions=(keep.mentions if keep else None),
         mentions_extra=(keep.mentions_extra if keep else []),
+        collections=(keep.collections if keep else []),
     )
 
 
@@ -479,6 +480,7 @@ def _process(cfg: Config, q: Queue, link: str, url: str, mode: str,
         # Not among the things a reprocess says it replaces: what the user
         # typed in the section stays.
         mentions_extra=(existing[1].mentions_extra if existing else []),
+        collections=(existing[1].collections if existing else []),
     )
     return _save(cfg, q, link, url, note, "ok", "", used, target)
 

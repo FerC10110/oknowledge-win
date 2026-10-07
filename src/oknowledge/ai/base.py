@@ -118,6 +118,11 @@ def normalize_tags(tags) -> list[str]:
     return out[:MAX_TAGS]
 
 
+MAX_COLLECTIONS = 16
+"""A note in sixteen projects at once is not being classified any more, and a
+frontmatter that grows without end is a note that one day cannot be read."""
+
+
 UNSAFE_IN_A_NAME = '\\/:*?"<>|'
 """The characters an index file name cannot hold.
 
@@ -144,6 +149,34 @@ def _clean_category(category: str) -> str:
     # The cut can expose a new trailing dot or space, so the last strip is
     # after it, not before.
     return " ".join(spaced.split()).strip(". ")[:MAX_CATEGORY_LENGTH].strip(". ")
+
+
+def normalize_collections(names, known=()) -> list[str]:
+    """The user's collections, cleaned but still in their own words.
+
+    Unlike a tag, nobody but the user ever reads one of these, and nobody but
+    the user ever writes one: "Casa nueva" stays "Casa nueva" instead of
+    becoming `casa-nueva`. It is cleaned the way a category is -- the
+    characters a file name cannot hold become spaces, whitespace collapses --
+    so a collection can earn its own index file later without migrating
+    anything.
+
+    `known` is every collection the library already has. A name that folds to
+    one of them comes back spelled the way it is already spelled: someone who
+    types "casa" meant the "Casa" they made last week, and two chips for one
+    thing is the disorder this feature exists to undo.
+    """
+    canonical = {_fold(_clean_category(str(name))): str(name) for name in known or []}
+    out: dict[str, str] = {}
+    for name in names or []:
+        if not isinstance(name, str):
+            continue
+        clean = _clean_category(name)
+        if not clean:
+            continue
+        folded = _fold(clean)
+        out.setdefault(folded, canonical.get(folded, clean))
+    return list(out.values())[:MAX_COLLECTIONS]
 
 
 def _first_segment(category: str) -> str:

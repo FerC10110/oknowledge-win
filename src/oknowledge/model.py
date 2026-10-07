@@ -44,6 +44,11 @@ class Note:
     difference between None and [] is what makes `oknowledge mentions`
     idempotent -- without it, a video that truly mentions nothing becomes a
     candidate again on every run and spends a model call to find nothing."""
+    collections: list[str] = field(default_factory=list)
+    """The user's own grouping: a project they are working on, a list they are
+    putting together. The only field here nobody but them writes -- the model
+    never proposes one and a re-analysis carries them across untouched, the
+    same promise mentions_extra has."""
     mentions_extra: list[str] = field(default_factory=list)
     """Lines of the mentions section that are not a bullet: a sentence the user
     typed there, a numbered item. Kept verbatim and written back after the

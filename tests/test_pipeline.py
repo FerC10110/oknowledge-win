@@ -29,6 +29,16 @@ ANSWER = json.dumps({
 
 TODAY = dt.datetime.now(dt.timezone.utc).date().isoformat()
 
+# A second analysis that agrees with nothing in the first, so a test can tell
+# a note that was really reprocessed from one that was left alone.
+OTHER_ANSWER = json.dumps({
+    "title": "Pan de masa madre",
+    "summary": "Explica el proceso.",
+    "points": ["Lleva tiempo"],
+    "category": "Cocina",
+    "tags": ["pan"],
+})
+
 PAGE = Extracted(
     title="WireGuard vs OpenVPN | Ars",
     text="WireGuard runs inside the kernel...",
@@ -2298,3 +2308,41 @@ def test_a_candidate_costs_one_vault_scan_not_two(videos, monkeypatch):
 
     # One to list the candidates, one under the lock, handed on to update_note.
     assert len(calls) == 2
+
+
+def test_a_reprocess_keeps_the_collections_the_user_made(cfg, q, monkeypatch):
+    """The reprocess warning lists what it replaces: title, summary, points,
+    category, tags, mentions. A collection is the user's own and is on no
+    such list -- it is the one thing in the note the model never writes."""
+    extraction(monkeypatch, PAGE)
+    no_pictures(monkeypatch)
+    first = add(cfg, "https://arstechnica.com/vpn", queue=q)
+    note = read_note(first.path)
+    note.collections = ["Casa nueva", "Leer después"]
+    write_note(cfg, note, "es", path=first.path)
+
+    # A fresh engine, because FakeEngine copies its replies on every call.
+    again = dataclasses.replace(cfg, engines={"fake": {"replies": [OTHER_ANSWER]}})
+    second = add(again, "https://arstechnica.com/vpn", reprocess=True, queue=q)
+
+    done = read_note(second.path)
+    assert (done.category, done.tags) == ("Cocina", ["pan"])      # really reprocessed
+    assert done.collections == ["Casa nueva", "Leer después"]
+
+
+def test_a_retry_that_fails_again_keeps_the_collections(cfg, q, monkeypatch):
+    """The half-written note a failed retry leaves behind is still the user's
+    note, and losing their project to a 503 loses it for a reason that has
+    nothing to do with them."""
+    extraction(monkeypatch, Unreadable("503"))
+    no_pictures(monkeypatch)
+    first = add(cfg, "https://arstechnica.com/vpn", queue=q)
+    assert first.status == "partial"
+    note = read_note(first.path)
+    note.collections = ["Casa nueva"]
+    write_note(cfg, note, "es", path=first.path)
+
+    second = retry(cfg, queue=q)[0]
+
+    assert second.status == "partial"                             # rewritten, not skipped
+    assert read_note(second.path).collections == ["Casa nueva"]

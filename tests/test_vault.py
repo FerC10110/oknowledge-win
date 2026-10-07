@@ -510,3 +510,43 @@ def test_a_repeated_mentions_heading_accumulates(tmp_path):
                          "## Menciones\n\n- [b](https://b.x)\n")
 
     assert [m.name for m in read_note(path).mentions] == ["a", "b"]
+
+
+# --- colecciones: el único campo que es del usuario y no del modelo ----------
+
+def test_the_collections_of_a_note_survive_the_round_trip(tmp_path):
+    cfg = make_config(tmp_path)
+    note = make_note(collections=["Casa nueva", "Leer después"])
+    path = write_note(cfg, note, "es")
+
+    assert read_note(path) == note
+
+
+def test_collections_are_written_next_to_the_tags(tmp_path):
+    """They are the other way of classifying a note, so they read together."""
+    cfg = make_config(tmp_path)
+    text = write_note(cfg, make_note(collections=["Casa"]), "es").read_text()
+    head = text.split("---")[1]
+
+    assert head.index("tags:") < head.index("collections:") < head.index("type:")
+
+
+def test_a_note_in_no_collection_writes_no_key(tmp_path):
+    """An empty list in every one of a thousand notes says nothing and is a
+    thousand lines of frontmatter to scroll past."""
+    cfg = make_config(tmp_path)
+    path = write_note(cfg, make_note(), "es")
+
+    assert "collections" not in path.read_text()
+    assert read_front(path).get("collections") is None
+    assert read_note(path).collections == []
+
+
+def test_collections_that_are_not_a_list_make_the_note_unreadable(tmp_path):
+    """The same answer `tags` gives: a frontmatter broken by hand is worth
+    seeing, not worth guessing at."""
+    cfg = make_config(tmp_path)
+    path = write_note(cfg, make_note(collections=["Casa"]), "es")
+    path.write_text(path.read_text().replace("collections:\n- Casa", "collections: Casa"))
+
+    assert read_note(path) is None

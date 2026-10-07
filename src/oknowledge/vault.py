@@ -40,8 +40,8 @@ HEADINGS = {
 }
 
 FRONTMATTER_ORDER = (
-    "url", "title", "category", "tags", "type", "source", "author",
-    "published", "saved", "cover", "content", "status", "id", MARKER,
+    "url", "title", "category", "tags", "collections", "type", "source",
+    "author", "published", "saved", "cover", "content", "status", "id", MARKER,
 )
 
 
@@ -93,6 +93,10 @@ def render(note: Note, language: str) -> str:
         "title": note.title,
         "category": note.category,
         "tags": list(note.tags),
+        # None rather than []: FRONTMATTER_ORDER drops what is None, and a
+        # thousand notes that are in no collection should not each carry a
+        # line saying so.
+        "collections": list(note.collections) or None,
         "type": note.type,
         "source": note.source,
         "author": note.author,
@@ -254,7 +258,8 @@ def read_note(path: Path) -> Note | None:
     if not all(isinstance(required[k], str) for k in _REQUIRED_TEXT):
         return None
     tags = front.get("tags") or []
-    if not isinstance(tags, list):
+    collections = front.get("collections") or []
+    if not isinstance(tags, list) or not isinstance(collections, list):
         return None
     for key in ("author", "cover"):
         if front.get(key) is not None and not isinstance(front[key], str):
@@ -266,6 +271,7 @@ def read_note(path: Path) -> Note | None:
         title=required["title"],
         category=required["category"],
         tags=[str(t) for t in tags],
+        collections=[str(c) for c in collections],
         type=required["type"],
         source=required["source"],
         saved=str(required["saved"]),

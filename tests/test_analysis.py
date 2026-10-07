@@ -5,7 +5,8 @@ import pytest
 
 from oknowledge.ai.base import (
     DEFAULT_LIMIT, TRUNCATION_MARKER, Analysis, AnalysisError, EngineError, analyze,
-    MAX_MENTION_NAME, MAX_MENTIONS, canonical_category, extract_json, normalize_tags,
+    MAX_MENTION_NAME, MAX_MENTIONS, canonical_category, extract_json,
+    normalize_collections, normalize_tags,
     mentions_only, render_mentions_prompt, render_prompt, retry_suffix, sent_text,
     to_mentions,
 )
@@ -846,3 +847,37 @@ def test_prose_punctuation_is_not_part_of_a_kept_url(said, returned, kept):
     got = to_mentions({"mentions": [{"name": "Foo", "url": returned}]}, said)
 
     assert got == [Mention(name="Foo", url=kept)]
+
+
+# --- colecciones: las escribe el usuario, no el modelo -----------------------
+
+def test_a_collection_keeps_the_words_the_user_typed():
+    """Not a tag: "casa-nueva" is not what anyone types into a box, and this
+    name is only ever read by the person who wrote it."""
+    assert normalize_collections(["  Casa   nueva  "]) == ["Casa nueva"]
+
+
+def test_a_collection_that_already_exists_keeps_its_spelling():
+    assert normalize_collections(["casa"], ["Casa", "Trabajo"]) == ["Casa"]
+    assert normalize_collections(["LEER DESPUES"], ["Leer después"]) == ["Leer después"]
+
+
+def test_the_same_collection_twice_in_one_list_is_one():
+    assert normalize_collections(["Casa", "casa", "CASA"]) == ["Casa"]
+
+
+def test_what_a_name_cannot_hold_becomes_a_space():
+    assert normalize_collections(["Proyecto/oknowledge"]) == ["Proyecto oknowledge"]
+    assert normalize_collections(["a\x00b"]) == ["a b"]
+
+
+def test_a_collection_that_cleans_to_nothing_is_dropped():
+    assert normalize_collections(["", "   ", "..", "/", None, "Casa"]) == ["Casa"]
+
+
+def test_a_very_long_collection_is_cut():
+    assert len(normalize_collections(["x" * 200])[0]) == 80
+
+
+def test_collections_are_capped_at_sixteen():
+    assert len(normalize_collections([f"Proyecto {i}" for i in range(40)])) == 16
