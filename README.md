@@ -131,6 +131,14 @@ domain, and the messages that looked like they had a link and did not match.
 The second group is where a false positive would be; the third is where a
 missed link would be.
 
+**From the browser:** Settings → Import a WhatsApp export. It takes the `.zip`
+WhatsApp gives you or the `.txt` inside it, and there the dry run is not
+optional: choosing the file shows what it found and writes nothing until you
+press the button. It says how it read the dates and lists every bare domain,
+which are the two things a written note no longer shows. The upload is held
+in `~/.local/state/oknowledge/import/` between the two steps and deleted when
+you confirm; one nobody confirmed is swept an hour later.
+
 Saving the same link twice gives one note (`already saved`). Pasting a link
 whose note is `partial` finishes it instead.
 
@@ -209,8 +217,8 @@ queue. The rule the project is built around is that a link is never lost.
 to stderr and, with `--open`, opens the browser. Screens: Library (cards, filter
 by category and tag), Search (title, summary, points, tags, what a video
 mentioned and full text, with the matching fragment), Item (change category, edit tags, reprocess, delete),
-Categories (rename and merge, rewriting the affected notes and indexes) and
-Settings.
+Categories (rename and merge, rewriting the affected notes and indexes),
+Import (a WhatsApp export, previewed before it is written) and Settings.
 
 - It shuts itself down after `idle_timeout` seconds without requests (default
   900; `0` means never). The watchdog polls every 5 seconds, so the shutdown

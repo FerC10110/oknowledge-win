@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import NamedTuple
 from urllib.parse import quote, urlencode
 
-from fastapi import BackgroundTasks, FastAPI, Form, HTTPException, Request
+from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.exception_handlers import http_exception_handler
 from fastapi.responses import (
     FileResponse, HTMLResponse, PlainTextResponse, RedirectResponse, Response,
@@ -31,13 +31,15 @@ from ..config import CONFIG_PATH, CONTENT_MODES, ENGINE_NAMES, MENTION_MODES, Co
 from ..config import save as save_config
 from ..i18n import LANGUAGES, set_ui_language, translator, ui_language
 from ..pipeline import add as add_link
-from ..pipeline import icon_path, is_domain
+from ..pipeline import icon_path, import_links, is_domain
 from ..queue import Locked, Queue
-from ..urls import is_search_url
+from ..urls import is_search_url, link_id, normalize
 from ..vault import (
     BadCategory, IndexesStale, ProtectedNote, clean_category, delete_note,
     rename_category, update_note,
 )
+from ..whatsapp import BadExport, parse as parse_export
+from .import_file import BadUpload, drop, stage, staged, text_of
 from .index import PER_PAGE, Library, read_full, terms
 
 WEB = files("oknowledge").joinpath("web")
@@ -206,6 +208,45 @@ def count(request: Request, key: str) -> int:
 def notice_for(request: Request, t) -> str | None:
     text = NOTICES.get(request.query_params.get("notice", ""))
     return None if text is None else t(text, count(request, "n"), count(request, "m"))
+
+
+def preview_of(scan, known: set[str]) -> dict:
+    """What the preview page shows about a parsed export, before anything is written.
+
+    `new` counts the way import_links() counts, by calling the same two
+    functions it calls: unique on link_id(normalize(url)), minus what the vault
+    already holds. It is an upper bound and the page says so -- a link another
+    process is holding this second gets written by neither of us, and only
+    import_links() can find that out, by trying.
+    """
+    ids: dict[str, object] = {}
+    unusable = 0
+    for one in scan.links:
+        clean = normalize(one.url)
+        if not clean:
+            unusable += 1
+            continue
+        ids.setdefault(link_id(clean), one)
+    already = sum(1 for link in ids if link in known)
+    dates = sorted(one.sent for one in scan.links)
+    return {
+        "links": len(scan.links),
+        "messages": scan.messages,
+        "first": dates[0] if dates else "",
+        "last": dates[-1] if dates else "",
+        # Said in the same words as the CLI, so the two reports read alike.
+        "order": "day/month" if scan.day_first else "month/day",
+        "assumed": scan.assumed,
+        "new": len(ids) - already,
+        "already": already,
+        "repeated": len(scan.links) - unusable - len(ids),
+        "unusable": unusable,
+        # The whole list, not a count: a sentence ending in a word that happens
+        # to be a TLD looks exactly like a domain, and seeing them before the
+        # write is the reason this preview exists.
+        "bare": [one for one in scan.links if one.bare],
+        "suspicious": scan.suspicious,
+    }
 
 
 def see_other(path: str, **params) -> RedirectResponse:
@@ -649,6 +690,60 @@ def create_app(cfg: Config) -> FastAPI:
             log.warning("the shared language file could not be written: %s", error)
             return see_other("/settings", notice="language-not-saved")
         return see_other("/settings", notice="saved")
+
+    # --- importing a WhatsApp export ---------------------------------------
+    #
+    # Two requests. The first reads the file and writes nothing; the second
+    # writes. The text crosses between them through import_file's staging
+    # folder, named by a token, because the file itself cannot: a browser will
+    # not re-send one, and the alternative is making the user pick it twice.
+
+    @app.get("/import", response_class=HTMLResponse)
+    def import_page(request: Request):
+        return page(request, "import.html")
+
+    @app.post("/import", response_class=HTMLResponse)
+    async def import_preview(request: Request, file: UploadFile = File(...)):
+        """Say what the export holds. This route writes no note, by construction:
+        it calls nothing that can."""
+        try:
+            text = text_of(await file.read())
+            scan = parse_export(text)
+        except (BadUpload, BadExport) as error:
+            return page(request, "import.html", status_code=400, problem=str(error))
+        # This route reads notes -- to say how many of these links the library
+        # already holds -- so it refreshes first, like every other route that
+        # does. Without it a second import of the same file offers to write
+        # every link again.
+        library.refresh()
+        return page(request, "import.html", token=stage(text),
+                    preview=preview_of(scan, {note.id for note in library.notes}))
+
+    @app.post("/import/confirm", response_class=HTMLResponse)
+    def import_confirm(request: Request, token: str = Form("")):
+        """Write the staged export. The browser sends back the token and nothing
+        else, so what is written is what the preview parsed and not what a form
+        says it was."""
+        text = staged(token)
+        if text is None:
+            # A refresh re-posts this form, and the upload is gone by then.
+            # Saying so is what stops a second copy of every note.
+            t = translator(ui_language())
+            return page(request, "import.html", status_code=400,
+                        problem=t("That upload is no longer here. "
+                                  "Choose the file again."))
+        try:
+            scan = parse_export(text)
+        except BadExport as error:          # unreachable: the preview parsed it
+            drop(token)
+            return page(request, "import.html", status_code=400, problem=str(error))
+        result = import_links(current["cfg"], scan.links)
+        drop(token)
+        # No library.refresh() here, unlike every route that reads notes: this
+        # page lists none, and the next request refreshes on its way in. Doing
+        # it here would re-parse all 1179 new notes at the end of the slowest
+        # request in the app, for a page that does not look at them.
+        return page(request, "import.html", result=result)
 
     app.state.library = library
     app.state.cfg = cfg               # the vault config: paths never change here

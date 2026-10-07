@@ -98,6 +98,61 @@ STRINGS = {
         # is the badge on a mention whose link is a search. Case is the difference.
         "search": "búsqueda",
         "Remove": "Quitar",
+
+        # Importing a WhatsApp export from the browser.
+        "Import a WhatsApp export": "Importar un export de WhatsApp",
+        "Turns the links people shared in a chat into notes, "
+        "with the date each one was sent.":
+            "Convierte en notas los links que compartieron en un chat, "
+            "con la fecha en que se mandó cada uno.",
+        "In WhatsApp: open the chat, Export chat, Without media. "
+        "Give it the .zip or the .txt inside it.":
+            "En WhatsApp: abrí el chat, Exportar chat, Sin archivos. "
+            "Dale el .zip o el .txt que tiene adentro.",
+        "The export file": "El archivo del export",
+        "Read it": "Leerlo",
+        "This only reads the file and shows what it found. "
+        "Nothing is written until you say so.":
+            "Esto solo lee el archivo y muestra lo que encontró. "
+            "No se escribe nada hasta que lo digas.",
+        "Nothing is written yet": "Todavía no se escribió nada",
+        "%1 links in %2 messages, %3 to %4.":
+            "%1 links en %2 mensajes, del %3 al %4.",
+        "Dates read as %1.": "Fechas leídas como %1.",
+        "assumed": "asumido",
+        "Up to %1 new notes. %2 were repeated in the chat, "
+        "%3 are already in your library.":
+            "Hasta %1 notas nuevas. %2 están repetidos en el chat "
+            "y %3 ya están en tu biblioteca.",
+        "%1 could not be read as a URL and will be reported, not written.":
+            "%1 no se pudieron leer como URL: se reportan, no se escriben.",
+        "Written without http:// \u2014 check these":
+            "Escritos sin http:// \u2014 revisá estos",
+        "A sentence that ends in a word which happens to be a domain ending "
+        "looks exactly like a domain. These are the ones to read before importing.":
+            "Una frase que termina en una palabra que casualmente es una "
+            "terminación de dominio se ve igual que un dominio. Estos son los "
+            "que conviene leer antes de importar.",
+        "Looked like a link and was not": "Parecían un link y no lo eran",
+        "Nothing here is imported. It is listed so you can see what was skipped.":
+            "Nada de esto se importa. Está listado para que veas qué se salteó.",
+        "Writing a thousand notes takes a few seconds. The page waits for it.":
+            "Escribir mil notas tarda unos segundos. La página espera.",
+        "Import %1 links": "Importar %1 links",
+        "Choose another file": "Elegir otro archivo",
+        "That upload is no longer here. Choose the file again.":
+            "Ese archivo ya no está. Elegí el archivo de nuevo.",
+        "Imported": "Importado",
+        "%1 of %2 links are now notes. %3 were repeated in the chat "
+        "and %4 were already in your library.":
+            "%1 de %2 links ya son notas. %3 estaban repetidos en el chat "
+            "y %4 ya estaban en tu biblioteca.",
+        "Not imported": "Sin importar",
+        "The notes are saved but not analysed yet: each one needs a model call. "
+        "Run `oknowledge retry` when you want that to happen.":
+            "Las notas están guardadas pero todavía sin analizar: cada una "
+            "necesita una llamada al modelo. Corré `oknowledge retry` cuando "
+            "quieras que pase.",
         "%1 notes moved, %2 could not be written. "
         "Check the folder and try again.":
             "Se movieron %1 notas; %2 no se pudieron escribir. "

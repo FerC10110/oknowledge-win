@@ -46,4 +46,10 @@
 
     <p><button type="submit" class="button">{{ t('Save') }}</button></p>
   </form>
+
+  {# Outside the settings form on purpose: it is an action, not a preference,
+     and nesting a second form inside this one is not legal HTML anyway. #}
+  <h2>{{ t('Import a WhatsApp export') }}</h2>
+  <p class="meta">{{ t('Turns the links people shared in a chat into notes, with the date each one was sent.') }}</p>
+  <p><a class="button" href="/import">{{ t('Import a WhatsApp export') }}</a></p>
 {% endblock %}

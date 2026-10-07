@@ -189,3 +189,15 @@ button { cursor: pointer; }
 /* .actions is hidden until hover on the note page; in here it is the way out. */
 .embed .actions { display: flex; flex-wrap: wrap; gap: 0.6rem; margin-top: 1.5rem;
                   border: 0; opacity: 1; }
+
+/* The import page. A long URL and a two-thousand-character message both go in
+   these lists, so they wrap instead of widening the page. The bullets stay:
+   the bare list is one to read down and check, item by item. Added after the
+   rule above rather than beside it, because a test reads the first
+   overflow-wrap block to pin which selectors it covers. */
+.import-bare, .import-skipped, .import-failed {
+  padding-left: 1.2rem; overflow-wrap: anywhere;
+}
+.import-skipped li, .import-failed li { color: var(--dim); font-size: 0.9rem; }
+.import-preview h3, .import-result h3 { margin-bottom: 0.2rem; }
+.import-preview input[type="file"] { font: inherit; }

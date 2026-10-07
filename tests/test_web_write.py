@@ -32,6 +32,10 @@ WRITE_ROUTES = [
     ("/categories/rename", {"old": "Networking", "new": "Redes"}),
     ("/settings", {"chain": ["ollama"], "language": "en",
                    "default_content": "summary", "ui_language": "es"}),
+    # The two import routes. The origin check runs before routing, so a
+    # cross-site POST here is refused without the file these would need.
+    ("/import", {}),
+    ("/import/confirm", {"token": "0" * 32}),
 ]
 
 
