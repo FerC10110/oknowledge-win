@@ -277,23 +277,37 @@ def item_url(link_id: str) -> str:
     return "/item/" + quote(link_id, safe="")
 
 
-def listing_url(category: str, tag: str, number: str) -> str:
-    """The library view a card was clicked on, rebuilt rather than echoed.
+# The two listings a card's button may send the user back to, and no others.
+RETURNS = {"library": "/", "search": "/search"}
 
-    The path is always "/" and the query is built here out of the three things
-    the library route understands, so a form made by hand can send the user
-    back to this app's own library and to nowhere else at all. A page that is
-    not a page number is dropped: a wrong number costs the user their place,
-    and page 1 needs no number anyway.
+
+def return_url(back: str, category: str, tag: str, query: str, number: str) -> str | None:
+    """The listing a card was clicked on, rebuilt rather than echoed.
+
+    None means `back` named no listing of ours and the caller should use the
+    note's own page. The path comes out of RETURNS and the query is built here
+    out of what those two routes understand, so a form made by hand can land
+    the user on one of these pages and on nowhere else at all.
+
+    A page that is not a page number is dropped: a wrong number costs the user
+    their place, and page 1 needs no number anyway.
     """
+    path = RETURNS.get(back)
+    if path is None:
+        return None
     params = {}
-    for name, value in (("category", category), ("tag", tag)):
-        if value.strip():
-            params[name] = value.strip()[:200]
+    if path == "/search":
+        if not query.strip():
+            return None            # a search with no terms is not a page to return to
+        params["q"] = query.strip()[:200]
+    else:
+        for name, value in (("category", category), ("tag", tag)):
+            if value.strip():
+                params[name] = value.strip()[:200]
     if number.isdigit() and int(number) > 1:
         params["page"] = number
-    query = urlencode(params)
-    return "/" + ("?" + query if query else "")
+    rest = urlencode(params)
+    return path + ("?" + rest if rest else "")
 
 
 def batch_size(raw: str, saved: int) -> int:
@@ -411,7 +425,11 @@ def create_app(cfg: Config) -> FastAPI:
         base = {"t": t, "lang": language, "query": "",
                 "unreadable": library.unreadable, "links_dir": cfg.links_dir,
                 "heading": None, "prev_url": None, "next_url": None,
-                "page": 1, "pages": 1, "notice": notice_for(request, t)}
+                "page": 1, "pages": 1, "notice": notice_for(request, t),
+                # On every page, because the link to the batch is in the nav
+                # and it says there how far along a run is. It is a read of
+                # memory, not of the queue: no page pays for it.
+                "batch": progress.snapshot()}
         if library.error is not None:
             return templates.TemplateResponse(
                 request=request, name="error.html", status_code=503,
@@ -628,7 +646,7 @@ def create_app(cfg: Config) -> FastAPI:
     @app.post("/item/{link_id}/reprocess")
     def reprocess(background: BackgroundTasks, link_id: str, engine: str = Form(""),
                   back: str = Form(""), category: str = Form(""),
-                  tag: str = Form(""), page: str = Form("")):
+                  tag: str = Form(""), q: str = Form(""), page: str = Form("")):
         library.refresh()                 # a note deleted from Obsidian since the
         note = library.by_id(link_id)     # page was drawn must not be rewritten
 
@@ -639,10 +657,10 @@ def create_app(cfg: Config) -> FastAPI:
             raise HTTPException(status_code=400, detail="unknown engine")
         # After the response, not before it: see reanalyze().
         background.add_task(reanalyze, current["cfg"], note.url, name)
-        # Two destinations and no third: the note's own page, or the library
-        # view the card was on. Anything else in `back` means the note page.
-        where = (listing_url(category, tag, page) if back == "library"
-                 else item_url(link_id))
+        # Three destinations and no fourth: the listing the card was on --
+        # the library or the search results -- or else the note's own page,
+        # which is where the button on that page sends you back to.
+        where = return_url(back, category, tag, q, page) or item_url(link_id)
         return see_other(where, notice="queued")
 
     @app.get("/categories", response_class=HTMLResponse)
@@ -773,8 +791,8 @@ def create_app(cfg: Config) -> FastAPI:
     def retry_page(request: Request):
         live = current["cfg"]
         waiting = len(owed(Queue())[0])
-        return page(request, "retry.html", batch=progress.snapshot(),
-                    owed=waiting, size=min(live.batch, waiting), refresh=REFRESH)
+        return page(request, "retry.html", owed=waiting,
+                    size=min(live.batch, waiting), refresh=REFRESH)
 
     @app.post("/retry")
     def start_batch(background: BackgroundTasks):

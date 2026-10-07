@@ -218,7 +218,19 @@ progress::-moz-progress-bar { background: var(--accent); }
 .batch-running .meta { margin-top: 0.6rem; }
 .batch-problem { margin-bottom: 1rem; }
 
-/* Pinned to the bottom of the card so it lines up across a row, whatever the
-   summary above it is doing. */
-.card .redo { margin: 0.4rem 0 0; }
-.card .redo button { font-size: 0.85rem; padding: 0.25rem 0.6rem; }
+/* The glyph is the whole button, so it gets no border to compete with it: on a
+   card it sits under the summary, on a search hit it rides in the corner of the
+   row -- out of the way of a result the user is reading down. The emoji keeps
+   its own colours, which is why nothing here sets one. */
+.redo { margin: 0; }
+.redo button { background: none; border: 0; padding: 0.15rem 0.3rem;
+               font-size: 1.05rem; line-height: 1; border-radius: 8px; }
+.redo button:hover, .redo button:focus-visible { background: var(--line); }
+.card .redo { margin-top: 0.4rem; }
+.hits li { position: relative; }
+.hits .redo { position: absolute; top: 0.9rem; right: 0; }
+/* Room for the button, so a long title never runs under it. */
+.hits a { padding-right: 2.2rem; }
+
+/* How far a running batch has got, in the nav, on every page. */
+header nav b { font-weight: 600; font-variant-numeric: tabular-nums; }

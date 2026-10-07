@@ -68,7 +68,11 @@
                 <input type="hidden" name="category" value="{{ category or '' }}">
                 <input type="hidden" name="tag" value="{{ tag or '' }}">
                 <input type="hidden" name="page" value="{{ page }}">
-                <button type="submit">{{ t('Analyse it') }}</button>
+                {# The glyph is the whole button, so it carries a name for
+                   anything that cannot see it, and a title for anyone who
+                   does not know what it means yet. #}
+                <button type="submit" title="{{ t('Analyse it') }}"
+                        aria-label="{{ t('Analyse it') }}">🔄</button>
               </form>
             {% endif %}
           </div>
@@ -85,6 +89,17 @@
             <p class="meta"><span class="cat">{{ hit.note.category }}</span> · {{ hit.note.saved }}</p>
             <p class="snippet" dir="auto">{{ hit.snippet }}</p>
           </a>
+          {% if hit.note.status != 'ok' %}
+            {# Beside the link and not inside it: a form inside an <a> is not
+               legal HTML, and this whole row is one link. #}
+            <form action="/item/{{ hit.note.id|slug }}/reprocess" method="post" class="redo">
+              <input type="hidden" name="back" value="search">
+              <input type="hidden" name="q" value="{{ query }}">
+              <input type="hidden" name="page" value="{{ page }}">
+              <button type="submit" title="{{ t('Analyse it') }}"
+                      aria-label="{{ t('Analyse it') }}">🔄</button>
+            </form>
+          {% endif %}
         </li>
       {% endfor %}
     </ul>

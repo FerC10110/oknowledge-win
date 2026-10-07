@@ -456,3 +456,95 @@ def test_the_card_s_own_button_is_the_one_that_comes_back(cards, monkeypatch):
     answer = client.post(form_html.group(1), data=fields, follow_redirects=False)
 
     assert answer.headers["location"] == "/?category=Redes&notice=queued"
+
+
+# --- The same button in the search results, and in the nav --------------------
+
+def test_a_search_hit_for_an_unanalysed_note_offers_to_analyse_it(cards):
+    """Searching is how a link is found again, so it is also where the user
+    notices the note was never analysed."""
+    cfg, client = cards
+
+    body = client.get("/search?q=Twaiting").text
+
+    assert 'action="/item/waiting/reprocess"' in body
+
+
+def test_a_search_hit_for_an_analysed_note_offers_nothing(cards):
+    cfg, client = cards
+
+    body = client.get("/search?q=Tdone").text
+
+    assert 'action="/item/done/reprocess"' not in body
+
+
+def test_the_hit_s_own_button_comes_back_to_the_same_search(cards, monkeypatch):
+    """Posted with the fields the page renders: landing on the library, or on
+    the note, loses the search the user had to type."""
+    import re
+
+    monkeypatch.setattr(module, "reanalyze", lambda cfg, url, engine: None)
+    cfg, client = cards
+
+    body = client.get("/search?q=Twaiting").text
+    form_html = re.search(r'<form action="([^"]+)"[^>]*class="redo">(.*?)</form>',
+                          body, re.S)
+    assert form_html, "the hit rendered no button to press"
+    fields = dict(re.findall(r'name="([^"]+)" value="([^"]*)"', form_html.group(2)))
+
+    answer = client.post(form_html.group(1), data=fields, follow_redirects=False)
+
+    assert answer.headers["location"] == "/search?q=Twaiting&notice=queued"
+
+
+def test_a_search_with_nothing_to_search_for_is_not_a_destination(cards, monkeypatch):
+    """/search with no terms redirects to the library, so sending the user
+    there would bounce them somewhere they never were."""
+    monkeypatch.setattr(module, "reanalyze", lambda cfg, url, engine: None)
+    cfg, client = cards
+
+    answer = client.post("/item/waiting/reprocess",
+                         data={"back": "search", "q": "  "}, follow_redirects=False)
+
+    assert answer.headers["location"] == "/item/waiting?notice=queued"
+
+
+def test_the_button_is_a_glyph_with_a_name_for_what_cannot_see_it(cards):
+    """A button whose whole text is an emoji has no accessible name, and a
+    tooltip is how anyone else learns what it does."""
+    cfg, client = cards
+
+    body = client.get("/").text
+
+    assert "\U0001f504</button>" in body
+    assert 'aria-label="Analyse it"' in body
+    assert 'title="Analyse it"' in body
+
+
+@pytest.mark.parametrize("path", ["/", "/settings", "/categories", "/retry"])
+def test_every_page_links_to_the_batch(setup, path):
+    """It was reachable from Settings alone, which is a page nobody opens to
+    check on a run that takes an hour."""
+    cfg, client = setup
+
+    assert 'href="/retry"' in client.get(path).text
+
+
+def test_the_nav_says_how_far_a_running_batch_has_got(setup, started):
+    """The run is behind whatever page the user is reading."""
+    cfg, client = setup
+    owe(5)
+    client.post("/retry", follow_redirects=False)
+    client.app.state.batch.step(_ok())
+
+    body = client.get("/categories").text
+
+    assert "<b>1/2</b>" in body
+
+
+def test_the_nav_counts_nothing_when_no_batch_is_running(setup):
+    cfg, client = setup
+
+    body = client.get("/categories").text
+
+    assert "<b>0/0</b>" not in body
