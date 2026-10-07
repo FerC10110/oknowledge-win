@@ -116,16 +116,8 @@ STRINGS = {
             "Esto solo lee el archivo y muestra lo que encontró. "
             "No se escribe nada hasta que lo digas.",
         "Nothing is written yet": "Todavía no se escribió nada",
-        "%1 links in %2 messages, %3 to %4.":
-            "%1 links en %2 mensajes, del %3 al %4.",
         "Dates read as %1.": "Fechas leídas como %1.",
         "assumed": "asumido",
-        "Up to %1 new notes. %2 were repeated in the chat, "
-        "%3 are already in your library.":
-            "Hasta %1 notas nuevas. %2 están repetidos en el chat "
-            "y %3 ya están en tu biblioteca.",
-        "%1 could not be read as a URL and will be reported, not written.":
-            "%1 no se pudieron leer como URL: se reportan, no se escriben.",
         "Written without http:// \u2014 check these":
             "Escritos sin http:// \u2014 revisá estos",
         "A sentence that ends in a word which happens to be a domain ending "
@@ -139,14 +131,26 @@ STRINGS = {
         "Writing a thousand notes takes a few seconds. The page waits for it.":
             "Escribir mil notas tarda unos segundos. La página espera.",
         "Import %1 links": "Importar %1 links",
+        "Import 1 link": "Importar 1 link",
+        # Counts in label form, never inside a sentence: a sentence carrying
+        # three of them needs the singular and the plural of each, and nobody
+        # writes eight variants, so it ends up saying "1 links".
+        "Links: %1": "Links: %1",
+        "Messages: %1": "Mensajes: %1",
+        "From %1 to %2": "Del %1 al %2",
+        "New notes: up to %1": "Notas nuevas: hasta %1",
+        "Repeated in the chat: %1": "Repetidos en el chat: %1",
+        "Already in your library: %1": "Ya en tu biblioteca: %1",
+        "Notes written: %1 of %2 links": "Notas escritas: %1 de %2 links",
+        "Not usable as a URL: %1. Those are reported, not written.":
+            "No usables como URL: %1. Se reportan, no se escriben.",
+        # The value the sentence above takes, so it is not left in English.
+        "day/month": "día/mes",
+        "month/day": "mes/día",
         "Choose another file": "Elegir otro archivo",
         "That upload is no longer here. Choose the file again.":
             "Ese archivo ya no está. Elegí el archivo de nuevo.",
         "Imported": "Importado",
-        "%1 of %2 links are now notes. %3 were repeated in the chat "
-        "and %4 were already in your library.":
-            "%1 de %2 links ya son notas. %3 estaban repetidos en el chat "
-            "y %4 ya estaban en tu biblioteca.",
         "Not imported": "Sin importar",
         "The notes are saved but not analysed yet: each one needs a model call. "
         "Run `oknowledge retry` when you want that to happen.":

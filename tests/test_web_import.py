@@ -136,6 +136,26 @@ def test_the_preview_says_nothing_is_new_the_second_time(setup):
     assert "Import 0 links" in page
 
 
+def test_the_button_does_not_say_one_links(setup):
+    """Every other count on this page is a label, which needs no agreement.
+    The button is a sentence, so it is the one that needs its singular."""
+    _, client = setup
+    one = "18/7/2019, 11:36 - Fer: https://scratux.org/ y de nuevo https://scratux.org/\n"
+
+    page = upload(client, one).text
+
+    assert "Import 1 link" in page
+    assert "Import 1 links" not in page
+
+
+def test_the_date_order_is_translated_and_not_printed_raw():
+    """It is a value the page prints, not a key somebody typed into a template,
+    which is how it stayed English on a Spanish page while every test passed."""
+    from oknowledge.i18n import STRINGS
+
+    assert {"day/month", "month/day"} <= set(STRINGS["es"])
+
+
 def test_the_preview_says_how_it_read_the_dates(setup):
     """Reading them the other way round moves every note to another day, and
     it is the one mistake the written notes do not show."""

@@ -15,7 +15,9 @@
   {% if result %}
     <div class="import-result">
       <h2>{{ t('Imported') }}</h2>
-      <p>{{ t('%1 of %2 links are now notes. %3 were repeated in the chat and %4 were already in your library.', result.saved, result.found, result.duplicated, result.already) }}</p>
+      <p>{{ t('Notes written: %1 of %2 links', result.saved, result.found) }} ·
+         {{ t('Repeated in the chat: %1', result.duplicated) }} ·
+         {{ t('Already in your library: %1', result.already) }}</p>
       {% if result.failed %}
         <h3>{{ t('Not imported') }}</h3>
         <ul class="import-failed">
@@ -36,8 +38,12 @@
   {% elif preview %}
     <div class="import-preview">
       <h2>{{ t('Nothing is written yet') }}</h2>
-      <p>{{ t('%1 links in %2 messages, %3 to %4.', preview.links, preview.messages, preview.first, preview.last) }}</p>
-      <p>{{ t('Dates read as %1.', preview.order) }}
+      {# Label form, not a sentence: a sentence with three numbers in it needs
+         singular and plural of each, and "1 links in 1 messages" is what you
+         get when nobody does that. #}
+      <p>{{ t('Links: %1', preview.links) }} · {{ t('Messages: %1', preview.messages) }} ·
+         {{ t('From %1 to %2', preview.first, preview.last) }}</p>
+      <p>{{ t('Dates read as %1.', t(preview.order)) }}
         {% if preview.assumed %}
           {# Every day in this chat is 12 or less, so both readings fit and the
              parser had to choose. Getting it wrong moves every note to another
@@ -45,9 +51,11 @@
           <span class="warn import-assumed">{{ t('assumed') }}</span>
         {% endif %}
       </p>
-      <p>{{ t('Up to %1 new notes. %2 were repeated in the chat, %3 are already in your library.', preview.new, preview.repeated, preview.already) }}</p>
+      <p>{{ t('New notes: up to %1', preview.new) }} ·
+         {{ t('Repeated in the chat: %1', preview.repeated) }} ·
+         {{ t('Already in your library: %1', preview.already) }}</p>
       {% if preview.unusable %}
-        <p class="meta">{{ t('%1 could not be read as a URL and will be reported, not written.', preview.unusable) }}</p>
+        <p class="meta">{{ t('Not usable as a URL: %1. Those are reported, not written.', preview.unusable) }}</p>
       {% endif %}
 
       {% if preview.bare %}
@@ -71,7 +79,7 @@
       <form action="/import/confirm" method="post">
         <input type="hidden" name="token" value="{{ token }}">
         <p class="meta">{{ t('Writing a thousand notes takes a few seconds. The page waits for it.') }}</p>
-        <button type="submit">{{ t('Import %1 links', preview.new) }}</button>
+        <button type="submit">{% if preview.new == 1 %}{{ t('Import 1 link') }}{% else %}{{ t('Import %1 links', preview.new) }}{% endif %}</button>
         <a class="button" href="/import">{{ t('Choose another file') }}</a>
       </form>
     </div>
