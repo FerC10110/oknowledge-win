@@ -210,6 +210,12 @@ body.wide header form { max-width: 34rem; }
 
 .item { padding-top: 1rem; }
 .item h1 { font-size: 2rem; line-height: 1.2; margin: 0.2rem 0 0.6rem; letter-spacing: -0.02em; }
+/* The same picture the card showed, at reading width: it is how a link is
+   recognised, and opening the note should not be where it disappears. The cap
+   on the height is for the long thin ones -- a cover is a glance, not a page
+   of its own to scroll past. */
+.item .cover { display: block; width: 100%; max-height: 22rem; object-fit: cover;
+               border-radius: 12px; margin: 1.5rem 0; background: var(--card); }
 .summary { font-size: 1.15rem; line-height: 1.7; white-space: pre-wrap; margin: 1.5rem 0; }
 .item h2 { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.08em;
            color: var(--dim); margin-top: 2.5rem; }

@@ -254,3 +254,48 @@ def test_the_scrollbar_is_not_drawn():
 
 def test_scrolling_a_card_does_not_scroll_the_page_behind_it():
     assert "overscroll-behavior: contain" in card_css()
+
+
+# --- the cover, where the note is read ---------------------------------------
+
+@pytest.fixture
+def with_cover(tmp_path):
+    """A note whose cover is really on disk, so the chain can be followed from
+    the page that names it to the bytes that come back."""
+    cfg, client = build(tmp_path, note("a1", cover="../attachments/a1.png"),
+                        note("b2", source="e.com", url="https://e.com/b2"))
+    attachments = cfg.attachments_dir
+    attachments.mkdir(parents=True, exist_ok=True)
+    # The smallest PNG there is: one transparent pixel.
+    (attachments / "a1.png").write_bytes(bytes.fromhex(
+        "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c489"
+        "0000000a49444154789c6300010000050001" "0d0a2db4" "0000000049454e44ae426082"))
+    return client
+
+
+def test_the_note_page_shows_the_cover_the_card_showed(with_cover):
+    """The picture is how a link is recognised at a glance; opening the note
+    should not be the moment it disappears."""
+    assert 'src="/cover/a1"' in with_cover.get("/item/a1").text
+
+
+def test_the_popup_shows_it_too(with_cover):
+    """Clicking the card body is the usual way in, and it never leaves the
+    library page."""
+    assert 'src="/cover/a1"' in with_cover.get("/embed/a1").text
+
+
+def test_the_cover_is_above_the_text_and_below_the_title(with_cover):
+    body = with_cover.get("/item/a1").text
+    assert body.index("<h1") < body.index('src="/cover/a1"') < body.index('class="summary"')
+
+
+def test_a_note_with_no_cover_draws_no_frame(with_cover):
+    for path in ("/item/b2", "/embed/b2"):
+        assert "/cover/" not in with_cover.get(path).text
+
+
+def test_the_picture_the_note_points_at_is_really_served(with_cover):
+    answer = with_cover.get("/cover/a1")
+    assert answer.status_code == 200
+    assert answer.headers["content-type"] == "image/png"

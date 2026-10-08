@@ -9,6 +9,11 @@
       {% if note.status != 'ok' %}<span class="warn">{{ t('Incomplete') }}</span>{% endif %}</p>
     <h1 dir="auto">{{ note.title }}</h1>
     <p class="tags">{% for tag in note.tags %}<span>#{{ tag }}</span>{% endfor %}</p>
+    {% if note.cover %}
+      {# alt="": the title says the same thing right above it, and a picture
+         that repeats the words beside it is read out twice. #}
+      <img class="cover" src="/cover/{{ note.id|slug }}" alt="" loading="lazy">
+    {% endif %}
     <div class="summary" dir="auto">{{ note.summary }}</div>
     {% if note.points %}
       <h2>{{ t('Key points') }}</h2>
