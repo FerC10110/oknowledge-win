@@ -65,24 +65,37 @@
       </details>
     {% endif %}
     <div class="actions">
-      <form action="/item/{{ note.id|slug }}/category" method="post" class="row">
-        <input name="category" value="{{ note.category }}" list="known"
-               aria-label="{{ t('Move to category') }}">
-        <button type="submit">{{ t('Save') }}</button>
+      {# A label over each one, visible and not only in an aria attribute:
+         three bare boxes in a column say nothing about which is which, and
+         the one holding eight tags was the width of a word. #}
+      <form action="/item/{{ note.id|slug }}/category" method="post" class="field">
+        <label for="field-category">{{ t('Move to category') }}</label>
+        <span class="row">
+          <input id="field-category" name="category" value="{{ note.category }}" list="known">
+          <button type="submit" title="{{ t('Save') }}"
+                  aria-label="{{ t('Save') }}">{% include "icon-save.html" %}</button>
+        </span>
       </form>
-      <form action="/item/{{ note.id|slug }}/tags" method="post" class="row">
-        <input name="tags" value="{{ note.tags|join(', ') }}"
-               aria-label="{{ t('Edit tags') }}">
-        <button type="submit">{{ t('Save') }}</button>
+      <form action="/item/{{ note.id|slug }}/tags" method="post" class="field">
+        <label for="field-tags">{{ t('Edit tags') }}</label>
+        <span class="row">
+          <input id="field-tags" name="tags" value="{{ note.tags|join(', ') }}">
+          <button type="submit" title="{{ t('Save') }}"
+                  aria-label="{{ t('Save') }}">{% include "icon-save.html" %}</button>
+        </span>
       </form>
-      <form action="/item/{{ note.id|slug }}/collections" method="post" class="row">
-        <input name="add" list="known-collections" autocomplete="off"
-               aria-label="{{ t('Add to a collection') }}"
-               placeholder="{{ t('Add to a collection') }}">
-        <datalist id="known-collections">
-          {% for name, count in collections.items() %}<option value="{{ name }}">{% endfor %}
-        </datalist>
-        <button type="submit">{{ t('Add') }}</button>
+      <form action="/item/{{ note.id|slug }}/collections" method="post" class="field">
+        <label for="field-collection">{{ t('Add to a collection') }}</label>
+        <span class="row">
+          <input id="field-collection" name="add" list="known-collections"
+                 autocomplete="off">
+          <datalist id="known-collections">
+            {% for name, count in collections.items() %}<option value="{{ name }}">{% endfor %}
+          </datalist>
+          {# A word and not the disk: joining a collection is not saving this
+             field, and two actions that differ should not look the same. #}
+          <button type="submit">{{ t('Add') }}</button>
+        </span>
       </form>
       <form action="/item/{{ note.id|slug }}/reprocess" method="post" class="row"
             data-ask="{{ t('Re-run the analysis? The title, summary, points, category, tags and mentions are replaced by the new answer.') }}">

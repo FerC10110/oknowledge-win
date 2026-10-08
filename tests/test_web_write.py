@@ -1420,13 +1420,15 @@ def test_the_note_page_draws_the_two_buttons_it_promises(setup):
     single note."""
     cfg, client = setup
     body = client.get("/item/a1").text
-    box = re.search(r'<form action="([^"]+)" method="post" class="row">\s*'
-                    r'<input name="(\w+)"[^>]*list="known-collections"', body)
+    box = re.search(r'<form action="([^"]*/collections)" method="post" class="field">'
+                    r'.*?<input id="field-collection" name="(\w+)"', body, re.S)
+    assert box, "the note drew no box to join a collection with"
 
     client.post(box.group(1), data={box.group(2): "Casa"})
 
     chip = re.search(r'<form action="([^"]+)" method="post">\s*<button[^>]*'
                      r'name="(\w+)" value="([^"]*)"', client.get("/item/a1").text)
+    assert chip, "the note drew no way out of the collection"
     assert chip.group(3) == "Casa"
     client.post(chip.group(1), data={chip.group(2): chip.group(3)})
 

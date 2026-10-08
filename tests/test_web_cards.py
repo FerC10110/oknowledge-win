@@ -6,6 +6,8 @@ site strip leave for the original site. Both must work with JavaScript off,
 which is why the popup's trigger is an ordinary link to the item page.
 """
 
+import re
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -299,3 +301,47 @@ def test_the_picture_the_note_points_at_is_really_served(with_cover):
     answer = with_cover.get("/cover/a1")
     assert answer.status_code == 200
     assert answer.headers["content-type"] == "image/png"
+
+
+# --- what the note page lets you change --------------------------------------
+
+def test_every_field_says_what_it_is_above_itself(client):
+    """Three bare boxes in a column said nothing about which was which. An
+    aria-label is not an answer: it is not on the screen."""
+    body = client.get("/item/a1").text
+    labelled = dict(re.findall(r'<label for="(field-\w+)">([^<]+)</label>', body))
+
+    assert labelled == {"field-category": "Move to category",
+                        "field-tags": "Edit tags",
+                        "field-collection": "Add to a collection"}
+    for field in labelled:
+        assert f'id="{field}"' in body          # the label points at something
+
+
+def test_saving_is_a_drawn_disk_with_a_name_for_what_cannot_see_it(client):
+    """A disk instead of the word, as asked. Drawn and not typed, for the same
+    reason the re-analyse arrow is: 💾 is a glyph the page would be hoping
+    some font on the machine draws, and on this one the other emoji did not.
+
+    The word stays in title and aria-label: a button whose whole content is a
+    picture has no accessible name.
+    """
+    body = client.get("/item/a1").text
+    saves = re.findall(r'<button type="submit" title="Save"\s+aria-label="Save">'
+                       r'\s*<svg class="icon"', body)
+
+    assert len(saves) == 2                      # the category and the tags
+    assert "Save</button>" not in body          # and nowhere is it still a word
+    # The colour of the text around it, so it reads in either theme and
+    # nothing here depends on telling two fixed colours apart.
+    assert body.count("currentColor") >= 2 and "#" not in re.search(
+        r"<svg class=\"icon\".*?</svg>", body, re.S).group(0)
+    assert not [ch for ch in body if ord(ch) > 0xFFFF]
+
+
+def test_joining_a_collection_is_not_drawn_as_saving(client):
+    """Two actions that differ should not look the same: that button does not
+    save the box beside it, it files the note somewhere."""
+    body = client.get("/item/a1").text
+
+    assert "<button type=\"submit\">Add</button>" in body

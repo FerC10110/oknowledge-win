@@ -243,8 +243,20 @@ form label { display: inline-flex; align-items: center; gap: 0.4rem; margin-righ
 input[type=text], input:not([type]), select, button { padding: 0.4rem 0.7rem; font: inherit;
   border: 1px solid var(--line); border-radius: 8px; background: var(--card); color: inherit; }
 button { cursor: pointer; }
-.item .actions { display: flex; flex-wrap: wrap; gap: 0.6rem 1.2rem; margin-top: 2.5rem;
+/* One labelled field per line, each as wide as the column: eight tags in a
+   box the width of a word is a box you edit blind. The two buttons that do
+   not take a field stay on a row of their own, at the end. */
+.item .actions { display: flex; flex-wrap: wrap; align-items: flex-end;
+                 gap: 1.1rem 1.2rem; margin-top: 2.5rem; padding-top: 1.5rem;
                  border-top: 1px solid var(--line); }
+.actions .field { flex: 1 0 100%; }
+.actions .field > label { display: block; font-size: 0.72rem; color: var(--dim);
+                          text-transform: uppercase; letter-spacing: 0.08em;
+                          margin-bottom: 0.35rem; }
+.actions .field .row { display: flex; gap: 0.5rem; padding: 0; }
+.actions .field .row input { flex: 1; min-width: 0; }
+/* The glyph is the whole button, so it gets the room a word would have had. */
+.actions .field .row button { display: inline-flex; align-items: center; }
 .notice { max-width: var(--measure); margin: 0 auto 1rem; padding: 0.6rem 1rem;
           color: var(--fg); font-size: 0.9rem; border-left: 2px solid var(--accent); }
 .warn-block { color: var(--dim); font-size: 0.85rem; border: 1px solid var(--line);
