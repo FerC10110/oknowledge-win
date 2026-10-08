@@ -15,6 +15,7 @@ file fresh from disk with read_full().
 from __future__ import annotations
 
 import os
+import re
 import threading
 import unicodedata
 from dataclasses import dataclass
@@ -27,6 +28,26 @@ from ..vault import read_note, scan_file
 
 SNIPPET = 160
 PER_PAGE = 100
+
+# A note whose `saved` is not a date. The field is text in a file the user can
+# edit, and a note nobody can date must still be somewhere you can get to: a
+# link that no filter can reach is a link that is lost. The vault already
+# names such a note undated-<title>.md.
+UNDATED = "undated"
+# The shape a date has to have. The month is checked against the twelve that
+# exist, because the strip gives each one a name and there is no name for the
+# thirteenth.
+DATED = re.compile(r"\d{4}-(?:0[1-9]|1[0-2])-\d{2}\Z")
+
+
+def period_of(saved: str, size: int = 4) -> str:
+    """The year ("2021") or the month ("2021-11") a note belongs to.
+
+    `size` is how much of the date to keep: 4 for the year, 7 for the month.
+    A date that cannot be read belongs to no period and answers UNDATED for
+    every size, so it never lands in a year it is not from.
+    """
+    return saved[:size] if DATED.match(saved or "") else UNDATED
 
 # Latin letters that do not decompose under NFD, so accent-stripping alone
 # would leave them unsearchable from a plain keyboard.
@@ -88,6 +109,23 @@ def terms(query: str) -> list[str]:
     """The folded words of a query; a leading # (as tags are displayed) is dropped."""
     found = (word.lstrip("#") for word in fold(query).split())
     return [word for word in found if word]
+
+
+def tally(notes) -> dict[str, int]:
+    """How many of `notes` fall in each year and each month.
+
+    Counted over the notes that passed the other filters, not over the whole
+    library: with a collection chosen, the strip is meant to say which years
+    that project lives in.
+    """
+    found: dict[str, int] = {}
+    for note in notes:
+        year = period_of(note.saved)
+        found[year] = found.get(year, 0) + 1
+        if year != UNDATED:
+            month = period_of(note.saved, 7)
+            found[month] = found.get(month, 0) + 1
+    return found
 
 
 @dataclass
@@ -202,6 +240,8 @@ class Library:
         self._tags: dict[str, int] = {}
         self._tag_home: dict[str, str] = {}
         self._collections: dict[str, int] = {}
+        self._years: dict[str, int] = {}
+        self._months: dict[str, int] = {}
         self.refresh()
 
     @property
@@ -232,6 +272,7 @@ class Library:
             self._fingerprint, self._cache, self._ids = None, {}, {}
             self._categories, self._tags, self._tag_home = {}, {}, {}
             self._collections = {}
+            self._years, self._months = {}, {}
             self.error = str(exc)
             return
         entries = [e for _, e in cache.values() if e is not None]
@@ -243,8 +284,15 @@ class Library:
         # are about instead of in one alphabetical wall.
         homes: dict[str, dict[str, int]] = {}
         collections: dict[str, int] = {}
+        years: dict[str, int] = {}
+        months: dict[str, int] = {}
         ids: dict[str, Entry] = {}
         for entry in entries:
+            year = period_of(entry.note.saved)
+            years[year] = years.get(year, 0) + 1
+            if year != UNDATED:
+                month = period_of(entry.note.saved, 7)
+                months[month] = months.get(month, 0) + 1
             categories[entry.note.category] = categories.get(entry.note.category, 0) + 1
             for name in entry.note.collections:
                 collections[name] = collections.get(name, 0) + 1
@@ -263,6 +311,13 @@ class Library:
         # one that moved every time they filed something would be a bucket
         # they have to look for.
         self._collections = dict(sorted(collections.items()))
+        # Newest first, like the notes themselves. Undated is not a year and
+        # does not sort like one: it goes last, on its own, at the foot of
+        # the strip.
+        ordered = sorted((name for name in years if name != UNDATED), reverse=True)
+        self._years = {name: years[name] for name in ordered + (
+            [UNDATED] if UNDATED in years else [])}
+        self._months = dict(sorted(months.items(), reverse=True))
         self._tags = dict(sorted(tags.items(), key=lambda kv: (-kv[1], kv[0])))
         # Most used wins, and the category name breaks a tie: a chip that moved
         # between groups on every reload, for a reason nobody could see, would
@@ -278,7 +333,7 @@ class Library:
         return entry.note if entry else None
 
     def filter(self, category: str | None = None, tag: str | None = None,
-               collection: str | None = None) -> list[Note]:
+               collection: str | None = None, when: str | None = None) -> list[Note]:
         found = self.notes
         if category:
             found = [n for n in found if n.category == category]
@@ -286,6 +341,13 @@ class Library:
             found = [n for n in found if tag in n.tags]
         if collection:
             found = [n for n in found if collection in n.collections]
+        if when:
+            # Checked against the periods this library has, not matched as a
+            # prefix: "2021-1" is not a month, and a prefix would quietly
+            # hand back October to December as if it were one.
+            if when not in self.periods():
+                return []
+            found = [n for n in found if period_of(n.saved, len(when)) == when]
         return found
 
     def categories(self) -> dict[str, int]:
@@ -297,6 +359,18 @@ class Library:
     def collections(self) -> dict[str, int]:
         """The user's own groupings, and how many notes each one holds."""
         return self._collections
+
+    def years(self) -> dict[str, int]:
+        """Every year the library holds, newest first, undated last."""
+        return self._years
+
+    def months(self) -> dict[str, int]:
+        """Every month the library holds, newest first."""
+        return self._months
+
+    def periods(self) -> set[str]:
+        """What `when` is allowed to name."""
+        return set(self._years) | set(self._months)
 
     def tag_home(self) -> dict[str, str]:
         """The category each tag is most used under."""

@@ -145,6 +145,14 @@ STRINGS = {
         "Every link has been analysed. Nothing to do.":
             "Todos los links est\u00e1n analizados. No hay nada que hacer.",
 
+        # La línea de tiempo. Los meses son de tres letras porque la tira
+        # en la que entran mide cinco caracteres de ancho.
+        "Time": "Tiempo",
+        "Undated": "Sin fecha",
+        "Jan": "ene", "Feb": "feb", "Mar": "mar", "Apr": "abr",
+        "May": "may", "Jun": "jun", "Jul": "jul", "Aug": "ago",
+        "Sep": "sep", "Oct": "oct", "Nov": "nov", "Dec": "dic",
+
         # Las colecciones: lo \u00fanico de una nota que escribe el usuario.
         "Select": "Seleccionar",
         "Cancel": "Cancelar",

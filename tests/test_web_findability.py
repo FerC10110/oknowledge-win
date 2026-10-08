@@ -169,14 +169,15 @@ def test_a_vanished_vault_leaves_nothing_behind_to_offer(tmp_path):
     library that cannot be read has no categories, tags or collections to
     offer -- least of all as a list to file something into."""
     cfg, client = app_with(tmp_path, note("n1", "Uno", category="Redes", tags=["vpn"],
-                                          collections=["Casa"]))
+                                          collections=["Casa"], saved="2021-11-05"))
     library = client.app.state.library
-    assert library.collections() == {"Casa": 1}
+    assert library.collections() == {"Casa": 1} and library.years() == {"2021": 1}
 
     cfg.vault.rename(tmp_path / "elsewhere")
     library.refresh()
 
-    assert (library.categories(), library.tags(), library.collections()) == ({}, {}, {})
+    assert (library.categories(), library.tags(), library.collections(),
+            library.years(), library.months()) == ({}, {}, {}, {}, {})
 
 
 def test_a_missing_vault_at_startup_is_an_error(tmp_path):

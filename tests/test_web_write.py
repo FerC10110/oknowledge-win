@@ -1377,7 +1377,7 @@ def test_the_button_says_which_collection_to_leave(setup):
 def test_the_remove_button_the_page_draws_takes_the_card_out(setup):
     cfg, client = setup
     client.post("/collections/add", data={"name": "Casa", "id": ["a1"]})
-    body = client.get("/?pick=1&collection=Casa").text
+    body = client.get("/?pick=1&collection=Casa&when=2026-10").text
     button = re.search(r'formaction="([^"]+)" formnovalidate\s+name="leave" value="([^"]+)"',
                        body)
     fields = dict(re.findall(r'<input type="hidden" name="(\w+)" value="([^"]*)"', body))
@@ -1386,8 +1386,10 @@ def test_the_remove_button_the_page_draws_takes_the_card_out(setup):
                          data={**fields, "leave": button.group(2), "id": ["a1"]})
 
     assert find_note(cfg, "a1")[1].collections == []
-    # Back to the collection it was pressed in, which the form has to carry.
-    assert answer.headers["location"].startswith("/?collection=Casa&")
+    # Back to the listing it was pressed on -- the collection AND the month --
+    # which the form has to carry, both of them.
+    where = answer.headers["location"]
+    assert "collection=Casa" in where and "when=2026-10" in where
 
 
 def test_one_note_gets_a_sentence_and_two_get_a_count(setup):

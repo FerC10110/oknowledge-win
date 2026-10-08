@@ -800,3 +800,167 @@ def test_a_library_with_no_collections_draws_no_row_for_them(client):
 
 def test_the_row_is_there_as_soon_as_there_is_one(collected):
     assert 'class="chips mine"' in collected.get("/").text
+
+
+# --- la línea de tiempo ------------------------------------------------------
+
+@pytest.fixture
+def dated(tmp_path):
+    """Notes across three years, one of them with a date nobody can read."""
+    vault = tmp_path / "vault"
+    (vault / "oknowledge" / "links").mkdir(parents=True)
+    cfg = Config(vault=vault)
+    plan = [("a1", "2021-11-05", "Redes", ["Casa"]),
+            ("b2", "2021-11-20", "Redes", []),
+            ("c3", "2021-03-02", "Cocina", ["Casa"]),
+            ("d4", "2019-07-14", "Redes", []),
+            ("e5", "2026-10-01", "Cocina", [])]
+    for n, (lid, saved, category, collections) in enumerate(plan):
+        write_note(cfg, note(lid, f"Nota {lid}", category, ["x"], "Un resumen.",
+                             saved=saved, collections=collections), "es")
+    broken = note("f6", "Nota rota", "Redes", ["x"], "Un resumen.", saved="2019-07-14")
+    path = write_note(cfg, broken, "es")
+    path.write_text(path.read_text().replace("saved: '2019-07-14'", "saved: alguna vez"))
+    rebuild_indexes(cfg, "es")
+    return TestClient(create_app(cfg))
+
+
+def test_the_library_counts_the_notes_of_each_year(dated):
+    assert library_of(dated).years() == {"2026": 1, "2021": 3, "2019": 1, "undated": 1}
+
+
+def test_the_years_come_newest_first(dated):
+    assert list(library_of(dated).years())[:3] == ["2026", "2021", "2019"]
+
+
+def test_undated_comes_last_whatever_it_sorts_like(dated):
+    """It is not a year and it is not 2026: it goes at the foot of the strip,
+    where a note whose date was typed over can still be found."""
+    assert list(library_of(dated).years())[-1] == "undated"
+
+
+def test_a_library_where_every_date_reads_has_no_undated_entry(client):
+    assert "undated" not in library_of(client).years()
+
+
+def test_the_library_counts_the_notes_of_each_month(dated):
+    assert library_of(dated).months() == {"2026-10": 1, "2021-11": 2,
+                                          "2021-03": 1, "2019-07": 1}
+
+
+def test_filtering_by_a_year_leaves_the_other_years_out(dated):
+    assert {n.id for n in library_of(dated).filter(when="2021")} == {"a1", "b2", "c3"}
+
+
+def test_filtering_by_a_month_is_narrower_than_its_year(dated):
+    assert {n.id for n in library_of(dated).filter(when="2021-11")} == {"a1", "b2"}
+
+
+def test_a_note_whose_date_cannot_be_read_is_still_reachable(dated):
+    assert [n.id for n in library_of(dated).filter(when="undated")] == ["f6"]
+
+
+def test_a_period_this_library_does_not_have_matches_nothing(dated):
+    """Not everything: a filter that quietly gives up shows the whole library
+    and lets the user believe that was the answer."""
+    assert library_of(dated).filter(when="2017") == []
+    assert library_of(dated).filter(when="hola") == []
+    # Not a month, and a prefix match would hand back October to December.
+    assert library_of(dated).filter(when="2021-1") == []
+
+
+def test_a_period_and_a_collection_are_asked_together(dated):
+    found = library_of(dated).filter(collection="Casa", when="2021-11")
+    assert [n.id for n in found] == ["a1"]
+
+
+def strip(body):
+    """(what the strip links, what it draws dimmed and unclickable)."""
+    nav = re.search(r'<nav class="timeline".*?</nav>', body, re.S)
+    if nav is None:
+        return None, None
+    live = re.findall(r'<a href="([^"]*)"[^>]*>\s*([^<]+?)\s*<b>(\d+)</b>', nav.group(0))
+    return live, re.findall(r'<span class="[^"]*off">([^<]+)</span>', nav.group(0))
+
+
+def test_the_strip_counts_what_the_other_filters_left(dated):
+    """With a project chosen it answers "which years does this live in", so
+    the numbers are of that project and not of the library."""
+    live, _ = strip(dated.get("/?collection=Casa").text)
+
+    assert [(name, n) for _, name, n in live] == [("All", "2"), ("2021", "2")]
+
+
+def test_a_year_with_nothing_of_what_you_are_looking_at_is_still_drawn(dated):
+    """Where a project is not is as much of an answer as where it is, and a
+    strip that changes shape every click is one you cannot read."""
+    _, off = strip(dated.get("/?collection=Casa").text)
+
+    assert off == ["2026", "2019", "Undated"]
+
+
+def test_the_whole_library_fills_the_strip(dated):
+    live, off = strip(dated.get("/").text)
+
+    assert [(name, n) for _, name, n in live] == [
+        ("All", "6"), ("2026", "1"), ("2021", "3"), ("2019", "1"), ("Undated", "1")]
+    assert off == []
+
+
+def test_only_the_year_you_are_in_opens_its_months(dated):
+    live, _ = strip(dated.get("/?when=2021").text)
+
+    assert [name for _, name, _ in live] == ["All", "2026", "2021", "Nov", "Mar",
+                                             "2019", "Undated"]
+
+
+def test_no_year_is_open_until_one_is_chosen(dated):
+    live, _ = strip(dated.get("/").text)
+
+    assert "Nov" not in [name for _, name, _ in live]
+
+
+def test_a_month_opens_its_own_year(dated):
+    live, _ = strip(dated.get("/?when=2021-11").text)
+
+    assert "Mar" in [name for _, name, _ in live]      # the year is still open
+    assert 'class="month on"' in dated.get("/?when=2021-11").text
+
+
+def test_travelling_in_time_keeps_what_you_were_looking_at(dated):
+    """The two axes cross, they do not compete: choosing a year must not undo
+    the project you chose first."""
+    live, _ = strip(dated.get("/?collection=Casa").text)
+
+    assert all("collection=Casa" in href for href, _, _ in live)
+
+
+def test_the_chips_keep_the_period(dated):
+    body = dated.get("/?when=2021").text
+    chips = re.findall(r'<a href="(/\?(?:category|tag|collection)=[^"]*)"', body)
+
+    assert chips and all("when=2021" in href for href in chips)
+
+
+def test_the_tags_behind_the_disclosure_keep_it_too(many_tags):
+    """Eighteen of the thirty are down there, and they are chips like the
+    others: clicking one must not cost the year."""
+    body = many_tags.get("/?when=2026").text
+    hidden = body.partition("<details")[2]
+    chips = re.findall(r'<a href="(/\?tag=[^"]*)"', hidden)
+
+    assert len(chips) == 18
+    assert all("when=2026" in href for href in chips)
+
+
+def test_the_way_out_of_a_period_keeps_what_you_were_looking_at(dated):
+    live, _ = strip(dated.get("/?collection=Casa&when=2021").text)
+    out = live[0][0]
+
+    assert out == "/?collection=Casa"
+
+
+def test_the_search_results_have_no_strip_of_time(dated):
+    """They are ordered by how well they match, and a strip of time beside a
+    list that is not in time order lies about the order it is in."""
+    assert strip(dated.get("/search?q=resumen").text) == (None, None)

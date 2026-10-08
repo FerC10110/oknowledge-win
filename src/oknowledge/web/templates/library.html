@@ -10,15 +10,16 @@
     {% if collections %}
       <div class="chips mine">
         {% for name, count in collections.items() %}
-          <a href="/?collection={{ name|urlencode }}"
+          <a href="/?collection={{ name|urlencode }}{% if when %}&amp;when={{ when|urlencode }}{% endif %}"
              class="chip {% if collection == name %}on{% endif %}">{{ name }} <b>{{ count }}</b></a>
         {% endfor %}
       </div>
     {% endif %}
     <div class="chips">
-      <a href="/" class="chip {% if not category and not tag and not collection %}on{% endif %}">{{ t('All') }}</a>
+      <a href="/{% if when %}?when={{ when|urlencode }}{% endif %}"
+         class="chip {% if not category and not tag and not collection %}on{% endif %}">{{ t('All') }}</a>
       {% for name, count in categories.items() %}
-        <a href="/?category={{ name|urlencode }}"
+        <a href="/?category={{ name|urlencode }}{% if when %}&amp;when={{ when|urlencode }}{% endif %}"
            class="chip {% if category == name %}on{% endif %}">{{ name }} <b>{{ count }}</b></a>
       {% endfor %}
       {# On this row and not on one of its own: a line of its own is vertical
@@ -33,7 +34,7 @@
        up here: a title per group turns this one line into one line each. #}
     <div class="chips tags">
       {% for name, count in tags %}
-        <a href="/?tag={{ name|urlencode }}"
+        <a href="/?tag={{ name|urlencode }}{% if when %}&amp;when={{ when|urlencode }}{% endif %}"
            class="chip small {% if tag == name %}on{% endif %}">#{{ name }}</a>
       {% endfor %}
     </div>
@@ -44,13 +45,14 @@
           {% if group %}<p class="group">{{ group }}</p>{% endif %}
           <div class="chips tags">
             {% for name, count in names %}
-              <a href="/?tag={{ name|urlencode }}"
+              <a href="/?tag={{ name|urlencode }}{% if when %}&amp;when={{ when|urlencode }}{% endif %}"
                  class="chip small {% if tag == name %}on{% endif %}">#{{ name }}</a>
             {% endfor %}
           </div>
         {% endfor %}
       </details>
     {% endif %}
+    {% if years %}<div class="withtime">{% endif %}
     {% if not notes %}<p class="empty">{% if filtered %}{{ t('Nothing in this category') if category else t('Nothing matches that filter') }}{% else %}{{ t('Nothing saved yet') }}{% endif %}</p>{% endif %}
     <ul class="grid">
       {% for note in notes %}
@@ -111,6 +113,7 @@
                 <input type="hidden" name="category" value="{{ category or '' }}">
                 <input type="hidden" name="tag" value="{{ tag or '' }}">
                 <input type="hidden" name="collection" value="{{ collection or '' }}">
+                <input type="hidden" name="when" value="{{ when or '' }}">
                 <input type="hidden" name="page" value="{{ page }}">
                 {# The glyph is the whole button, so it carries a name for
                    anything that cannot see it, and a title for anyone who
@@ -123,6 +126,39 @@
         </li>
       {% endfor %}
     </ul>
+    {% if years %}
+      {# The years are the library's, always all of them; the numbers beside
+         them are this page's. So the shape of six years does not change
+         while you move through it, and a year that holds nothing of what you
+         are looking at says so instead of disappearing. #}
+      <nav class="timeline" aria-label="{{ t('Time') }}">
+        <a href="{{ when_urls[''] }}" class="{% if not when %}on{% endif %}"
+           >{{ t('All') }} <b>{{ dated }}</b></a>
+        {% for year in years %}
+          {% set count = counted.get(year, 0) %}
+          {% set label = t('Undated') if year == 'undated' else year %}
+          {% if count %}
+            <a href="{{ when_urls[year] }}"
+               class="{% if when == year %}on{% endif %}">{{ label }} <b>{{ count }}</b></a>
+          {% else %}
+            <span class="off">{{ label }}</span>
+          {% endif %}
+          {% if when and year == when[:4] %}
+            {% for month in months %}
+              {% set found = counted.get(month, 0) %}
+              {% if found %}
+                <a href="{{ when_urls[month] }}"
+                   class="month {% if when == month %}on{% endif %}"
+                   >{{ t(month_names[month]) }} <b>{{ found }}</b></a>
+              {% else %}
+                <span class="month off">{{ t(month_names[month]) }}</span>
+              {% endif %}
+            {% endfor %}
+          {% endif %}
+        {% endfor %}
+      </nav>
+    </div>
+    {% endif %}
     {% if picking %}
       {# After the cards, because it is what you do once you have picked
          them, and sticky so it is still there at the bottom of a long page. #}
@@ -131,6 +167,7 @@
         <input type="hidden" name="category" value="{{ category or '' }}">
         <input type="hidden" name="tag" value="{{ tag or '' }}">
         <input type="hidden" name="collection" value="{{ collection or '' }}">
+        <input type="hidden" name="when" value="{{ when or '' }}">
         <input type="hidden" name="page" value="{{ page }}">
         <input name="name" list="known-collections" required autocomplete="off"
                aria-label="{{ t('Collection') }}"

@@ -94,6 +94,37 @@ body.wide header form { max-width: 34rem; }
 .grid { list-style: none; padding: 0; margin: 0; display: grid; gap: 1rem;
         grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr)); }
 
+/* The cards and the strip of time are two columns, and the grid is the one
+   that gives: the strip is five characters wide and stays that way. */
+.withtime { display: flex; align-items: flex-start; gap: 1rem; }
+.withtime .grid { flex: 1; min-width: 0; }
+/* Sticky, so it is still beside the cards after a screen of scrolling, and
+   scrollable on its own for the year that is open. */
+.timeline { position: sticky; top: 1rem; flex: none; width: 6rem;
+            max-height: calc(100vh - 2rem); overflow-y: auto;
+            display: flex; flex-direction: column; gap: 0.1rem;
+            font-size: 0.78rem; }
+.timeline a, .timeline span { padding: 0.15rem 0.4rem; border-radius: 6px;
+                              color: var(--dim); text-decoration: none; }
+.timeline a:hover { color: var(--fg); background: var(--card); }
+.timeline a.on { color: var(--accent); background: var(--card); }
+.timeline b { font-weight: 400; opacity: 0.55; float: right; }
+/* A year with nothing of what you are looking at. Shown and not removed:
+   where a project is NOT is as much of an answer as where it is. */
+.timeline .off { opacity: 0.35; }
+.timeline .month { padding-left: 1.1rem; }
+
+/* No room for a column on a phone: the same links, in a row above the cards
+   that scrolls sideways. */
+@media (max-width: 42rem) {
+  .withtime { flex-direction: column; }
+  .timeline { order: -1; position: static; flex-direction: row; width: 100%;
+              max-height: none; overflow-x: auto; padding-bottom: 0.3rem; }
+  .timeline a, .timeline span { white-space: nowrap; }
+  .timeline b { float: none; margin-left: 0.25rem; }
+  .timeline .month { padding-left: 0.4rem; }
+}
+
 /* Every card is the same height, whatever it holds: a wall of cards that each
    end somewhere different is the thing this replaces. The height is fixed
    here and the text is clamped below, so neither a six-line summary nor a
