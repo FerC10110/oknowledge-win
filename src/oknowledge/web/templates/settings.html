@@ -10,11 +10,28 @@
       <p class="row">
         <label><input type="checkbox" name="chain" value="{{ name }}"
                       {% if name in cfg.chain %}checked{% endif %}> {{ name }}</label>
-        <input name="{{ name }}_model" placeholder="model"
+        {# An <input list> and not a <select>: the list is a convenience and
+           the typing is the guarantee. An engine that is not installed, not
+           running or behind somebody else's gateway cannot be asked, and that
+           must not be the day you cannot name your model. #}
+        <input name="{{ name }}_model" placeholder="model" list="models-{{ name }}"
                aria-label="{{ name }} model"
                value="{{ cfg.engines.get(name, {}).get('model', '') }}">
+        <datalist id="models-{{ name }}">
+          {% for found in models.get(name, {}).get('found', []) %}
+            <option value="{{ found }}">
+          {% endfor %}
+        </datalist>
+        {# The button belongs to its own form, declared at the end of the page:
+           a form cannot nest inside another, and this press must not save the
+           settings form half-typed. #}
+        <button type="submit" form="find-{{ name }}">{{ t('Find models') }}</button>
+        {% if models.get(name, {}).get('at') %}
+          <span class="meta">{{ t('Looked up %1', models[name]['at']) }}</span>
+        {% endif %}
       </p>
     {% endfor %}
+    <p class="meta">{{ t('Looking for models asks that engine and reloads this page, so save anything you have typed first. A list from a month ago is still a list: the date beside each button says which.') }}</p>
     <p class="meta">{{ t('The API key is not written here: it goes in config.toml as key_env, or in the environment variable that field names.') }}</p>
 
     {# Both groups loop over the same order. Written out by hand they had drifted
@@ -74,4 +91,10 @@
   <h2>{{ t('Import a WhatsApp export') }}</h2>
   <p class="meta">{{ t('Turns the links people shared in a chat into notes, with the date each one was sent.') }}</p>
   <p><a class="button" href="/import">{{ t('Import a WhatsApp export') }}</a></p>
+
+  {# One per engine, empty on purpose: the buttons up in the engine rows name
+     these by id, which is how a button inside one form submits another. #}
+  {% for name in engines %}
+    <form id="find-{{ name }}" action="/settings/models/{{ name }}" method="post"></form>
+  {% endfor %}
 {% endblock %}

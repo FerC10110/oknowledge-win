@@ -40,6 +40,9 @@ WRITE_ROUTES = [
     # Starting a batch of re-analysis. A cross-site POST here would spend the
     # user's model quota, which is the kind of thing an origin check is for.
     ("/retry", {}),
+    # Asking an engine for its models. A cross-site POST here would run
+    # `opencode models` and reach the user's provider with their key.
+    ("/settings/models/opencode", {}),
     ("/collections/add", {"name": "Casa", "id": ["a1"]}),
     ("/collections/remove", {"name": "Casa", "id": ["a1"]}),
     ("/item/a1/collections", {"add": "Casa"}),

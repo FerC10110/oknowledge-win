@@ -243,6 +243,22 @@ STRINGS = {
         "Engine": "Motor",
         # The step list on the batch page, and the box that writes the files.
         "What it is doing": "Qué está haciendo",
+        # Choosing a model from a list instead of typing it from memory.
+        "Find models": "Buscar modelos",
+        "Looked up %1": "Consultado el %1",
+        "Looking for models asks that engine and reloads this page, so save "
+        "anything you have typed first. A list from a month ago is still a "
+        "list: the date beside each button says which.":
+            "Buscar modelos consulta ese motor y recarga esta página, así que "
+            "guardá antes lo que hayas escrito. Una lista de hace un mes "
+            "sigue siendo una lista: la fecha al lado de cada botón dice cuál.",
+        "%1 models found. They are in the list beside each box.":
+            "Se encontraron %1 modelos. Están en la lista al lado de cada campo.",
+        "No models could be listed. The engine may not be installed, running "
+        "or reachable -- you can still type the name by hand.":
+            "No se pudo listar ningún modelo. El motor puede no estar "
+            "instalado, no estar corriendo o no ser alcanzable: podés escribir "
+            "el nombre a mano igual.",
         "Save the prompt and the reply of each link":
             "Guardar el prompt y la respuesta de cada link",
         "The trace files hold the full text of each page. They are written "

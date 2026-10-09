@@ -28,12 +28,15 @@ from fastapi.templating import Jinja2Templates
 from starlette.datastructures import Headers
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from ..ai import build_engine
 from ..ai.base import normalize_collections
 from ..config import CONFIG_PATH, CONTENT_MODES, ENGINE_NAMES, MENTION_MODES, Config
 from ..config import save as save_config
 from ..i18n import LANGUAGES, NATIVE_NAMES, set_ui_language, translator, ui_language
 from ..pipeline import add as add_link
 from ..pipeline import icon_path, import_links, is_domain, owed
+from ..models_cache import read as read_models
+from ..models_cache import remember as remember_models
 from ..queue import Locked, Queue
 from ..trace import trace_run
 from ..urls import is_search_url, link_id, normalize
@@ -104,6 +107,12 @@ NOTICES = {
     # that would be nothing at all once the spaces are taken out.
     "bad-collection": "That name cannot be used as a collection: it has to be "
                       "something other than spaces, dots and slashes.",
+    "models-found": "%1 models found. They are in the list beside each box.",
+    # Not a failure: an engine that is not installed or not running has
+    # nothing to say, and the box takes a name typed by hand either way.
+    "models-none": "No models could be listed. The engine may not be "
+                   "installed, running or reachable -- you can still type "
+                   "the name by hand.",
     "nothing-picked": "No cards were selected, so nothing changed.",
     "collected-one": "The note was added to the collection.",
     "collected": "%1 notes added to the collection.",
@@ -923,6 +932,11 @@ def create_app(cfg: Config) -> FastAPI:
         waiting = len(owed(Queue())[0])
         return page(request, "settings.html", cfg=saved, ui=ui_language(),
                     engines=order, config_path=config_file(),
+                    # Read from disk, never asked for here: three engines with
+                    # their timeouts is up to twelve seconds to open a page,
+                    # and the slow case -- a server that is down -- is the
+                    # common one.
+                    models=read_models(),
                     # What the Procesar button would do, which is the saved
                     # size unless fewer links than that are left.
                     owed=waiting, size=min(saved.batch, waiting),
@@ -1002,6 +1016,29 @@ def create_app(cfg: Config) -> FastAPI:
             return JSONResponse({"working": False, "status": "unknown"})
         return JSONResponse({"working": working,
                              "status": entry.status if entry else "unknown"})
+
+    @app.post("/settings/models/{engine}")
+    def find_models(engine: str):
+        """Ask one engine what models it has, and write down the answer.
+
+        Its own tiny form, so the button can sit in the row it belongs to
+        without nesting a form inside the settings form -- and so pressing it
+        does not save whatever is half-typed in that one.
+        """
+        if engine not in WEB_ENGINES:
+            raise HTTPException(status_code=404, detail="no such engine")
+        try:
+            found = build_engine(engine, current["cfg"]).models()
+        except Exception as error:
+            # models() promises [] over raising and build_engine raises by
+            # design (an unknown provider, a config it cannot use). Either way
+            # the page has to come back, and come back saying so.
+            log.info("could not list %s models: %s", engine, error)
+            found = []
+        remember_models(engine, found)
+        if not found:
+            return see_other("/settings", notice="models-none")
+        return see_other("/settings", notice="models-found", n=len(found))
 
     # --- analysing a batch of what the import left ---------------------------
     #
