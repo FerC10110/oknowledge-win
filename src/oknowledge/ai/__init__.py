@@ -69,7 +69,7 @@ def _recorder(cfg: Config, link: str, tally: Iterator[int], engine: str,
 
     def record(prompt: str, reply: str, parsed: str) -> None:
         try:
-            write_trace(link=f"{link}-{next(tally):02d}", url=url, engine=engine,
+            write_trace(link=link, attempt=next(tally), url=url, engine=engine,
                         model=model, prompt=prompt, reply=reply, parsed=parsed,
                         run=cfg.trace_to, language=cfg.language)
         except Exception:

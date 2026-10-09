@@ -85,6 +85,16 @@ def test_a_link_id_cannot_climb_out_of_the_folder(tmp_path):
     assert write_trace(tmp_path, "", prompt="x", reply="", run="r") is None
 
 
+def test_the_file_is_numbered_but_the_link_is_not(tmp_path):
+    """The link's id is what the vault, the queue and the library all call
+    this page. Only the file is numbered."""
+    path = write_trace(tmp_path, "abc123", prompt="p", reply="r", run="r",
+                       attempt=2)
+    assert path.name == "abc123-02.md"
+    assert "abc123-02" not in path.read_text(encoding="utf-8")
+    assert "abc123" in path.read_text(encoding="utf-8")
+
+
 def test_two_links_of_one_run_land_in_the_same_folder(tmp_path):
     first = write_trace(tmp_path, "aaa", prompt="1", reply="", run="r")
     second = write_trace(tmp_path, "bbb", prompt="2", reply="", run="r")

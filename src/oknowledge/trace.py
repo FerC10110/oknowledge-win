@@ -148,8 +148,16 @@ def _middle(text: str, limit: int, t) -> str:
 def write_trace(base: Path | str | None = None, link: str = "", *,
                 url: str = "", engine: str = "", model: str = "",
                 prompt: str = "", reply: str = "", parsed: str = "",
-                run: str = "", language: str = "en") -> Path | None:
+                run: str = "", attempt: int = 0,
+                language: str = "en") -> Path | None:
     """Write one link's prompt and reply, and return the path, or None.
+
+    `attempt` numbers the file when there is more than one for a link, which
+    is the interesting case: a link that falls through a chain of two, each
+    getting a second stricter try, is four prompts and four replies. It
+    numbers the file and not the link -- the link's id is what the vault, the
+    queue and the library all call this page, and it has to stay the same
+    word everywhere.
 
     None is every way this can fail: a folder that will not be created, a
     disk that is full, a link id that is not one. A trace is a convenience
@@ -187,11 +195,12 @@ def write_trace(base: Path | str | None = None, link: str = "", *,
         f"## {t('Reply')}", "", _fenced(reply_block), "",
         f"## {t('Parsed')}", "", _fenced(parsed_block), "",
     ])
+    target = folder / (f"{link}-{attempt:02d}.md" if attempt else f"{link}.md")
     try:
-        (folder / f"{link}.md").write_text(text, encoding="utf-8")
+        target.write_text(text, encoding="utf-8")
     except OSError:
         return None
-    return folder / f"{link}.md"
+    return target
 
 
 def sweep_traces(base: Path | str | None = None, keep: int = 10) -> None:

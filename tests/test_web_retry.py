@@ -835,6 +835,22 @@ def test_the_page_draws_what_the_run_is_doing(setup, started):
     assert "1.5" in body
 
 
+def test_a_step_with_nothing_to_say_says_nothing(setup, started):
+    """`opencode · ` reads as a line that lost half of itself."""
+    from oknowledge.trace import Step
+
+    cfg, client = setup
+    owe(3)
+    client.post("/retry")
+    client.app.state.batch.note(Step(link="a", name="analyze", state="start",
+                                     seconds=0.0, engine="opencode"))
+
+    body = client.get("/retry").text
+    assert "opencode" in body
+    assert "opencode ·" not in body
+    assert "opencode &#183;" not in body
+
+
 def test_the_checkbox_is_off_unless_asked(setup, started):
     cfg, client = setup
     owe(3)

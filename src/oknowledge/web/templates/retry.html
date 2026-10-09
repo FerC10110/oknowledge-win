@@ -41,7 +41,11 @@
           <span class="step-name">{{ line.name }}</span>
           <span class="step-state">{{ line.state }}</span>
           <span class="step-time">{{ '%.1f' % line.seconds }}s</span>
-          <span class="step-detail">{% if line.engine %}{{ line.engine }} · {% endif %}{{ line.detail }}</span>
+          {# The separator only between two things. An `analyze` that has just
+             started names its engine and has no detail yet -- the model is not
+             known until the engine is built -- and "opencode · " reads as a
+             line that lost half of itself. #}
+          <span class="step-detail">{% if line.engine %}{{ line.engine }}{% if line.detail %} · {% endif %}{% endif %}{{ line.detail }}</span>
         </li>
       {% endfor %}
     </ol>
