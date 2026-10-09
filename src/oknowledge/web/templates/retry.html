@@ -26,31 +26,6 @@
     </div>
   {% endif %}
 
-  {# What it is doing, newest first. The run holds the last two hundred steps
-     and the meta refresh above is what brings them: no JavaScript, and a page
-     that stays readable with the tab closed and reopened. Shown after a run
-     has ended too -- that is when you read it. #}
-  {% if batch.lines %}
-    <h2>{{ t('What it is doing') }}</h2>
-    <ol class="steps">
-      {% for line in batch.lines %}
-        <li class="step {{ line.state }}">
-          {# Not translated, like the stage names beside them: find, extract,
-             analyze, ok and fail are this pipeline's vocabulary, and a reader
-             of this list is reading the pipeline. #}
-          <span class="step-name">{{ line.name }}</span>
-          <span class="step-state">{{ line.state }}</span>
-          <span class="step-time">{{ '%.1f' % line.seconds }}s</span>
-          {# The separator only between two things. An `analyze` that has just
-             started names its engine and has no detail yet -- the model is not
-             known until the engine is built -- and "opencode · " reads as a
-             line that lost half of itself. #}
-          <span class="step-detail">{% if line.engine %}{{ line.engine }}{% if line.detail %} · {% endif %}{% endif %}{{ line.detail }}</span>
-        </li>
-      {% endfor %}
-    </ol>
-  {% endif %}
-
   {% if not batch.running %}
     {% if batch.total %}
       {# The run can end under its total: an entry only the bookkeeping thought
@@ -74,6 +49,31 @@
     {% else %}
       <p class="meta">{{ t('Every link has been analysed.') }}</p>
     {% endif %}
+  {% endif %}
+
+  {# What it is doing, newest first. The run holds the last two hundred steps
+     and the meta refresh above is what brings them: no JavaScript, and a page
+     that stays readable with the tab closed and reopened. Shown after a run
+     has ended too -- that is when you read it. #}
+  {% if batch.lines %}
+    <h2>{{ t('What it is doing') }}</h2>
+    <ol class="steps">
+      {% for line in batch.lines %}
+        <li class="step {{ line.state }}">
+          {# Not translated, like the stage names beside them: find, extract,
+             analyze, ok and fail are this pipeline's vocabulary, and a reader
+             of this list is reading the pipeline. #}
+          <span class="step-name">{{ line.name }}</span>
+          <span class="step-state">{{ line.state }}</span>
+          <span class="step-time">{{ '%.1f' % line.seconds }}s</span>
+          {# The separator only between two things. An `analyze` that has just
+             started names its engine and has no detail yet -- the model is not
+             known until the engine is built -- and "opencode · " reads as a
+             line that lost half of itself. #}
+          <span class="step-detail">{% if line.engine %}{{ line.engine }}{% if line.detail %} · {% endif %}{% endif %}{{ line.detail }}</span>
+        </li>
+      {% endfor %}
+    </ol>
   {% endif %}
 
   <p><a class="button" href="/settings">{{ t('Settings') }}</a>
