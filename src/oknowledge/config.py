@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from .atomic import atomic_write
+from .trace import trace_run
 
 CONFIG_PATH = Path.home() / ".config" / "oknowledge" / "config.toml"
 ENGINE_NAMES = ("opencode", "ollama", "api", "fake")
@@ -45,6 +46,15 @@ class Config:
     engines: dict[str, dict] = field(default_factory=dict)
     port: int = 8787
     idle_timeout: int = 900
+    trace_to: str = ""
+    """The run folder this process writes prompt-and-reply traces into, or ""
+    for the usual case of not tracing at all. One value and not a flag plus a
+    name: a run folder is what tracing *is*, and two fields could disagree.
+
+    `[debug] trace = true` turns it into one folder per process, which is one
+    folder per run. The web sets it per batch instead, with a replace(), so a
+    box ticked once does not leave every later run writing the full text of
+    every page to disk."""
     source: Path | None = None
     """The file this was read from, when it was read from one. `--config
     somewhere/else.toml` has to reach the settings page: saving to the default
@@ -147,6 +157,11 @@ def load(path: Path = CONFIG_PATH) -> Config:
     engines = {name: dict(value) for name, value in ai.items() if isinstance(value, dict)}
     web = _table(data, "web", "web")
 
+    debug = _table(data, "debug", "debug")
+    tracing = debug.get("trace", False)
+    if not isinstance(tracing, bool):
+        raise ConfigError(f"debug.trace must be true or false, not {tracing!r}")
+
     return Config(
         vault=vault,
         folder=folder,
@@ -158,6 +173,7 @@ def load(path: Path = CONFIG_PATH) -> Config:
         engines=engines,
         port=_integer(web, "port", 8787, "web.port"),
         idle_timeout=_integer(web, "idle_timeout", 900, "web.idle_timeout"),
+        trace_to=trace_run() if tracing else "",
         source=path,
     )
 
@@ -188,6 +204,9 @@ def save(cfg: Config, path: Path | None = None) -> Path:
                "mentions": cfg.mentions,
                **{name: dict(options) for name, options in cfg.engines.items()}},
         "web": {"port": cfg.port, "idle_timeout": cfg.idle_timeout},
+        # Written only when it is on: a `trace = false` in everybody's config
+        # file is a line that explains nothing and has to be read anyway.
+        **({"debug": {"trace": True}} if cfg.trace_to else {}),
     }
     text = tomli_w.dumps(data)          # before the backup: a bad value changes nothing
 

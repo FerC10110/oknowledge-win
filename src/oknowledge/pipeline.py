@@ -17,8 +17,9 @@ from __future__ import annotations
 import datetime as dt
 import os
 import secrets
-from collections.abc import Callable
-from contextlib import ExitStack
+import time
+from collections.abc import Callable, Iterator
+from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -30,6 +31,7 @@ from .extract import Unreadable, detect_type, extract
 from .model import Extracted, Note, QueueEntry
 from .net import fetch
 from .queue import Locked, Queue
+from .trace import SILENT, Step, Tracer, guarded
 from .urls import link_id, normalize
 from .vault import (
     ProtectedNote,
@@ -327,9 +329,47 @@ def _partial_note(cfg: Config, link: str, url: str, content: str,
     )
 
 
+@dataclass
+class _Told:
+    """What a traced step wants said about itself when it closes."""
+
+    state: str = "ok"
+    detail: str = ""
+
+
+@contextmanager
+def _step(trace: Tracer, link: str, name: str) -> Iterator[_Told]:
+    """Emit a `start`, then exactly one close, whichever way the block ends.
+
+    One close per open is the invariant a reader leans on: a step left open is
+    a line that sits there saying the pipeline is still busy with something it
+    finished long ago. A block that raises closes as `fail` and the exception
+    goes on its way -- tracing never changes what happens, only what is said
+    about it. A block that fails without raising says so through `told`.
+    """
+    trace(Step(link=link, name=name, state="start", seconds=0.0))
+    clock = time.monotonic()
+    told = _Told()
+    try:
+        yield told
+    except BaseException as error:
+        trace(Step(link=link, name=name, state="fail",
+                   seconds=time.monotonic() - clock, detail=_reason(error)))
+        raise
+    trace(Step(link=link, name=name, state=told.state,
+               seconds=time.monotonic() - clock, detail=told.detail))
+
+
 def add(cfg: Config, url: str, content: str | None = None, engine: str | None = None,
-        reprocess: bool = False, queue: Queue | None = None) -> Result:
-    """Save one link, and say what happened to it."""
+        reprocess: bool = False, queue: Queue | None = None,
+        trace: Tracer | None = None) -> Result:
+    """Save one link, and say what happened to it.
+
+    `trace` is told what each stage is doing, for a caller drawing more than a
+    progress bar. It is wrapped before anything else happens: from here on it
+    cannot raise, and a link cannot be lost to a watcher's bug.
+    """
+    trace = guarded(trace)
     q = queue or Queue()
     clean = normalize(url)
     link = link_id(clean)
@@ -357,7 +397,10 @@ def add(cfg: Config, url: str, content: str | None = None, engine: str | None = 
         # another process is halfway through writing, and we would then write a
         # second file for the same link: one URL listed twice in the index, in
         # a tool whose whole point is that links stop piling up unfindably.
-        found = find_note(cfg, link)
+        with _step(trace, link, "find") as told:
+            found = find_note(cfg, link)
+            told.detail = (f"{found[1].status} note on disk" if found
+                           else "no note yet")
         # One shape for every path a Result can carry: find_note() reports the
         # path it globbed and write_note() the resolved one, so a vault reached
         # through a symlink would otherwise give two spellings for one note.
@@ -380,7 +423,7 @@ def add(cfg: Config, url: str, content: str | None = None, engine: str | None = 
 
         # _process() is not guarded: an OSError from the vault is a real
         # failure to report, and retry() turns it into a failed Result.
-        result = _process(cfg, q, link, clean, mode, engine, existing)
+        result = _process(cfg, q, link, clean, mode, engine, existing, trace)
         result.warnings = [*trouble, *result.warnings]
         return result
 
@@ -404,7 +447,8 @@ def _mode(cfg: Config, content: str | None, existing: Note | None) -> tuple[str,
 
 
 def _process(cfg: Config, q: Queue, link: str, url: str, mode: str,
-             engine: str | None, existing: tuple[Path, Note] | None) -> Result:
+             engine: str | None, existing: tuple[Path, Note] | None,
+             trace: Tracer = SILENT) -> Result:
     # Reprocessing rewrites the note already on disk, whatever the new title
     # would have named it: a second file carrying the same id is the duplicate
     # link that find_note() exists to prevent.
@@ -428,16 +472,23 @@ def _process(cfg: Config, q: Queue, link: str, url: str, mode: str,
     # here, and the partial one through `keep`.
     kept_date = existing[1].saved if existing else None
 
-    try:
-        page = extract(url)
-    except Exception as error:
-        # extract() promises to raise only Unreadable, and the rule that a link
-        # is never lost must not rest on that promise: a bug in trafilatura,
-        # pypdf, yt-dlp or in our own dispatcher would otherwise cost the user
-        # the link. _reason() keeps the type name so a real bug stays legible.
-        # BaseException -- Ctrl-C, SystemExit -- passes through untouched.
-        return _give_up(cfg, q, link, url, mode, None, _reason(error), finished,
-                        target, keep=keep)
+    with _step(trace, link, "extract") as told:
+        try:
+            page = extract(url)
+        except Exception as error:
+            # extract() promises to raise only Unreadable, and the rule that a
+            # link is never lost must not rest on that promise: a bug in
+            # trafilatura, pypdf, yt-dlp or in our own dispatcher would
+            # otherwise cost the user the link. _reason() keeps the type name
+            # so a real bug stays legible. BaseException -- Ctrl-C, SystemExit
+            # -- passes through untouched.
+            told.state, told.detail, trouble = "fail", _reason(error), _reason(error)
+            page = None
+        else:
+            told.detail = f"{page.type} · {len(page.text.split())} words"
+    if page is None:
+        return _give_up(cfg, q, link, url, mode, None, trouble, finished,
+                        target, keep=keep, trace=trace)
 
     try:
         analysis, used, used_model = analyze_with_chain(
@@ -446,18 +497,23 @@ def _process(cfg: Config, q: Queue, link: str, url: str, mode: str,
             # Only a video is asked, and only the pipeline sees both the type
             # and the config at once.
             mentions=cfg.mentions if page.type == "youtube" else None,
+            trace=trace, link=link,
         )
     except AllEnginesFailed as error:
         # The text is already out of the page: keep it, so a retry only has to
         # ask a model again instead of fetching the page again.
         return _give_up(cfg, q, link, url, mode, page, str(error), finished,
-                        target, keep=keep)
+                        target, keep=keep, trace=trace)
 
     summary = analysis.summary
     if len(page.text) > DEFAULT_LIMIT:
         # Only the full-content note keeps the text the longer notice promises.
         notice = TRUNCATED if mode == "full" else TRUNCATED_SUMMARY
         summary += notice.get(cfg.language, notice["en"])
+
+    with _step(trace, link, "cover") as told:
+        cover = download_cover(cfg, page.cover_url, link)
+        told.detail = cover or "no cover"
 
     note = Note(
         id=link,
@@ -474,7 +530,7 @@ def _process(cfg: Config, q: Queue, link: str, url: str, mode: str,
         content=mode,
         author=page.author,
         published=page.published,
-        cover=download_cover(cfg, page.cover_url, link),
+        cover=cover,
         engine=used,
         model=used_model,
         body=page.text if mode == "full" else None,
@@ -484,12 +540,13 @@ def _process(cfg: Config, q: Queue, link: str, url: str, mode: str,
         mentions_extra=(existing[1].mentions_extra if existing else []),
         collections=(existing[1].collections if existing else []),
     )
-    return _save(cfg, q, link, url, note, "ok", "", used, target)
+    return _save(cfg, q, link, url, note, "ok", "", used, target, trace)
 
 
 def _give_up(cfg: Config, q: Queue, link: str, url: str, mode: str,
              page: Extracted | None, reason: str, finished: Note | None,
-             target: Path | None, keep: Note | None = None) -> Result:
+             target: Path | None, keep: Note | None = None,
+             trace: Tracer = SILENT) -> Result:
     """Record a failure that produced no analysis.
 
     With an analyzed note already on disk there is nothing to write that would
@@ -513,11 +570,12 @@ def _give_up(cfg: Config, q: Queue, link: str, url: str, mode: str,
         return Result(id=link, url=url, path=target, status="failed", error=reason,
                       warnings=[KEPT_NOTE, *trouble])
     note = _partial_note(cfg, link, url, mode, page, keep=keep)
-    return _save(cfg, q, link, url, note, "partial", reason, None, target)
+    return _save(cfg, q, link, url, note, "partial", reason, None, target, trace)
 
 
 def _save(cfg: Config, q: Queue, link: str, url: str, note: Note, status: str,
-          error: str, engine: str | None, target: Path | None) -> Result:
+          error: str, engine: str | None, target: Path | None,
+          trace: Tracer = SILENT) -> Result:
     """Write the note, record its status, fix its name, rebuild the indexes.
 
     The order is the point. The queue is what a retry reads and the indexes are
@@ -534,14 +592,16 @@ def _save(cfg: Config, q: Queue, link: str, url: str, note: Note, status: str,
 
     Only write_note() may raise: see _record() for why the status may not.
     """
-    path = write_note(cfg, note, cfg.language, path=target)
-    warnings = _record(q, link, status, error, note.title)
-    if target is not None:
-        path, trouble = _rename_to_title(cfg, note, path)
-        if trouble:
-            warnings.append(trouble)
-    warnings += _reindex(cfg)
-    download_icon(cfg, note.source)
+    with _step(trace, link, "save") as told:
+        path = write_note(cfg, note, cfg.language, path=target)
+        warnings = _record(q, link, status, error, note.title)
+        if target is not None:
+            path, trouble = _rename_to_title(cfg, note, path)
+            if trouble:
+                warnings.append(trouble)
+        warnings += _reindex(cfg)
+        download_icon(cfg, note.source)
+        told.detail = str(path.name)
     return Result(id=link, url=url, path=path, status=status, engine=engine,
                   error=error or None, warnings=warnings)
 
@@ -931,7 +991,8 @@ def _announce(hook: Callable[[Result], None] | None, result: Result) -> None:
 
 def retry(cfg: Config, queue: Queue | None = None,
           limit: int | None = None,
-          on_step: Callable[[Result], None] | None = None) -> list[Result]:
+          on_step: Callable[[Result], None] | None = None,
+          trace: Tracer | None = None) -> list[Result]:
     """Finish every link the queue still owes, newest first, and settle the
     ones only the bookkeeping thinks are owed.
 
@@ -991,7 +1052,7 @@ def retry(cfg: Config, queue: Queue | None = None,
                 results.append(settled)
                 continue                  # bookkeeping, not work: no quota used
             results.append(add(cfg, entry.url, content=entry.content,
-                               reprocess=True, queue=q))
+                               reprocess=True, queue=q, trace=trace))
             done += 1
             _announce(on_step, results[-1])
         except Exception as error:

@@ -7,9 +7,11 @@ normalizing it -- lives here, identical for all three engines.
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import re
 import unicodedata
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from importlib.resources import files
 from typing import Protocol
@@ -73,6 +75,22 @@ class Analysis:
     category: str
     tags: list[str]
     mentions: list[Mention] = field(default_factory=list)
+
+
+def _NOTHING(prompt: str, reply: str, parsed: str) -> None:
+    """The recorder of a caller who wants no trace."""
+
+
+def _as_text(analysis: Analysis) -> str:
+    """The parsed analysis, for a person reading a trace beside the raw reply.
+
+    JSON because that is what the reply is, so the two read side by side and
+    the difference between them is the question being asked.
+    """
+    try:
+        return json.dumps(dataclasses.asdict(analysis), ensure_ascii=False, indent=2)
+    except (TypeError, ValueError):
+        return repr(analysis)
 
 
 def retry_suffix(language: str, reason: str) -> str:
@@ -445,15 +463,35 @@ def _to_analysis(data: dict, known, meta: dict, language: str, sent: str | None 
 
 
 def analyze(engine: Engine, text: str, meta: dict, known, language: str,
-            mentions: str | None = None) -> Analysis:
+            mentions: str | None = None,
+            record: Callable[[str, str, str], None] | None = None) -> Analysis:
+    """Ask the engine about the page and give back what it said, parsed.
+
+    `record(prompt, reply, parsed)` is called once per attempt, for a caller
+    keeping a trace of what went out and what came back: it is the only place
+    that holds all three at once. It is called on the failure paths too --
+    those are the ones worth reading -- and never on the happy path of a
+    caller who did not ask for it.
+    """
+    tell = record or _NOTHING
     sent = sent_text(text) if mentions else None
     prompt = render_prompt(text, meta, known, language, mentions=mentions)
     request = prompt
     for attempt in range(2):
         try:
-            return _to_analysis(extract_json(engine.complete(request)), known,
-                                meta, language, sent)
+            reply = engine.complete(request)
+        except Exception as error:
+            # No reply to record, which is itself the thing to record: a
+            # timeout and a refusal look alike from the note's side.
+            tell(request, "", f"{type(error).__name__}: {error}")
+            raise
+        try:
+            done = _to_analysis(extract_json(reply), known, meta, language, sent)
         except AnalysisError as error:
+            tell(request, reply, f"unusable: {error}")
             last = error
             request = prompt + retry_suffix(language, str(error))
+            continue
+        tell(request, reply, _as_text(done))
+        return done
     raise AnalysisError(f"the engine never produced a usable answer: {last}") from last

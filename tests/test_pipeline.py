@@ -190,7 +190,7 @@ def test_the_existing_categories_are_offered_to_the_model(cfg, q, monkeypatch):
     no_pictures(monkeypatch)
     seen = {}
 
-    def spy(config, text, meta, known, engine=None, mentions=None):
+    def spy(config, text, meta, known, engine=None, mentions=None, **_):
         seen["known"] = list(known)
         return Analysis("T", "S", [], "Redes", ["vpn"]), "fake", "fake-7b"
 
@@ -1953,7 +1953,7 @@ def test_the_pipeline_asks_for_the_configured_mode_and_only_for_a_video(
     no_pictures(monkeypatch)
     seen = {}
 
-    def spy(config, text, meta, known, engine=None, mentions=None):
+    def spy(config, text, meta, known, engine=None, mentions=None, **_):
         seen["mentions"] = mentions
         return (Analysis(title="t", summary="s", points=[], category="Redes",
                          tags=["x"], mentions=[]), "fake", "fake-7b")
