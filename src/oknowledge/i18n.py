@@ -237,6 +237,14 @@ STRINGS = {
             "Ese archivo ya no está. Elegí el archivo de nuevo.",
         "Imported": "Importado",
         "Not imported": "Sin importar",
+        # The trace file one run writes per link. "Prompt" and "Link" are the
+        # same word in both languages, so they are not in here: a key with no
+        # entry degrades to English, which is where they already are.
+        "Engine": "Motor",
+        "Reply": "Respuesta",
+        "Parsed": "Interpretado",
+        "(%1 characters cut from the middle)":
+            "(se recortaron %1 caracteres del medio)",
         "The notes are saved but not analysed yet: each one needs a model call. "
         "Run `oknowledge retry` when you want that to happen.":
             "Las notas están guardadas pero todavía sin analizar: cada una "
