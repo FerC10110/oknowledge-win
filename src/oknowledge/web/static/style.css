@@ -352,3 +352,37 @@ header nav b { font-weight: 600; font-variant-numeric: tabular-nums; }
   opacity: 0.55;
 }
 .icon-engine:hover { opacity: 1; }
+
+/* What a run is doing, line by line. Monospaced and in columns because the
+   eye reads it by scanning down one of them -- which stage, how it went, how
+   long -- and ragged text makes that impossible. The failures are the reason
+   the list exists, so they are the only ones with a colour. */
+.steps {
+  list-style: none;
+  margin: 0.4rem 0 1rem;
+  padding: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.82rem;
+  max-height: 24rem;
+  overflow-y: auto;
+}
+.step {
+  display: grid;
+  grid-template-columns: 5.5rem 3rem 4rem 1fr;
+  gap: 0.5rem;
+  padding: 0.1rem 0;
+  white-space: nowrap;
+}
+.step-time { text-align: right; font-variant-numeric: tabular-nums; }
+.step-detail { overflow: hidden; text-overflow: ellipsis; color: var(--dim); }
+/* This palette has no red in it, and a list where one line in three is red is
+   a list that reads as broken. A failure stands out by being the only line
+   that is not dim. */
+.step.fail .step-state, .step.fail .step-detail { color: var(--fg); font-weight: 600; }
+.step.start .step-state { opacity: 0.5; }
+@media (max-width: 40rem) {
+  /* Two lines at phone width: the four columns would each be four characters
+     wide, and the detail is the half of it worth reading. */
+  .step { grid-template-columns: 5.5rem 3rem 4rem; }
+  .step-detail { grid-column: 1 / -1; padding-left: 0.5rem; }
+}

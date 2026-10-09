@@ -35,6 +35,7 @@ from ..i18n import LANGUAGES, NATIVE_NAMES, set_ui_language, translator, ui_lang
 from ..pipeline import add as add_link
 from ..pipeline import icon_path, import_links, is_domain, owed
 from ..queue import Locked, Queue
+from ..trace import trace_run
 from ..urls import is_search_url, link_id, normalize
 from ..vault import (
     BadCategory, IndexesStale, ProtectedNote, clean_category, delete_note,
@@ -1016,8 +1017,13 @@ def create_app(cfg: Config) -> FastAPI:
                     size=min(live.batch, waiting), refresh=REFRESH)
 
     @app.post("/retry")
-    def start_batch(background: BackgroundTasks):
+    def start_batch(background: BackgroundTasks, debug: str = Form("")):
         live = current["cfg"]
+        if debug:
+            # This batch and no other: the box is on the page that starts a
+            # run, not in Settings, because every run after this one writing
+            # the full text of every page to disk is not what a tick meant.
+            live = dataclasses.replace(live, trace_to=trace_run())
         # The same listing retry() walks, so the bar's total cannot promise
         # work the run will not find.
         waiting = len(owed(Queue())[0])

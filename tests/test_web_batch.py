@@ -11,6 +11,16 @@ from oknowledge.web import batch as module
 from oknowledge.web.batch import Batch, run
 
 
+class _Config:
+    """As much of a Config as the worker reads: whether to trace, and nothing
+    else. A real one needs a vault on disk, which none of this touches."""
+
+    trace_to = ""
+
+
+NO_TRACE = _Config()
+
+
 def _result(status="ok", url="https://a.com/x"):
     from oknowledge.pipeline import Result
     return Result(id="abc", url=url, path=None, status=status)
@@ -132,7 +142,7 @@ def test_a_step_after_the_run_ended_is_ignored():
 def test_the_worker_asks_retry_for_the_batch_size_and_passes_the_hook(monkeypatch):
     seen = {}
 
-    def fake_retry(cfg, limit=None, on_step=None):
+    def fake_retry(cfg, limit=None, on_step=None, trace=None):
         seen.update(cfg=cfg, limit=limit)
         on_step(_result())
         return []
@@ -141,9 +151,9 @@ def test_the_worker_asks_retry_for_the_batch_size_and_passes_the_hook(monkeypatc
     held = Batch()
     held.start(10)
 
-    run("the-config", held, 10)
+    run(NO_TRACE, held, 10)
 
-    assert seen == {"cfg": "the-config", "limit": 10}
+    assert seen == {"cfg": NO_TRACE, "limit": 10}
     assert held.snapshot().done == 1
 
 
@@ -152,7 +162,7 @@ def test_the_worker_leaves_the_record_idle_when_it_is_done(monkeypatch):
     held = Batch()
     held.start(10)
 
-    run("cfg", held, 10)
+    run(NO_TRACE, held, 10)
 
     assert not held.snapshot().running
 
@@ -160,14 +170,14 @@ def test_the_worker_leaves_the_record_idle_when_it_is_done(monkeypatch):
 def test_a_run_that_blows_up_still_frees_the_button(monkeypatch):
     """Left running, the button is dead until the server restarts, and the user
     has no way to know why -- so the failure has to come back as text."""
-    def explode(cfg, limit=None, on_step=None):
+    def explode(cfg, limit=None, on_step=None, trace=None):
         raise OSError("no space left on device")
 
     monkeypatch.setattr(module, "retry", explode)
     held = Batch()
     held.start(10)
 
-    run("cfg", held, 10)             # must not raise: a task has nowhere to raise to
+    run(NO_TRACE, held, 10)             # must not raise: a task has nowhere to raise to
 
     state = held.snapshot()
     assert not state.running

@@ -24,7 +24,30 @@
       {% endif %}
       <p class="meta">{{ t('This page comes back on its own. You can close it: the run keeps going until it is done or the server stops.') }}</p>
     </div>
-  {% else %}
+  {% endif %}
+
+  {# What it is doing, newest first. The run holds the last two hundred steps
+     and the meta refresh above is what brings them: no JavaScript, and a page
+     that stays readable with the tab closed and reopened. Shown after a run
+     has ended too -- that is when you read it. #}
+  {% if batch.lines %}
+    <h2>{{ t('What it is doing') }}</h2>
+    <ol class="steps">
+      {% for line in batch.lines %}
+        <li class="step {{ line.state }}">
+          {# Not translated, like the stage names beside them: find, extract,
+             analyze, ok and fail are this pipeline's vocabulary, and a reader
+             of this list is reading the pipeline. #}
+          <span class="step-name">{{ line.name }}</span>
+          <span class="step-state">{{ line.state }}</span>
+          <span class="step-time">{{ '%.1f' % line.seconds }}s</span>
+          <span class="step-detail">{% if line.engine %}{{ line.engine }} · {% endif %}{{ line.detail }}</span>
+        </li>
+      {% endfor %}
+    </ol>
+  {% endif %}
+
+  {% if not batch.running %}
     {% if batch.total %}
       {# The run can end under its total: an entry only the bookkeeping thought
          was owed is settled without a model call, and costs no step. #}
@@ -37,6 +60,11 @@
     {% if owed %}
       <form action="/retry" method="post">
         <button type="submit">{% if size == 1 %}{{ t('Analyse 1 link') }}{% else %}{{ t('Analyse %1 links', size) }}{% endif %}</button>
+        {# Off every time, and for this run only: a batch of fifty writes
+           fifty files, and the whole queue would write 1164. #}
+        <p class="field"><label><input type="checkbox" name="debug" value="on">
+          {{ t('Save the prompt and the reply of each link') }}</label></p>
+        <p class="meta">{{ t('The trace files hold the full text of each page. They are written outside the vault and only the last ten runs are kept.') }}</p>
       </form>
       <p class="meta">{{ t('Each link is one model call, so this takes a while. How many at a time is in Settings.') }}</p>
     {% else %}

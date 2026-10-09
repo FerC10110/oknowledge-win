@@ -761,3 +761,107 @@ def test_the_lock_being_let_go_ends_the_spin(cards):
         pass
 
     assert client.get("/item/waiting/state").json()["working"] is False
+
+
+# --- What the run is doing, line by line -------------------------------------
+
+def step(n, name="extract", state="ok"):
+    from oknowledge.trace import Step
+    return Step(link=f"link{n}", name=name, state=state, seconds=1.5,
+                detail=f"detail {n}")
+
+
+def test_the_lines_are_capped_and_the_newest_is_first():
+    """A run of 1164 links is some six thousand lines, and the page sends
+    every one of them it holds on every refresh."""
+    from oknowledge.web.batch import Batch
+
+    held = Batch()
+    held.start(500)
+    for n in range(500):
+        held.note(step(n))
+
+    lines = held.snapshot().lines
+    assert len(lines) == 200
+    assert lines[0].link == "link499"
+    assert lines[-1].link == "link300"
+
+
+def test_a_run_that_is_not_running_drops_what_arrives_late():
+    from oknowledge.web.batch import Batch
+
+    held = Batch()
+    held.note(step(1))
+    held.start(1)
+    held.finish()
+    held.note(step(2))
+    assert held.snapshot().lines == ()
+
+
+def test_a_new_run_does_not_start_with_the_last_one_s_lines():
+    from oknowledge.web.batch import Batch
+
+    held = Batch()
+    held.start(1)
+    held.note(step(1))
+    held.finish()
+    held.start(1)
+    assert held.snapshot().lines == ()
+
+
+def test_the_worker_hands_the_tracer_to_retry(setup, monkeypatch):
+    cfg, _ = setup
+    from oknowledge.web import batch as batch_module
+
+    seen = {}
+    monkeypatch.setattr(batch_module, "retry",
+                        lambda cfg, **kw: seen.update(kw) or [])
+    held = batch_module.Batch()
+    held.start(1)
+    batch_module.run(cfg, held, 1)
+    assert seen["trace"] == held.note
+
+
+def test_the_page_draws_what_the_run_is_doing(setup, started):
+    cfg, client = setup
+    owe(3)
+    client.post("/retry")
+    app_batch = client.app.state.batch
+    app_batch.note(step(1, name="analyze", state="fail"))
+
+    body = client.get("/retry").text
+    assert "analyze" in body
+    assert "detail 1" in body
+    assert "1.5" in body
+
+
+def test_the_checkbox_is_off_unless_asked(setup, started):
+    cfg, client = setup
+    owe(3)
+    body = client.get("/retry").text
+    assert 'name="debug"' in body
+    assert "checked" not in body
+
+
+def test_the_page_says_the_traces_hold_the_page_text(setup, started):
+    """The box says what it keeps, because what it keeps is your content."""
+    cfg, client = setup
+    owe(3)
+    assert "full text of each page" in client.get("/retry").text
+
+
+def test_the_box_unticked_traces_nothing(setup, started):
+    cfg, client = setup
+    owe(3)
+    client.post("/retry")
+    assert started[0][0].trace_to == ""
+
+
+def test_the_box_ticked_traces_this_batch_and_no_other(setup, started):
+    cfg, client = setup
+    owe(3)
+    client.post("/retry", data={"debug": "on"})
+    assert started[0][0].trace_to != ""
+    # The server's own config is untouched: a box ticked once must not leave
+    # every later run writing the full text of every page to disk.
+    assert client.app.state.settings["cfg"].trace_to == ""

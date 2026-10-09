@@ -241,6 +241,14 @@ STRINGS = {
         # same word in both languages, so they are not in here: a key with no
         # entry degrades to English, which is where they already are.
         "Engine": "Motor",
+        # The step list on the batch page, and the box that writes the files.
+        "What it is doing": "Qué está haciendo",
+        "Save the prompt and the reply of each link":
+            "Guardar el prompt y la respuesta de cada link",
+        "The trace files hold the full text of each page. They are written "
+        "outside the vault and only the last ten runs are kept.":
+            "Los archivos de traza tienen el texto completo de cada página. Se "
+            "escriben fuera del vault y sólo se guardan las últimas diez corridas.",
         "Reply": "Respuesta",
         "Parsed": "Interpretado",
         "(%1 characters cut from the middle)":

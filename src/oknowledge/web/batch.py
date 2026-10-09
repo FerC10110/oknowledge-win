@@ -16,12 +16,19 @@ from __future__ import annotations
 
 import logging
 import threading
+from collections import deque
 from typing import NamedTuple
 
 from ..config import Config
 from ..pipeline import Result, retry
+from ..trace import Step, sweep_traces
 
 log = logging.getLogger("oknowledge.web")
+
+
+# The most steps a run keeps. A batch of 1164 links is some six thousand of
+# them, and the page sends every one it holds on every refresh.
+LINES = 200
 
 
 class State(NamedTuple):
@@ -32,6 +39,8 @@ class State(NamedTuple):
     done: int
     failed: int
     error: str | None
+    lines: tuple[Step, ...] = ()
+    """What the run has been doing, newest first.""" 
 
 
 class Batch:
@@ -50,6 +59,7 @@ class Batch:
         self._done = 0
         self._failed = 0
         self._error: str | None = None
+        self._lines: deque[Step] = deque(maxlen=LINES)
 
     def start(self, total: int) -> bool:
         """Claim the run. False means one is already in flight -- do not start.
@@ -65,6 +75,9 @@ class Batch:
             self._done = 0
             self._failed = 0
             self._error = None
+            # A new run starts with an empty list: the last run's steps under
+            # this run's bar would read as this run's work.
+            self._lines.clear()
             return True
 
     def step(self, result: Result) -> None:
@@ -80,6 +93,22 @@ class Batch:
             if result.status == "failed":
                 self._failed += 1
 
+    def note(self, step: Step) -> None:
+        """One more thing the run is doing, for the page to draw.
+
+        Newest first and capped at `LINES`, which the deque does in one move:
+        a step arriving pushes the oldest one off the end.
+
+        A step for a run that is over is dropped, like a counter's would be.
+        The pipeline hands this to `retry()` and the handing is guarded, so a
+        step that arrives after `finish()` -- the last link of a run that has
+        already given up -- cannot reopen it.
+        """
+        with self._lock:
+            if not self._running:
+                return
+            self._lines.appendleft(step)
+
     def finish(self, error: str | None = None) -> None:
         """The run is over. The numbers stay, to be read on the next page."""
         with self._lock:
@@ -90,7 +119,7 @@ class Batch:
         with self._lock:
             return State(running=self._running, total=self._total,
                          done=self._done, failed=self._failed,
-                         error=self._error)
+                         error=self._error, lines=tuple(self._lines))
 
 
 def run(cfg: Config, held: Batch, limit: int) -> None:
@@ -102,8 +131,12 @@ def run(cfg: Config, held: Batch, limit: int) -> None:
     until the server is restarted, with nothing on the page to say why.
     """
     problem = None
+    if cfg.trace_to:
+        # Before the run writes its first file, so the ten kept folders are
+        # the ten most recent runs and this one is one of them.
+        sweep_traces()
     try:
-        retry(cfg, limit=limit, on_step=held.step)
+        retry(cfg, limit=limit, on_step=held.step, trace=held.note)
     except Exception as error:
         problem = f"{type(error).__name__}: {error}"
         log.exception("the batch of %s links failed", limit)
