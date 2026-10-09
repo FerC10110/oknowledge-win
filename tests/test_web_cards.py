@@ -345,3 +345,60 @@ def test_joining_a_collection_is_not_drawn_as_saving(client):
     body = client.get("/item/a1").text
 
     assert "<button type=\"submit\">Add</button>" in body
+
+
+# --- which engine analysed the note ------------------------------------------
+
+
+def test_a_note_nobody_analysed_draws_no_engine_icon(client):
+    """1182 of 1184 notes are in that state. An icon meaning "I don't know",
+    repeated a thousand times, is noise and not information."""
+    assert "icon-engine" not in client.get("/").text
+
+
+def test_the_card_draws_the_engine_that_analysed_it(tmp_path):
+    _, client = build(tmp_path, note("a1", engine="opencode",
+                                     model="opencode/ling-3.1-flash-free"))
+
+    assert "icon-engine opencode" in client.get("/").text
+
+
+def test_the_model_is_named_where_the_mouse_finds_it(tmp_path):
+    _, client = build(tmp_path, note("a1", engine="ollama", model="qwen2.5:7b"))
+    body = client.get("/").text
+
+    assert 'title="ollama · qwen2.5:7b"' in body
+    assert 'aria-label="ollama · qwen2.5:7b"' in body
+
+
+def test_an_engine_with_no_model_names_only_itself(tmp_path):
+    """The model is empty on a note whose engine never reported one. A dangling
+    separator is worse than no separator."""
+    _, client = build(tmp_path, note("a1", engine="opencode"))
+
+    assert 'title="opencode"' in client.get("/").text
+
+
+def test_an_engine_nobody_has_an_icon_for_draws_nothing(tmp_path):
+    """`engine: pepe` typed by hand must not reach a template as a file name."""
+    _, client = build(tmp_path, note("a1", engine="../../etc/passwd", model="m"))
+    body = client.get("/").text
+
+    assert "icon-engine" not in body
+    assert "passwd" not in body
+
+
+def test_the_engine_icon_follows_the_theme(tmp_path):
+    """The lesson of the floppy disk: a fixed colour breaks in the other theme."""
+    _, client = build(tmp_path, note("a1", engine="api", model="gpt-5"))
+    body = client.get("/").text
+    drawn = body[body.index("icon-engine"):body.index("</svg>")]
+
+    assert "currentColor" in drawn
+    assert "fill=\"#" not in drawn
+
+
+def test_the_note_page_names_the_engine_too(tmp_path):
+    _, client = build(tmp_path, note("a1", engine="opencode", model="m"))
+
+    assert "icon-engine" in client.get("/item/a1").text

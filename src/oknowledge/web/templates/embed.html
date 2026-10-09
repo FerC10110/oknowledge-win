@@ -6,7 +6,8 @@
 {% if note %}
   <article class="item embed">
     <p class="meta"><span class="cat">{{ note.category }}</span> · {{ note.source }} · {{ note.saved }}
-      {% if note.status != 'ok' %}<span class="warn">{{ t('Incomplete') }}</span>{% endif %}</p>
+      {% if note.status != 'ok' %}<span class="warn">{{ t('Incomplete') }}</span>{% endif %}
+      {% include "engine-badge.html" %}</p>
     <h1 dir="auto">{{ note.title }}</h1>
     <p class="tags">{% for tag in note.tags %}<span>#{{ tag }}</span>{% endfor %}</p>
     {% if note.cover %}

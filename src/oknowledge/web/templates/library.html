@@ -96,6 +96,7 @@
                 {% else %}
                   <span>{{ note.source }}</span>
                 {% endif %}
+                {% include "engine-badge.html" %}
               </p>
             {% endif %}
             {% if note.url is not web_url %}

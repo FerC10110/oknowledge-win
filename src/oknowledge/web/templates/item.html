@@ -3,7 +3,8 @@
 {% block main %}
   <article class="item">
     <p class="meta"><span class="cat">{{ note.category }}</span> · {{ note.source }} · {{ note.saved }}
-      {% if note.status != 'ok' %}<span class="warn">{{ t('Incomplete') }}</span>{% endif %}</p>
+      {% if note.status != 'ok' %}<span class="warn">{{ t('Incomplete') }}</span>{% endif %}
+      {% include "engine-badge.html" %}</p>
     <h1 dir="auto">{{ note.title }}</h1>
     <p class="tags">{% for tag in note.tags %}<a href="/?tag={{ tag|urlencode }}">#{{ tag }}</a>{% endfor %}</p>
     {% if note.collections %}

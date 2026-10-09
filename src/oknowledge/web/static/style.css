@@ -342,3 +342,13 @@ progress::-moz-progress-bar { background: var(--accent); }
 
 /* How far a running batch has got, in the nav, on every page. */
 header nav b { font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* Who analysed the note, beside where it came from. Dimmer than the text it
+   sits in: it answers a question you only sometimes ask, and a card that
+   shouts its engine at you is a card about the wrong thing. */
+.icon-engine {
+  display: inline-flex;
+  vertical-align: -0.15em;
+  opacity: 0.55;
+}
+.icon-engine:hover { opacity: 1; }

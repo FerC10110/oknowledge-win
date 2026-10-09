@@ -116,6 +116,11 @@ NOTICES = {
 
 # Three letters each, because the strip they go in is five characters wide.
 # "2021-11" is a date for a database; a person reads "nov".
+# One drawn icon each, by the engine's own name. `api` is one icon for every
+# provider it can point at: the provider is named in the title beside it, and
+# a logo guessed wrong is worse than no logo.
+ENGINE_ICONS = ("opencode", "ollama", "api")
+
 MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun",
           "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
 
@@ -493,6 +498,9 @@ def create_app(cfg: Config) -> FastAPI:
     templates.env.filters["slug"] = lambda value: quote(str(value), safe="")
     templates.env.tests["web_url"] = is_web_url
     templates.env.tests["search_link"] = is_search_url
+    # The engines there is an icon for. A name outside this never reaches an
+    # include: `engine:` is frontmatter and frontmatter is typed by hand.
+    templates.env.globals["engines"] = ENGINE_ICONS
     app.mount("/static", StaticFiles(directory=str(WEB.joinpath("static"))), name="static")
 
     def page(request: Request, name: str, status_code: int = 200, **context) -> HTMLResponse:

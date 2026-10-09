@@ -1,0 +1,15 @@
+{# Who analysed this note, if anybody did.
+
+   The name is checked against `engines` before it reaches the include: the
+   vault is hand-edited, so `engine:` can say anything, and an include built
+   from user text is a path the user chose. A name nobody has an icon for
+   draws nothing at all -- not a question mark, because almost every note
+   saved before this existed is in that state and a thousand shrugs are noise.
+
+   The model is in the title rather than beside it: it is long, it repeats on
+   every card, and it is the answer to a question you only sometimes ask. #}
+{% if note.engine in engines %}
+  {% set named = note.engine ~ (' · ' ~ note.model if note.model else '') %}
+  <span class="icon-engine {{ note.engine }}" title="{{ named }}" aria-label="{{ named }}"
+        role="img">{% include "icon-engine-" ~ note.engine ~ ".html" %}</span>
+{% endif %}
