@@ -404,7 +404,7 @@ def test_the_card_button_does_not_stop_to_ask(cards):
 def test_the_card_button_comes_back_to_the_view_it_was_clicked_on(cards, monkeypatch):
     """Analysing from a card and landing on the note page is the trip the
     button exists to avoid -- and on page 4 of a category it is worse."""
-    monkeypatch.setattr(module, "reanalyze", lambda cfg, url, engine: None)
+    monkeypatch.setattr(module, "reanalyze", lambda cfg, url, engine, **kw: None)
     cfg, client = cards
 
     answer = client.post("/item/waiting/reprocess",
@@ -415,7 +415,7 @@ def test_the_card_button_comes_back_to_the_view_it_was_clicked_on(cards, monkeyp
 
 
 def test_the_note_page_button_still_comes_back_to_the_note(cards, monkeypatch):
-    monkeypatch.setattr(module, "reanalyze", lambda cfg, url, engine: None)
+    monkeypatch.setattr(module, "reanalyze", lambda cfg, url, engine, **kw: None)
     cfg, client = cards
 
     answer = client.post("/item/waiting/reprocess", data={"engine": ""},
@@ -435,7 +435,7 @@ def test_the_note_page_button_still_comes_back_to_the_note(cards, monkeypatch):
     ({"back": "https://evil.com"}, "/item/waiting?notice=queued"),
 ])
 def test_a_hand_made_return_cannot_leave_this_app(cards, monkeypatch, sent, expected):
-    monkeypatch.setattr(module, "reanalyze", lambda cfg, url, engine: None)
+    monkeypatch.setattr(module, "reanalyze", lambda cfg, url, engine, **kw: None)
     cfg, client = cards
 
     answer = client.post("/item/waiting/reprocess", data=sent, follow_redirects=False)
@@ -449,7 +449,7 @@ def test_the_card_s_own_button_is_the_one_that_comes_back(cards, monkeypatch):
     page, which is the trip this button exists to avoid."""
     import re
 
-    monkeypatch.setattr(module, "reanalyze", lambda cfg, url, engine: None)
+    monkeypatch.setattr(module, "reanalyze", lambda cfg, url, engine, **kw: None)
     cfg, client = cards
 
     body = client.get("/?category=Redes").text
@@ -468,7 +468,7 @@ def test_the_card_in_a_collection_comes_back_to_that_collection(cards, monkeypat
     button is not losing the place you pressed it from."""
     import re
 
-    monkeypatch.setattr(module, "reanalyze", lambda cfg, url, engine: None)
+    monkeypatch.setattr(module, "reanalyze", lambda cfg, url, engine, **kw: None)
     cfg, client = cards
     client.post("/collections/add", data={"name": "Casa", "id": ["waiting"]})
 
@@ -488,7 +488,7 @@ def test_the_card_in_a_period_comes_back_to_that_period(cards, monkeypatch):
     this button exists not to do."""
     import re
 
-    monkeypatch.setattr(module, "reanalyze", lambda cfg, url, engine: None)
+    monkeypatch.setattr(module, "reanalyze", lambda cfg, url, engine, **kw: None)
     cfg, client = cards
 
     body = client.get("/?when=2026-10").text
@@ -527,7 +527,7 @@ def test_the_hit_s_own_button_comes_back_to_the_same_search(cards, monkeypatch):
     the note, loses the search the user had to type."""
     import re
 
-    monkeypatch.setattr(module, "reanalyze", lambda cfg, url, engine: None)
+    monkeypatch.setattr(module, "reanalyze", lambda cfg, url, engine, **kw: None)
     cfg, client = cards
 
     body = client.get("/search?q=Twaiting").text
@@ -544,7 +544,7 @@ def test_the_hit_s_own_button_comes_back_to_the_same_search(cards, monkeypatch):
 def test_a_search_with_nothing_to_search_for_is_not_a_destination(cards, monkeypatch):
     """/search with no terms redirects to the library, so sending the user
     there would bounce them somewhere they never were."""
-    monkeypatch.setattr(module, "reanalyze", lambda cfg, url, engine: None)
+    monkeypatch.setattr(module, "reanalyze", lambda cfg, url, engine, **kw: None)
     cfg, client = cards
 
     answer = client.post("/item/waiting/reprocess",
@@ -616,7 +616,7 @@ def test_the_nav_counts_nothing_when_no_batch_is_running(setup):
 def test_a_link_being_worked_on_says_so(cards, monkeypatch):
     """What the spinning card polls. The queue and never the vault: every card
     the user clicked asks this every few seconds."""
-    monkeypatch.setattr(module, "reanalyze", lambda cfg, url, engine: None)
+    monkeypatch.setattr(module, "reanalyze", lambda cfg, url, engine, **kw: None)
     cfg, client = cards
 
     client.post("/item/waiting/reprocess", data={"back": "library"},
@@ -668,7 +668,7 @@ def test_the_click_marks_the_link_pending_before_it_answers(cards, monkeypatch):
 
     seen = {}
     monkeypatch.setattr(module, "reanalyze",
-                        lambda cfg, url, engine: seen.update(
+                        lambda cfg, url, engine, **kw: seen.update(
                             status=Queue().get("waiting").status))
 
     cfg, client = cards
@@ -700,7 +700,7 @@ def test_the_script_s_click_gets_no_page_back(cards, monkeypatch):
     """The whole point: the user stays where they were. A redirect here would
     make the browser fetch the library again and the script would have to
     throw it away -- or, worse, follow it."""
-    monkeypatch.setattr(module, "reanalyze", lambda cfg, url, engine: None)
+    monkeypatch.setattr(module, "reanalyze", lambda cfg, url, engine, **kw: None)
     cfg, client = cards
 
     answer = client.post("/item/waiting/reprocess", data={"back": "library"},
@@ -715,7 +715,7 @@ def test_the_script_s_click_gets_no_page_back(cards, monkeypatch):
 def test_a_click_without_the_script_still_gets_its_page(cards, monkeypatch):
     """The same route serves both: with JavaScript off the form posts plainly
     and the browser has to be sent somewhere."""
-    monkeypatch.setattr(module, "reanalyze", lambda cfg, url, engine: None)
+    monkeypatch.setattr(module, "reanalyze", lambda cfg, url, engine, **kw: None)
     cfg, client = cards
 
     answer = client.post("/item/waiting/reprocess", data={"back": "library"},
@@ -729,7 +729,7 @@ def test_the_quiet_answer_still_queues_the_work(cards, monkeypatch):
     """A 204 that did nothing would be the quietest bug in the program."""
     seen = []
     monkeypatch.setattr(module, "reanalyze",
-                        lambda cfg, url, engine: seen.append(url))
+                        lambda cfg, url, engine, **kw: seen.append(url))
     cfg, client = cards
 
     client.post("/item/waiting/reprocess", headers={"X-Requested-With": "redo"},
@@ -787,15 +787,18 @@ def test_the_lines_are_capped_and_the_newest_is_first():
     assert lines[-1].link == "link300"
 
 
-def test_a_run_that_is_not_running_drops_what_arrives_late():
+def test_work_outside_a_batch_is_still_work_you_can_watch():
+    """The list is what this process has been doing, not what one run did.
+    A link re-analysed from its card is a model call like any other, and the
+    page that shows model calls has to show it."""
     from oknowledge.web.batch import Batch
 
     held = Batch()
-    held.note(step(1))
     held.start(1)
+    held.note(step(1))
     held.finish()
-    held.note(step(2))
-    assert held.snapshot().lines == ()
+    held.note(step(2))          # the card's own button, long after the batch
+    assert [line.link for line in held.snapshot().lines] == ["link2", "link1"]
 
 
 def test_a_new_run_does_not_start_with_the_last_one_s_lines():
@@ -820,6 +823,27 @@ def test_the_worker_hands_the_tracer_to_retry(setup, monkeypatch):
     held.start(1)
     batch_module.run(cfg, held, 1)
     assert seen["trace"] == held.note
+
+
+def test_the_card_s_retry_button_is_watched_too(cards, monkeypatch):
+    """The whole complaint: the ↻ on a card is a model call the page knew
+    nothing about."""
+    cfg, client = cards
+    seen = {}
+    monkeypatch.setattr(module, "reanalyze",
+                        lambda cfg, url, engine, trace=None: seen.update(trace=trace))
+
+    client.post("/item/waiting/reprocess", headers={"x-requested-with": "redo"})
+
+    assert seen["trace"] == client.app.state.batch.note
+
+
+def test_re_analysing_one_link_hands_the_tracer_to_the_pipeline(monkeypatch):
+    seen = {}
+    monkeypatch.setattr(module, "add_link",
+                        lambda cfg, url, **kw: seen.update(kw))
+    module.reanalyze("cfg", "https://e.com/x", None, trace="the-tracer")
+    assert seen["trace"] == "the-tracer"
 
 
 def test_the_page_draws_what_the_run_is_doing(setup, started):

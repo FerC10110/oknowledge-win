@@ -94,19 +94,18 @@ class Batch:
                 self._failed += 1
 
     def note(self, step: Step) -> None:
-        """One more thing the run is doing, for the page to draw.
+        """One more thing this process is doing, for the page to draw.
 
         Newest first and capped at `LINES`, which the deque does in one move:
         a step arriving pushes the oldest one off the end.
 
-        A step for a run that is over is dropped, like a counter's would be.
-        The pipeline hands this to `retry()` and the handing is guarded, so a
-        step that arrives after `finish()` -- the last link of a run that has
-        already given up -- cannot reopen it.
+        Taken whether or not a batch is running, unlike the counters beside
+        it: a link re-analysed from its own card is a model call like any
+        other, and the page that shows model calls has to show it. A new
+        batch still clears the list, so the bar and the lines under it always
+        describe the same run.
         """
         with self._lock:
-            if not self._running:
-                return
             self._lines.appendleft(step)
 
     def finish(self, error: str | None = None) -> None:

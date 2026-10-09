@@ -14,6 +14,7 @@ import logging
 import re
 from importlib.resources import files
 from pathlib import Path
+from collections.abc import Callable
 from typing import NamedTuple
 from urllib.parse import quote, urlencode
 
@@ -478,7 +479,8 @@ def link_lock(link_id: str):
         yield
 
 
-def reanalyze(cfg: Config, url: str, engine: str | None) -> None:
+def reanalyze(cfg: Config, url: str, engine: str | None,
+              trace: Callable | None = None) -> None:
     """Re-run the analysis outside the request, and never raise into the server.
 
     The chain can take minutes per engine, which is far too long to hold a
@@ -487,7 +489,7 @@ def reanalyze(cfg: Config, url: str, engine: str | None) -> None:
     `retry` to pick up: nothing is lost by answering early.
     """
     try:
-        add_link(cfg, url, engine=engine, reprocess=True)
+        add_link(cfg, url, engine=engine, reprocess=True, trace=trace)
     except Exception:                 # a background task has nowhere to raise to
         log.exception("re-analysing %s failed", url)
 
@@ -784,7 +786,11 @@ def create_app(cfg: Config) -> FastAPI:
         # note page has always said happens -- made true when it says it.
         with contextlib.suppress(OSError, ValueError):
             Queue().set_status(link_id, "pending")
-        background.add_task(reanalyze, current["cfg"], note.url, name)
+        # The same list the batch page draws: one link re-analysed by hand is
+        # the same five stages and the same model call, and the page that
+        # shows them is the page to look at while this takes its minute.
+        background.add_task(reanalyze, current["cfg"], note.url, name,
+                            trace=progress.note)
         # Three destinations and no fourth: the listing the card was on --
         # the library or the search results -- or else the note's own page,
         # which is where the button on that page sends you back to.

@@ -232,7 +232,8 @@ def test_reprocess_asks_for_the_right_url_and_engine(setup, monkeypatch):
     monkeypatch.setattr("oknowledge.web.app.add_link",
                         lambda cfg, url, **kwargs: calls.append((url, kwargs)))
     client.post("/item/a1/reprocess", data={"engine": "ollama"})
-    assert calls == [("https://e.com/a1", {"engine": "ollama", "reprocess": True})]
+    assert calls == [("https://e.com/a1", {"engine": "ollama", "reprocess": True,
+                                           "trace": client.app.state.batch.note})]
 
 
 def test_reprocess_without_an_engine_lets_the_chain_decide(setup, monkeypatch):
@@ -241,7 +242,8 @@ def test_reprocess_without_an_engine_lets_the_chain_decide(setup, monkeypatch):
     monkeypatch.setattr("oknowledge.web.app.add_link",
                         lambda cfg, url, **kwargs: calls.append(kwargs))
     client.post("/item/a1/reprocess", data={"engine": ""})
-    assert calls == [{"engine": None, "reprocess": True}]
+    assert calls == [{"engine": None, "reprocess": True,
+                      "trace": client.app.state.batch.note}]
 
 
 def test_reprocess_with_an_engine_we_do_not_have_is_refused(setup, monkeypatch):
