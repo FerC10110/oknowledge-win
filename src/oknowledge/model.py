@@ -89,3 +89,9 @@ class QueueEntry:
     updated: str                     # ISO 8601 UTC
     title: str | None = None
     error: str | None = None
+    step: str = ""
+    """What is being done to this link right now -- the pipeline's stage, and
+    the engine after it when there is one ("analyze opencode") -- or "" when
+    nothing is. The one field here that nobody keeps: it is written as the
+    work moves and cleared when the link is settled, so a watcher can say
+    what is happening instead of only that something is."""

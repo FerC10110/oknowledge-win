@@ -59,6 +59,12 @@ def _entry_from(link_id: str, data: object) -> QueueEntry | None:
     fields = {key: data.get(key) for key in ("content", "updated", "title", "error")}
     if any(v is not None and not isinstance(v, str) for v in fields.values()):
         return None
+    # Not held to that rule: the step is a transient a watcher reads, not
+    # something that describes the link. A hand-edited one that is not text
+    # reads as no step at all rather than stranding the link, which rejecting
+    # the entry would do -- and a link `retry` can never see again is the one
+    # thing this module does not allow.
+    step = data.get("step")
     return QueueEntry(
         id=link_id,
         url=url,
@@ -68,6 +74,7 @@ def _entry_from(link_id: str, data: object) -> QueueEntry | None:
         updated=fields["updated"] or "",
         title=fields["title"],
         error=fields["error"],
+        step=step if isinstance(step, str) else "",
     )
 
 
@@ -87,7 +94,7 @@ class Queue:
         payload = {
             "id": entry.id, "url": entry.url, "content": entry.content,
             "status": entry.status, "updated": entry.updated,
-            "title": entry.title, "error": entry.error,
+            "title": entry.title, "error": entry.error, "step": entry.step,
         }
         atomic_write(self._path(entry.id),
                      json.dumps(payload, ensure_ascii=False, indent=2), fsync_dir=True)
@@ -121,11 +128,36 @@ class Queue:
             return None
         entry.status = status
         entry.updated = _now()
+        # A status is where a link stops being worked on, so whatever it was
+        # in the middle of, it is not any more.
+        entry.step = ""
         if error is not None:
             entry.error = error
         if title is not None:
             entry.title = title
         return self._write(entry)
+
+    def set_step(self, link_id: str, step: str) -> None:
+        """Say what is being done to this link right now, for whoever watches.
+
+        Never raises, and never returns a problem either: this is told between
+        the stages of a run that is holding a model open, and nothing about it
+        may reach the link. A link with no entry yet -- the first stage runs
+        before `add()` has written one -- is simply not told about.
+
+        It also keeps `updated` moving, which is what lets a watcher tell a
+        thirty-second analysis from a run that died: the panel calls an entry
+        "working" only while its clock is fresh.
+        """
+        try:
+            entry = self.get(link_id)
+            if entry is None:
+                return
+            entry.step = step
+            entry.updated = _now()
+            self._write(entry)
+        except (OSError, ValueError):
+            return
 
     def entries(self) -> list[QueueEntry]:
         if not self.dir.is_dir():

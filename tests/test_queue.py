@@ -1,3 +1,4 @@
+import json
 import os
 import stat
 import time
@@ -300,3 +301,91 @@ def test_no_test_can_reach_the_real_state_tree(tmp_path):
     assert state_dir().is_relative_to(tmp_path)
     assert not state_dir().is_relative_to(pathlib.Path.home() / ".local" / "state")
     assert os.environ["XDG_STATE_HOME"].startswith(str(tmp_path))
+
+
+# --- what is happening to a link right now ------------------------------------
+
+def test_an_entry_says_which_stage_it_is_in(tmp_path):
+    q = Queue(tmp_path)
+    q.enqueue("a1", "https://e.com/a", "full")
+    assert q.get("a1").step == ""
+
+    q.set_step("a1", "analyze opencode")
+
+    assert q.get("a1").step == "analyze opencode"
+
+
+def test_a_step_moves_the_clock_so_a_watcher_knows_it_is_alive(tmp_path):
+    """The panel calls an entry "working" while its `updated` is fresh. Every
+    stage touching it is what keeps a thirty-second analysis from looking
+    like a run that died.
+
+    The old stamp is written by hand: two real writes can land in the same
+    millisecond, and a test that passes because the clock did not tick is
+    not a test of anything.
+    """
+    q = Queue(tmp_path)
+    q.enqueue("a1", "https://e.com/a", "full")
+    path = tmp_path / "queue" / "a1.json"
+    data = json.loads(path.read_text(encoding="utf-8"))
+    data["updated"] = "2020-01-01T00:00:00.000+00:00"
+    path.write_text(json.dumps(data), encoding="utf-8")
+
+    q.set_step("a1", "analyze")
+
+    assert q.get("a1").updated > "2020-01-01T00:00:00.000+00:00"
+
+
+def test_the_final_status_clears_the_step(tmp_path):
+    q = Queue(tmp_path)
+    q.enqueue("a1", "https://e.com/a", "full")
+    q.set_step("a1", "analyze opencode")
+
+    q.set_status("a1", "ok")
+
+    assert q.get("a1").step == ""
+
+
+def test_a_step_for_a_link_with_no_entry_is_quiet(tmp_path):
+    q = Queue(tmp_path)
+    q.set_step("a1", "extract")              # the entry is written a moment later
+    assert q.get("a1") is None
+
+
+def test_a_step_that_cannot_be_written_costs_nothing(tmp_path):
+    """It is told between the stages of a run that is holding a model open.
+    Nothing about it may reach the link."""
+    q = Queue(tmp_path)
+    q.enqueue("a1", "https://e.com/a", "full")
+    (tmp_path / "queue").chmod(0o500)        # readable, not writable
+    try:
+        q.set_step("a1", "analyze")          # does not raise
+    finally:
+        (tmp_path / "queue").chmod(0o700)
+    assert q.get("a1").step == ""
+
+
+def test_a_step_for_an_entry_that_cannot_be_read_is_quiet(tmp_path):
+    q = Queue(tmp_path)
+    q.enqueue("a1", "https://e.com/a", "full")
+    (tmp_path / "queue" / "a1.json").write_text("}{", encoding="utf-8")
+
+    q.set_step("a1", "analyze")              # unreadable now: does not raise
+
+
+def test_a_step_of_nonsense_does_not_strand_the_link(tmp_path):
+    """Unlike a title or an error: those describe the link, and one that is
+    not text means the file is not ours to trust. The step is a transient a
+    watcher reads, and a hand-edited one must not hide the link from
+    `retry` -- which is the one thing this module does not allow."""
+    q = Queue(tmp_path)
+    q.enqueue("a1", "https://e.com/a", "full")
+    path = tmp_path / "queue" / "a1.json"
+    data = json.loads(path.read_text(encoding="utf-8"))
+    data["step"] = 7
+    path.write_text(json.dumps(data), encoding="utf-8")
+
+    entry = q.get("a1")
+
+    assert entry is not None
+    assert entry.step == ""

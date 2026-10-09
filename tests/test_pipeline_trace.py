@@ -226,3 +226,57 @@ def test_the_config_traces_nothing_by_default(tmp_path):
 def dataclasses_replace(cfg, **changes):
     import dataclasses
     return dataclasses.replace(cfg, **changes)
+
+
+# --- and the queue says it too, for a watcher in another process -------------
+
+def seen_at(cfg, q, link, engine_reply):
+    """What the queue entry says while the model is being asked."""
+    caught = {}
+
+    def reply(prompt):
+        caught["step"] = q.get(link).step
+        return engine_reply
+
+    return reply, caught
+
+
+def test_the_queue_says_which_stage_the_link_is_in(cfg, q, ready, monkeypatch):
+    """The Omarchy panel runs the CLI in another process, so the only place
+    it can read this from is the file the queue already keeps for it."""
+    link = "0" * 12
+    monkeypatch.setattr("oknowledge.pipeline.link_id", lambda url: link)
+    reply, caught = seen_at(cfg, q, link, ANSWER)
+    cfg = dataclasses_replace(cfg, engines={"fake": {"replies": reply,
+                                                     "model": "fake-7b"}})
+
+    add(cfg, "https://a.test/x", queue=q)
+
+    assert caught["step"] == "analyze fake"
+
+
+def test_a_finished_link_is_not_still_analysing(cfg, q, ready):
+    result = add(cfg, "https://a.test/x", queue=q)
+    assert q.get(result.id).step == ""
+
+
+def test_a_link_that_failed_is_not_still_reading_the_page(cfg, q, monkeypatch):
+    monkeypatch.setattr("oknowledge.pipeline.extract",
+                        lambda url: (_ for _ in ()).throw(Unreadable("no text")))
+    monkeypatch.setattr("oknowledge.pipeline.download_icon", lambda cfg, source: None)
+    result = add(cfg, "https://a.test/x", queue=q)
+    assert q.get(result.id).step == ""
+
+
+def test_the_callers_own_tracer_still_gets_everything(cfg, q, ready):
+    """The queue is told as well as the caller, not instead of it."""
+    seen = []
+    add(cfg, "https://a.test/x", queue=q, trace=seen.append)
+    assert {s.name for s in seen} == {"find", "extract", "analyze", "cover", "save"}
+
+
+def test_a_queue_that_cannot_be_told_does_not_cost_the_note(cfg, q, ready,
+                                                            monkeypatch):
+    monkeypatch.setattr(Queue, "set_step",
+                        lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom")))
+    assert add(cfg, "https://a.test/x", queue=q).status == "ok"

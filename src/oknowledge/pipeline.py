@@ -329,6 +329,31 @@ def _partial_note(cfg: Config, link: str, url: str, content: str,
     )
 
 
+def _telling(q: Queue, link: str, trace: Tracer) -> Tracer:
+    """`trace`, and the queue entry along with it.
+
+    The entry is the only thing a second process can read: the Omarchy panel
+    runs the CLI, so the in-memory list the web page draws is invisible to it
+    and a file is the only place these two can meet. It is the same reason the
+    queue is files and not a database.
+
+    Only a `start` is written, so the entry names the stage being worked on
+    rather than the last one that ended, and it is cleared by the status that
+    settles the link. Both calls are already safe -- the tracer is guarded and
+    `set_step` swallows its own trouble -- so this adds no new way to lose a
+    link.
+    """
+    def both(step: Step) -> None:
+        trace(step)
+        if step.state == "start":
+            q.set_step(link, " ".join(p for p in (step.name, step.engine) if p))
+
+    # Guarded for the same reason everything else here is: `set_step` promises
+    # not to raise, and the rule that a link is never lost does not rest on a
+    # promise. This runs with a model call open on the other side of it.
+    return guarded(both)
+
+
 @dataclass
 class _Told:
     """What a traced step wants said about itself when it closes."""
@@ -369,10 +394,12 @@ def add(cfg: Config, url: str, content: str | None = None, engine: str | None = 
     progress bar. It is wrapped before anything else happens: from here on it
     cannot raise, and a link cannot be lost to a watcher's bug.
     """
-    trace = guarded(trace)
     q = queue or Queue()
     clean = normalize(url)
     link = link_id(clean)
+    # Guarded first and wrapped second, so a watcher that raises cannot stop
+    # the queue being told, and the telling is as safe as the watching.
+    trace = _telling(q, link, guarded(trace))
     trouble: list[str] = []
 
     with ExitStack() as stack:
