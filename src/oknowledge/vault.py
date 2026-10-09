@@ -43,7 +43,8 @@ HEADINGS = {
 
 FRONTMATTER_ORDER = (
     "url", "title", "category", "tags", "collections", "type", "source",
-    "author", "published", "saved", "cover", "content", "status", "id", MARKER,
+    "author", "published", "saved", "cover", "content", "engine", "model",
+    "status", "id", MARKER,
 )
 
 
@@ -106,6 +107,10 @@ def render(note: Note, language: str) -> str:
         "saved": note.saved,
         "cover": note.cover,
         "content": note.content,
+        # `or None` for the same reason collections has it: a thousand notes
+        # that nobody analysed should not each carry two empty lines.
+        "engine": note.engine or None,
+        "model": note.model or None,
         "status": note.status,
         "id": note.id,
         MARKER: MARKER_VERSION,
@@ -266,6 +271,11 @@ def read_note(path: Path) -> Note | None:
     for key in ("author", "cover"):
         if front.get(key) is not None and not isinstance(front[key], str):
             return None
+    # A hand-edited `engine:` comes back as whatever was typed -- a list, a
+    # number, a date. It picks an icon, so anything that is not text is nobody.
+    # The note is not refused over it: it is the user's note either way.
+    made = {key: front.get(key) for key in ("engine", "model")}
+    made = {key: value if isinstance(value, str) else "" for key, value in made.items()}
     summary, points, mentions, extra, body = _split_body(rest)
     return Note(
         id=required["id"],
@@ -281,6 +291,8 @@ def read_note(path: Path) -> Note | None:
         points=points,
         status=str(front.get("status", "ok")),
         content=str(front.get("content", "full")),
+        engine=made["engine"],
+        model=made["model"],
         author=front.get("author"),
         published=str(front["published"]) if front.get("published") else None,
         cover=front.get("cover"),

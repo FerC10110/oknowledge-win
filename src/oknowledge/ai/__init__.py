@@ -42,17 +42,22 @@ def build_engine(name: str, cfg: Config) -> Engine:
         )
     if name == "fake":
         from .fake import FakeEngine
-        return FakeEngine(options.get("replies", []))
+        return FakeEngine(options.get("replies", []), options.get("model", ""))
     raise EngineError(f"unknown engine: {name!r}")
 
 
 def analyze_with_chain(cfg: Config, text: str, meta: dict, known,
                        engine: str | None = None,
-                       mentions: str | None = None) -> tuple[Analysis, str]:
-    """Try each listed engine in order; return the analysis and who produced it.
+                       mentions: str | None = None) -> tuple[Analysis, str, str]:
+    """Try each listed engine in order; return the analysis, who produced it
+    and with which model.
 
     An engine that is not in the chain is never tried. Forcing one by name is an
     explicit request and bypasses the chain.
+
+    The model comes off the engine the chain actually built, not off the
+    config: those differ whenever the config names none and the engine falls
+    back to its own default, which is the common case.
     """
     names = (engine,) if engine else cfg.chain
     if not names:
@@ -60,8 +65,12 @@ def analyze_with_chain(cfg: Config, text: str, meta: dict, known,
     failures = []
     for name in names:
         try:
-            return analyze(build_engine(name, cfg), text, meta, known,
-                           cfg.language, mentions=mentions), name
+            # build_engine stays inside the try: an engine named in the chain
+            # that does not exist is a failure to record, not one to raise.
+            engine_used = build_engine(name, cfg)
+            return (analyze(engine_used, text, meta, known, cfg.language,
+                            mentions=mentions),
+                    name, str(getattr(engine_used, "model", "")))
         except (EngineError, AnalysisError) as error:
             failures.append(f"{name}: {error}")
     raise AllEnginesFailed("every engine failed: " + "; ".join(failures))

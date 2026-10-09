@@ -25,10 +25,13 @@ class FakeEngine:
 
     name = "fake"
 
-    def __init__(self, replies):
+    def __init__(self, replies, model: str = ""):
         self._answer = replies if callable(replies) else None
         self.replies = [] if self._answer else list(replies)
         self.prompts: list[str] = []
+        # Only so a test can assert the model reaches the note. The real
+        # engines carry theirs because they need it to make the call.
+        self.model = model
 
     @staticmethod
     def answer(**overrides) -> str:

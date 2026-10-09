@@ -16,7 +16,8 @@ from oknowledge.pipeline import (IMPORTED, _last_worked, add, backfill_mentions,
                                  import_links, retry)
 from oknowledge.queue import Locked, Queue, state_dir
 from oknowledge.urls import link_id, normalize, search_url
-from oknowledge.vault import all_notes, find_note, index_path, read_note, write_note
+from oknowledge.vault import (all_notes, find_note, index_path, read_note, update_note,
+                              write_note)
 from oknowledge.whatsapp import Imported
 
 ANSWER = json.dumps({
@@ -191,7 +192,7 @@ def test_the_existing_categories_are_offered_to_the_model(cfg, q, monkeypatch):
 
     def spy(config, text, meta, known, engine=None, mentions=None):
         seen["known"] = list(known)
-        return Analysis("T", "S", [], "Redes", ["vpn"]), "fake"
+        return Analysis("T", "S", [], "Redes", ["vpn"]), "fake", "fake-7b"
 
     monkeypatch.setattr(pipeline, "analyze_with_chain", spy)
     add(cfg, "https://arstechnica.com/a", queue=q)
@@ -1954,8 +1955,8 @@ def test_the_pipeline_asks_for_the_configured_mode_and_only_for_a_video(
 
     def spy(config, text, meta, known, engine=None, mentions=None):
         seen["mentions"] = mentions
-        return Analysis(title="t", summary="s", points=[], category="Redes",
-                        tags=["x"], mentions=[]), "fake"
+        return (Analysis(title="t", summary="s", points=[], category="Redes",
+                         tags=["x"], mentions=[]), "fake", "fake-7b")
 
     monkeypatch.setattr(pipeline, "analyze_with_chain", spy)
 
@@ -2346,3 +2347,51 @@ def test_a_retry_that_fails_again_keeps_the_collections(cfg, q, monkeypatch):
 
     assert second.status == "partial"                             # rewritten, not skipped
     assert read_note(second.path).collections == ["Casa nueva"]
+
+
+# ---- which engine and model produced the note
+
+
+def test_the_note_records_who_analysed_it(cfg, q, monkeypatch):
+    extraction(monkeypatch, PAGE)
+    no_pictures(monkeypatch)
+    live = dataclasses.replace(
+        cfg, engines={"fake": {"replies": [ANSWER], "model": "fake-7b"}})
+
+    result = add(live, "https://arstechnica.com/vpn", queue=q)
+
+    note = read_note(result.path)
+    assert note.engine == "fake"
+    assert note.model == "fake-7b"
+
+
+def test_a_note_nobody_could_analyse_names_no_engine(cfg, q, monkeypatch):
+    """A partial note has no analysis, so it has nobody to credit."""
+    extraction(monkeypatch, Unreadable("no se pudo leer"))
+    no_pictures(monkeypatch)
+
+    result = add(cfg, "https://arstechnica.com/vpn", queue=q)
+
+    assert result.status == "partial"
+    note = read_note(result.path)
+    assert (note.engine, note.model) == ("", "")
+
+
+def test_a_reprocess_credits_the_new_engine_and_keeps_what_is_the_user_s(
+        cfg, q, monkeypatch):
+    """The engine says who wrote the content that is there now, so it is
+    replaced. The collections are the user's and are not."""
+    extraction(monkeypatch, PAGE)
+    no_pictures(monkeypatch)
+    first = add(dataclasses.replace(
+        cfg, engines={"fake": {"replies": [ANSWER], "model": "old"}}),
+        "https://arstechnica.com/vpn", queue=q)
+    update_note(cfg, first.id, "es", add_collection="Rack del garage")
+
+    again = add(dataclasses.replace(
+        cfg, engines={"fake": {"replies": [ANSWER], "model": "new"}}),
+        "https://arstechnica.com/vpn", reprocess=True, queue=q)
+
+    note = read_note(again.path)
+    assert note.model == "new"
+    assert note.collections == ["Rack del garage"]

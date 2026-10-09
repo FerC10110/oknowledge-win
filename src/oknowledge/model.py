@@ -44,6 +44,15 @@ class Note:
     difference between None and [] is what makes `oknowledge mentions`
     idempotent -- without it, a video that truly mentions nothing becomes a
     candidate again on every run and spends a model call to find nothing."""
+    engine: str = ""
+    """Which engine produced the analysis below, and with which model. Written
+    by the pipeline and nobody else: they say who wrote the content that is in
+    the note right now, so a re-analysis replaces them rather than carrying
+    them across the way `collections` and `mentions_extra` are carried. Empty
+    on every note saved before this existed, and on every partial one -- a
+    note nobody analysed has no engine to name."""
+    model: str = ""
+
     collections: list[str] = field(default_factory=list)
     """The user's own grouping: a project they are working on, a list they are
     putting together. The only field here nobody but them writes -- the model

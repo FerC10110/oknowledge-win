@@ -287,7 +287,7 @@ def test_an_unknown_engine_in_the_chain_falls_through(tmp_path, monkeypatch):
         "oknowledge.ai.build_engine",
         lambda name, cfg: FakeEngine([GOOD]) if name == "ollama" else real(name, cfg),
     )
-    analysis, used = analyze_with_chain(make_config(tmp_path, ["gpt5", "ollama"]), "t", META, [])
+    analysis, used, _ = analyze_with_chain(make_config(tmp_path, ["gpt5", "ollama"]), "t", META, [])
     assert used == "ollama"
 
 
@@ -305,7 +305,7 @@ def test_the_chain_falls_through_to_the_next_engine(tmp_path, monkeypatch):
     monkeypatch.setattr("oknowledge.ai.build_engine", lambda name, cfg: engines[name])
 
     cfg = make_config(tmp_path, ["opencode", "ollama"])
-    analysis, used = analyze_with_chain(cfg, "texto", META, [])
+    analysis, used, _ = analyze_with_chain(cfg, "texto", META, [])
 
     assert used == "ollama"
     assert analysis.category == "Redes"
@@ -317,7 +317,7 @@ def test_the_chain_falls_through_when_the_reply_is_unusable(tmp_path, monkeypatc
     engines = {"opencode": FakeEngine(["no json", "still no json"]),
                "ollama": FakeEngine([GOOD])}
     monkeypatch.setattr("oknowledge.ai.build_engine", lambda name, cfg: engines[name])
-    _, used = analyze_with_chain(make_config(tmp_path, ["opencode", "ollama"]), "t", META, [])
+    _, used, _model = analyze_with_chain(make_config(tmp_path, ["opencode", "ollama"]), "t", META, [])
     assert used == "ollama"
 
 
@@ -343,7 +343,7 @@ def test_the_first_engine_that_works_stops_the_chain(tmp_path, monkeypatch):
         "oknowledge.ai.build_engine",
         lambda name, cfg: built.append(name) or FakeEngine([GOOD]),
     )
-    _, used = analyze_with_chain(make_config(tmp_path, ["ollama", "opencode"]), "t", META, [])
+    _, used, _model = analyze_with_chain(make_config(tmp_path, ["ollama", "opencode"]), "t", META, [])
     assert used == "ollama" and built == ["ollama"]
 
 

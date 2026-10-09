@@ -550,3 +550,57 @@ def test_collections_that_are_not_a_list_make_the_note_unreadable(tmp_path):
     path.write_text(path.read_text().replace("collections:\n- Casa", "collections: Casa"))
 
     assert read_note(path) is None
+
+
+# ---- which engine and model produced the note
+
+
+def test_the_engine_and_model_survive_the_round_trip(tmp_path):
+    cfg = make_config(tmp_path)
+    note = make_note(engine="opencode", model="opencode/ling-3.1-flash-free")
+    back = read_note(write_note(cfg, note, "es"))
+
+    assert back.engine == "opencode"
+    assert back.model == "opencode/ling-3.1-flash-free"
+
+
+def test_a_note_nobody_analysed_does_not_carry_the_keys(tmp_path):
+    """1182 notes predate this and none of them should grow a line saying so."""
+    cfg = make_config(tmp_path)
+    text = write_note(cfg, make_note(), "es").read_text(encoding="utf-8")
+
+    assert "engine:" not in text
+    assert "model:" not in text
+
+
+def test_a_note_written_before_this_existed_reads_as_nobody(tmp_path):
+    cfg = make_config(tmp_path)
+    back = read_note(write_note(cfg, make_note(), "es"))
+
+    assert (back.engine, back.model) == ("", "")
+
+
+def test_an_engine_hand_edited_into_something_that_is_not_text_is_ignored(tmp_path):
+    """The vault is edited by hand, so `engine:` can come back as a list, a
+    number or a date. None of those may reach a template as an icon name."""
+    cfg = make_config(tmp_path)
+    path = write_note(cfg, make_note(engine="opencode", model="m"), "es")
+    path.write_text(path.read_text(encoding="utf-8")
+                    .replace("engine: opencode", "engine:\n- opencode")
+                    .replace("model: m", "model: 7"),
+                    encoding="utf-8")
+
+    back = read_note(path)
+    assert (back.engine, back.model) == ("", "")
+
+
+def test_the_engine_sits_with_the_other_notes_about_how_it_was_made(tmp_path):
+    """Between `content` and `status`, not at the end: the frontmatter is read
+    by people, and the fields about how the note was made belong together."""
+    cfg = make_config(tmp_path)
+    text = write_note(cfg, make_note(engine="ollama", model="qwen2.5:7b"), "es")\
+        .read_text(encoding="utf-8")
+    keys = [line.split(":")[0] for line in text.splitlines() if ": " in line]
+
+    assert keys.index("content") < keys.index("engine") < keys.index("status")
+    assert keys.index("engine") < keys.index("model") < keys.index("status")

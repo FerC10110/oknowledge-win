@@ -440,7 +440,7 @@ def _process(cfg: Config, q: Queue, link: str, url: str, mode: str,
                         target, keep=keep)
 
     try:
-        analysis, used = analyze_with_chain(
+        analysis, used, used_model = analyze_with_chain(
             cfg, page.text, {"url": url, "title": page.title},
             list(categories(cfg)), engine=engine,
             # Only a video is asked, and only the pipeline sees both the type
@@ -475,6 +475,8 @@ def _process(cfg: Config, q: Queue, link: str, url: str, mode: str,
         author=page.author,
         published=page.published,
         cover=download_cover(cfg, page.cover_url, link),
+        engine=used,
+        model=used_model,
         body=page.text if mode == "full" else None,
         mentions=analysis.mentions if page.type == "youtube" else None,
         # Not among the things a reprocess says it replaces: what the user
