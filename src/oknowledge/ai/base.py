@@ -77,6 +77,35 @@ class Analysis:
     mentions: list[Mention] = field(default_factory=list)
 
 
+MODEL_LIMIT = 200
+"""The most model names any engine is believed about. A provider answering
+ten thousand of them is a provider having a bad day, and a <datalist> with
+ten thousand entries in it is a page that does not open."""
+
+_MODEL = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:/+@-]{0,119}")
+
+
+def clean_models(names) -> list[str]:
+    """The names in `names` that could be a model, in order, without repeats.
+
+    Shared by all three engines because all three are reading something they
+    did not write: a binary's stdout, a server's JSON, a gateway somebody
+    else runs. Anything that is not a plain short name is dropped rather than
+    shown -- the box is typable either way, so a listing that is wrong is
+    worse than a listing that is short.
+    """
+    seen: dict[str, None] = {}
+    for name in names or ():
+        if not isinstance(name, str):
+            continue
+        text = name.strip()
+        if _MODEL.fullmatch(text):
+            seen.setdefault(text, None)
+        if len(seen) >= MODEL_LIMIT:
+            break
+    return list(seen)
+
+
 def _NOTHING(prompt: str, reply: str, parsed: str) -> None:
     """The recorder of a caller who wants no trace."""
 

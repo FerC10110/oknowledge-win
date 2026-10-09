@@ -9,10 +9,14 @@ from urllib.parse import urlparse
 
 import httpx
 
-from .base import EngineError
+from .base import EngineError, clean_models
 
 
 UNIT = "ollama.service"
+LIST_TIMEOUT = 2.0
+"""Seconds to wait for a listing. The server is either up and instant or
+down, and down is the state of this machine: a longer wait would only make
+opening Settings slower for the case that is already the common one."""
 LOCAL_HOSTS = ("localhost", "127.0.0.1", "::1")
 
 
@@ -127,3 +131,19 @@ class OllamaEngine:
         if not isinstance(content, str) or not content.strip():
             raise EngineError("ollama sent an unexpected reply: no text")
         return content
+
+    def models(self) -> list[str]:
+        """The models already pulled, or [] if the server is not answering.
+
+        Deliberately does not call `ensure_running()`: listing is a question,
+        and starting a server to answer it would turn the page into a
+        fifteen-second wait for somebody who only wanted to see the box.
+        """
+        try:
+            response = httpx.get(f"{self.url}/api/tags", timeout=LIST_TIMEOUT)
+            response.raise_for_status()
+            listed = response.json().get("models", [])
+            return clean_models(
+                item.get("name") for item in listed if isinstance(item, dict))
+        except Exception:
+            return []

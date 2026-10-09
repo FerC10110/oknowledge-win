@@ -11,7 +11,9 @@ import os
 
 import httpx
 
-from .base import EngineError
+from urllib.parse import urlsplit, urlunsplit
+
+from .base import EngineError, clean_models
 
 ENDPOINTS = {
     "anthropic": "https://api.anthropic.com/v1/messages",
@@ -20,6 +22,9 @@ ENDPOINTS = {
 
 
 MESSAGE_LIMIT = 300
+LIST_TIMEOUT = 5
+"""Seconds to wait for a listing, against the 300 a completion gets: this one
+answers a page somebody is looking at."""
 
 
 def _server_message(response) -> str:
@@ -109,3 +114,31 @@ class ApiEngine:
         if not isinstance(text, str) or not text.strip():
             raise EngineError(f"{self.provider} sent an unexpected reply: no text")
         return text
+
+    def models(self) -> list[str]:
+        """What the provider says it offers, or [] if it will not say.
+
+        Asked at the provider's own /v1/models, derived from wherever the
+        completions endpoint lives so a gateway of your own is asked where it
+        actually is. Without a key nothing is asked at all: a 401 is a round
+        trip to learn what the empty key already said.
+        """
+        try:
+            secret = self._secret()
+        except EngineError:
+            return []
+        parts = urlsplit(self.url)
+        where = urlunsplit((parts.scheme, parts.netloc, "/v1/models", "", ""))
+        headers = ({"x-api-key": secret, "anthropic-version": "2023-06-01"}
+                   if self.provider == "anthropic"
+                   else {"Authorization": f"Bearer {secret}"})
+        try:
+            response = httpx.get(where, headers=headers, timeout=LIST_TIMEOUT)
+            response.raise_for_status()
+            listed = response.json().get("data", [])
+            return clean_models(
+                item.get("id") for item in listed if isinstance(item, dict))
+        except Exception:
+            # Including a key that is wrong, a provider that does not expose
+            # this at all, and a gateway that answers something else entirely.
+            return []
