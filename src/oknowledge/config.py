@@ -13,6 +13,7 @@ from pathlib import Path
 
 from . import places
 from .atomic import atomic_write
+from .perms import only_you
 from .trace import trace_run
 
 FILE = "config.toml"
@@ -269,7 +270,7 @@ def save(cfg: Config, path: Path | None = None) -> Path:
     if path.exists():
         backup = path.with_name(path.name + ".bak")
         shutil.copy2(path, backup)
-        backup.chmod(0o600)
+        only_you(backup)
     atomic_write(path, text)
-    path.chmod(0o600)
+    only_you(path)
     return path

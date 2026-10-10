@@ -29,7 +29,7 @@ from fastapi.templating import Jinja2Templates
 from starlette.datastructures import Headers
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from .. import env
+from .. import env, places
 from ..ai import build_engine
 from ..ai.base import normalize_collections
 from ..ai.providers import PROVIDERS
@@ -986,6 +986,10 @@ def create_app(cfg: Config) -> FastAPI:
                     stranger="" if known else str(api.get("provider", "")),
                     by_hand=str(api.get("base_url", "")),
                     key=api_key_state(),
+                    # So the page can stop talking about chmod on a system
+                    # where the mode decides nothing. Not inside `key`: it is
+                    # a fact about the machine, not about the key.
+                    windows=places.WINDOWS,
                     # Read from disk, never asked for here: three engines with
                     # their timeouts is up to twelve seconds to open a page,
                     # and the slow case -- a server that is down -- is the

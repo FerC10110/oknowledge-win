@@ -307,6 +307,47 @@ def test_a_file_the_rest_of_the_machine_can_read_is_called_out(tmp_path):
     assert "chmod" in body
 
 
+def test_on_windows_the_page_says_where_the_key_is_instead_of_how_to_chmod_it(
+        tmp_path, monkeypatch):
+    """The same 0o644 file, on a system where that number means nothing. There
+    is nothing to fix with chmod there, so the page says the thing the reader
+    can act on: which file holds the key, and that it is as private as the
+    folder it is in."""
+    monkeypatch.setattr(module.places, "WINDOWS", True)
+    path = dotenv(tmp_path, "GROQ_API_KEY=sk-x\n")
+    path.chmod(0o644)
+
+    body = with_api(tmp_path, provider="groq").get("/settings").text
+
+    assert "chmod" not in body
+    assert str(path) in body
+    assert "sk-x" not in body                  # the key itself, never
+
+
+def test_on_linux_that_line_is_not_said_at_all(tmp_path):
+    """On a system where the mode decides who can read the file, "as private as
+    the folder" is the wrong sentence: the answer is the mode, and when the
+    mode is wrong the warning above says so."""
+    dotenv(tmp_path, "GROQ_API_KEY=sk-x\n").chmod(0o600)
+
+    body = with_api(tmp_path, provider="groq").get("/settings").text
+
+    assert "private as the folder" not in body
+
+
+def test_on_windows_a_file_that_is_not_there_is_not_described(tmp_path, monkeypatch):
+    """Nothing to be private: the .env has not been created yet. Saying where
+    the key is when there is no key is the kind of sentence that sends somebody
+    looking for a file that does not exist."""
+    monkeypatch.setattr(module.places, "WINDOWS", True)
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
+
+    body = with_api(tmp_path, provider="groq").get("/settings").text
+
+    assert "private as the folder" not in body
+    assert 'form="make-env"' in body           # the button to make it, instead
+
+
 def test_the_button_that_makes_the_file_is_only_there_when_there_is_no_file(
         tmp_path, monkeypatch):
     monkeypatch.delenv("GROQ_API_KEY", raising=False)

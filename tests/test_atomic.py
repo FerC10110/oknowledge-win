@@ -1,6 +1,7 @@
 import os
 import stat
 
+from oknowledge import atomic
 from oknowledge.atomic import atomic_write
 
 
@@ -22,6 +23,24 @@ def test_the_directory_is_synced_on_request(tmp_path, monkeypatch):
     atomic_write(tmp_path / "a.txt", "x", fsync_dir=True)
     assert any(stat.S_ISDIR(m) for m in synced)
     assert (tmp_path / "a.txt").read_text(encoding="utf-8") == "x"
+
+
+def test_on_windows_the_directory_is_not_opened_at_all(tmp_path, monkeypatch):
+    """There is no handle for a directory on Windows: os.open on one raises
+    PermissionError. So this is not a weaker guarantee there, it is an
+    exception where a note was about to be written -- every enqueue and every
+    saved note goes through here with fsync_dir=True.
+    """
+    monkeypatch.setattr(atomic.places, "WINDOWS", True)
+    opened = []
+    real = os.open
+    monkeypatch.setattr(os, "open",
+                        lambda path, *a, **k: (opened.append(path), real(path, *a, **k))[1])
+
+    atomic_write(tmp_path / "a.txt", "x", fsync_dir=True)
+
+    assert (tmp_path / "a.txt").read_text(encoding="utf-8") == "x"
+    assert [p for p in opened if os.path.isdir(p)] == []
 
 
 def test_an_existing_files_mode_survives_a_rewrite(tmp_path):

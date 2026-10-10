@@ -258,6 +258,8 @@ STRINGS = {
         "There is no key yet. Paste %1=… into %2":
             "Todavía no hay key. Pegá %1=… en %2",
         "Create that file": "Crear ese archivo",
+        "The key is in %1, which is as private as the folder it sits in.":
+            "La key está en %1, que es tan privado como la carpeta donde vive.",
         "Anyone else with an account on this machine can read %1. Make it yours "
         "alone with chmod 600.":
             "Cualquier otra cuenta de esta máquina puede leer %1. Dejalo sólo "

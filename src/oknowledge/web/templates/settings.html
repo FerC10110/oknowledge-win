@@ -73,6 +73,11 @@
     {% endif %}
     {% if key.exposed %}
       <p class="warn-block">{{ t('Anyone else with an account on this machine can read %1. Make it yours alone with chmod 600.', key.file) }}</p>
+    {% elif windows and key.exists %}
+      {# No chmod talk on Windows: the mode decides nothing there and the
+         check that would warn about it is off. What is left to say is the
+         thing the reader can act on -- which file, and what guards it. #}
+      <p class="meta">{{ t('The key is in %1, which is as private as the folder it sits in.', key.file) }}</p>
     {% endif %}
     {# One row, used twice: for the provider in use and for every other one.
        `t` is passed in because it is a context variable, and a macro does not

@@ -169,3 +169,35 @@ def test_a_file_the_rest_of_the_machine_can_read_is_worth_saying(config):
 
 def test_a_file_that_is_not_there_is_not_exposed(config):
     assert env.exposed(config) is False
+
+
+def test_on_windows_the_mode_is_not_worth_saying(config, monkeypatch):
+    """Windows reports 0o666 for everything, so this check would warn that
+    anyone can read your key, forever, on every machine. A warning that is
+    always on is a warning nobody reads, and this one would also be wrong:
+    what keeps the file private there is the folder it is in."""
+    written(config, "GROQ_API_KEY=sk-x\n")
+    env.path(config).chmod(0o644)
+
+    monkeypatch.setattr(env.places, "WINDOWS", True)
+    assert env.exposed(config) is False
+    monkeypatch.setattr(env.places, "WINDOWS", False)
+    assert env.exposed(config) is True
+
+
+def test_the_file_it_creates_does_not_promise_what_the_system_will_not_keep(config, monkeypatch):
+    """The header line oknowledge writes into the file is a claim about who can
+    read it. On Windows the claim is false, so there it says something true
+    instead: the file is as private as the folder it sits in."""
+    monkeypatch.setattr(env.places, "WINDOWS", True)
+    env.create("GROQ_API_KEY", config)
+    windows = env.path(config).read_text(encoding="utf-8")
+
+    assert "Nobody but you" not in windows
+    assert "folder" in windows
+
+    other = config.parent / "other" / "config.toml"
+    monkeypatch.setattr(env.places, "WINDOWS", False)
+    env.create("GROQ_API_KEY", other)
+
+    assert "Nobody but you" in env.path(other).read_text(encoding="utf-8")

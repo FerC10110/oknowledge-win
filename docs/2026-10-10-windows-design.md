@@ -26,6 +26,15 @@ rutas con `/`, y los 1692 tests pasan.
 | El idioma de la interfaz | el archivo compartido de Omarchy | no existe |
 | Pegar un link | el panel de la barra | no hay panel |
 
+**Apareció un sexto al implementar el tercero**, y es peor que los cinco de
+arriba porque no es una promesa floja sino una excepción: `atomic_write(...,
+fsync_dir=True)` abre el directorio con `os.open` para sincronizarlo, y en
+Windows un directorio no tiene handle — `os.open` sobre uno levanta
+`PermissionError`. Por ahí pasan *todas* las notas y *todas* las entradas de
+la cola. En Windows el pedido se descarta: `os.replace` sigue siendo atómico
+y lo que se pierde es la garantía frente a un corte de luz, no la escritura.
+Queda anotado acá para que el README lo liste entre las diferencias reales.
+
 ### A. El candado
 
 Es lo único que no es un detalle. `queue.lock()` garantiza dos cosas: que un

@@ -25,9 +25,15 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+from . import places
 from .config import CONFIG_PATH
 
 FILE = ".env"
+_PRIVACY = {
+    False: "Nobody but you can read this file; keep it that way.",
+    True: "This file is as private as the folder it is in; keep it there.",
+}
+
 LIMIT = 64 * 1024
 """Past this, it is not an env file. Reading the first 64 KB instead would
 hand out half a key, and half a key is a 401 nobody can explain."""
@@ -94,7 +100,9 @@ def create(name: str, config: Path | None = None) -> bool:
     A file that already exists is never touched, whatever is in it: this is
     the only writer, and the thing it would be overwriting is a secret that
     exists nowhere else. Created 0600 by the open itself, so there is no
-    moment when it is readable and about to hold a key.
+    moment when it is readable and about to hold a key -- on POSIX. On Windows
+    that mode is decoration, and the second header line says so rather than
+    promising what the system will not keep.
     """
     target = path(config)
     try:
@@ -105,7 +113,7 @@ def create(name: str, config: Path | None = None) -> bool:
     try:
         with os.fdopen(handle, "w", encoding="utf-8") as out:
             out.write("# Read by oknowledge. One NAME=value per line.\n"
-                      "# Nobody but you can read this file; keep it that way.\n"
+                      f"# {_PRIVACY[places.WINDOWS]}\n"
                       f"{name}=\n")
     except OSError:
         return False
@@ -113,7 +121,15 @@ def create(name: str, config: Path | None = None) -> bool:
 
 
 def exposed(config: Path | None = None) -> bool:
-    """Whether anyone but you can read it. False when there is no file."""
+    """Whether anyone but you can read it. False when there is no file.
+
+    False on Windows always, and not because it is safe there: the mode is not
+    what decides it and os.stat reports 0o666 for every file, so this would
+    answer "anyone can read your key" forever. A warning that is always on is
+    a warning nobody reads, and this one would be wrong as well.
+    """
+    if places.WINDOWS:
+        return False
     try:
         return bool(path(config).stat().st_mode & 0o077)
     except OSError:
