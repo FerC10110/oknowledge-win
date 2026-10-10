@@ -737,3 +737,40 @@ def test_a_failure_names_the_provider_you_picked_not_the_protocol(monkeypatch):
                         lambda *a, **k: Response({"error": "nope"}, status=500))
     with pytest.raises(EngineError, match="groq failed"):
         ApiEngine(provider="groq", model="m").complete("hola")
+
+
+def test_the_env_is_looked_for_beside_the_config_in_use(monkeypatch, tmp_path):
+    """Started with --config somewhere else, the key goes beside that file.
+
+    Otherwise the page would say to paste it into one .env and the engine
+    would read another, and both would be telling the truth.
+    """
+    elsewhere = tmp_path / "elsewhere" / "config.toml"
+    elsewhere.parent.mkdir(parents=True)
+    (elsewhere.parent / ".env").write_text("GROQ_API_KEY=sk-beside\n", encoding="utf-8")
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
+    monkeypatch.setattr("oknowledge.env.CONFIG_PATH", tmp_path / "home" / "config.toml")
+    seen = {}
+    answering(monkeypatch, seen)
+    cfg = Config(vault=tmp_path / "vault", source=elsewhere,
+                 engines={"api": {"provider": "groq", "model": "m"}})
+
+    build_engine("api", cfg).complete("hola")
+
+    assert seen["headers"]["Authorization"] == "Bearer sk-beside"
+
+
+def test_with_no_key_it_points_at_the_env_beside_the_config_in_use(monkeypatch,
+                                                                  tmp_path):
+    elsewhere = tmp_path / "elsewhere" / "config.toml"
+    elsewhere.parent.mkdir(parents=True)
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
+    monkeypatch.setattr("oknowledge.env.CONFIG_PATH", tmp_path / "home" / "config.toml")
+    monkeypatch.setattr("httpx.post", lambda *a, **k: pytest.fail("must not post"))
+    cfg = Config(vault=tmp_path / "vault", source=elsewhere,
+                 engines={"api": {"provider": "groq", "model": "m"}})
+
+    with pytest.raises(EngineError) as error:
+        build_engine("api", cfg).complete("hola")
+
+    assert str(elsewhere.parent / ".env") in str(error.value)

@@ -44,6 +44,7 @@ def build_engine(name: str, cfg: Config) -> Engine:
             key_env=options.get("key_env", ""),
             key=options.get("key", ""),
             base_url=options.get("base_url", ""),
+            config=cfg.source,
         )
     if name == "fake":
         from .fake import FakeEngine

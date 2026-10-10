@@ -12,6 +12,8 @@ from a config.toml that lives with 600 permissions.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import httpx
 
 from .. import env
@@ -46,7 +48,7 @@ class ApiEngine:
 
     def __init__(self, provider: str, model: str, key_env: str = "",
                  key: str = "", base_url: str = "", timeout: int = 300,
-                 max_tokens: int = 2000):
+                 max_tokens: int = 2000, config: Path | None = None):
         row = find(provider)
         if row is None:
             known = ", ".join(p.id for p in PROVIDERS)
@@ -64,6 +66,9 @@ class ApiEngine:
         self.url = base_url or row.url
         self.timeout = timeout
         self.max_tokens = max_tokens
+        # Which config.toml this run read, so the .env beside it is the one
+        # read -- the same file the settings page tells you to paste into.
+        self.config = config
 
     def _secret(self) -> str:
         """The key, from the config, the environment, or the .env -- in that order.
@@ -72,11 +77,12 @@ class ApiEngine:
         anybody needs it is a key sitting in memory for an hour of batch, and
         one that nothing in the chain was ever going to ask for.
         """
-        secret = self.key or (env.value(self.key_env) if self.key_env else "")
+        secret = self.key or (env.value(self.key_env, self.config)
+                              if self.key_env else "")
         if not secret:
             raise EngineError(
                 f"no API key: paste {self.key_env or 'ai.api.key'}=… "
-                f"into {env.path()}")
+                f"into {env.path(self.config)}")
         return secret
 
     @staticmethod
