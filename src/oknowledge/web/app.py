@@ -978,6 +978,9 @@ def create_app(cfg: Config) -> FastAPI:
                     # you are pointing at.
                     providers=PROVIDERS,
                     picked=known.id if known else "",
+                    # The row drawn outside the fold, or None when the file
+                    # names a provider this does not know.
+                    current=known,
                     # A provider somebody wrote by hand that this does not
                     # know. Said out loud rather than quietly unselected.
                     stranger="" if known else str(api.get("provider", "")),

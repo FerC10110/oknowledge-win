@@ -415,6 +415,14 @@ header nav b { font-weight: 600; font-variant-numeric: tabular-nums; }
 .tag { border: 1px solid var(--line); border-radius: 999px; padding: 0 0.45rem;
        font-size: 0.7rem; color: var(--dim); white-space: nowrap; }
 .row select { max-width: 100%; }
+/* The rest of the addresses, folded. Same disclosure as the tag groups in the
+   library: the browser's own, so it needs no script, and closed it costs one
+   line instead of twelve blocks. */
+.providers-all { margin: 0 0 0.6rem; }
+.providers-all summary { display: inline-block; cursor: pointer; font-size: 0.78rem;
+                         color: var(--dim); padding: 0.1rem 0.3rem; border-radius: 999px; }
+.providers-all summary:hover, .providers-all summary:focus-visible { color: var(--fg); }
+.providers-all .providers { margin-top: 0.4rem; }
 
 /* On a phone. The header was three things in one flex row -- the name, the
    search box and three links -- and in Spanish those links alone are wider

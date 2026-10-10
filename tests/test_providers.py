@@ -52,9 +52,11 @@ def test_every_provider_says_what_it_will_cost_you():
         assert p.note.strip(), p.id
 
 
-def test_the_list_is_short_enough_to_read_down():
-    # The page shows every row, and a phone shows them one under the other.
-    assert len(PROVIDERS) <= 10
+def test_the_list_stays_short_enough_to_pick_from():
+    # Every row is an option in one select, and a select of fifty is not a
+    # thing anybody picks from on a phone. The addresses themselves are behind
+    # a disclosure on the page, which is what pays for the rows past ten.
+    assert len(PROVIDERS) <= 16
 
 
 def test_every_provider_has_a_name_a_person_can_read():

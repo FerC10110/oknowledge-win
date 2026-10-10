@@ -74,15 +74,28 @@
     {% if key.exposed %}
       <p class="warn-block">{{ t('Anyone else with an account on this machine can read %1. Make it yours alone with chmod 600.', key.file) }}</p>
     {% endif %}
-    <ul class="providers">
-      {% for p in providers %}
-        <li{% if p.id == picked %} class="now"{% endif %}>
-          <span class="who"><b>{{ p.label }}</b>{% if p.id == picked %}<span class="tag">{{ t('in use') }}</span>{% endif %}{% if p.free %}<span class="tag">{{ t('free key') }}</span>{% endif %}</span>
+    {# One row, used twice: for the provider in use and for every other one.
+       `t` is passed in because it is a context variable, and a macro does not
+       see the context it was rendered in. #}
+    {% macro row(p, t, now=False) %}
+        <li{% if now %} class="now"{% endif %}>
+          <span class="who"><b>{{ p.label }}</b>{% if now %}<span class="tag">{{ t('in use') }}</span>{% endif %}{% if p.free %}<span class="tag">{{ t('free key') }}</span>{% endif %}</span>
           <code>{{ p.url }}</code>
           <span class="meta">{{ p.key_env }} · <a href="{{ p.console }}" target="_blank" rel="noreferrer">{{ t('get a key') }}</a>{% if p.note %} · {{ t(p.note) }}{% endif %}</span>
         </li>
-      {% endfor %}
-    </ul>
+    {% endmacro %}
+    {% if current %}
+      <ul class="providers">{{ row(current, t, true) }}</ul>
+    {% endif %}
+    {# Folded. Thirteen addresses one under the other is a wall on a phone,
+       and the one worth seeing without asking is the one in use. #}
+    {% set others = providers | rejectattr('id', 'equalto', picked) | list %}
+    <details class="providers-all">
+      <summary>{{ t('Where the other %1 live', others | length) }}</summary>
+      <ul class="providers">
+        {% for p in others %}{{ row(p, t) }}{% endfor %}
+      </ul>
+    </details>
     <p class="meta">{{ t('What is marked in use is what is saved, not what the box shows: save first. The key itself never goes in config.toml -- this page rewrites that file.') }}</p>
 
     {# Both groups loop over the same order. Written out by hand they had drifted

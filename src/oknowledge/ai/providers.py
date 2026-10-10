@@ -91,6 +91,37 @@ PROVIDERS = (
         note="Some models are free, with a low limit, and signing up gives you "
              "a small credit.",
     ),
+    Provider(
+        id="opencode-zen", label="OpenCode Zen", protocol="openai",
+        url="https://opencode.ai/zen/v1/chat/completions",
+        key_env="OPENCODE_API_KEY", console="https://opencode.ai/auth",
+        free=True,
+        note="Free coding models that rotate, and no card to sign up. Where "
+             "the opencode engine already goes, by API instead of by command.",
+    ),
+    Provider(
+        id="zai", label="Z.ai (GLM)", protocol="openai",
+        url="https://api.z.ai/api/paas/v4/chat/completions",
+        key_env="ZAI_API_KEY", console="https://z.ai/manage-apikey/apikey-list",
+        free=True,
+        note="The GLM Flash models cost nothing at all, which is not the same "
+             "as a trial credit. No published limit.",
+    ),
+    Provider(
+        id="cohere", label="Cohere", protocol="openai",
+        url="https://api.cohere.ai/compatibility/v1/chat/completions",
+        key_env="COHERE_API_KEY", console="https://dashboard.cohere.com/api-keys",
+        free=True,
+        note="A trial key: 20 requests a minute and a thousand calls a month.",
+    ),
+    Provider(
+        id="huggingface", label="Hugging Face", protocol="openai",
+        url="https://router.huggingface.co/v1/chat/completions",
+        key_env="HF_TOKEN", console="https://huggingface.co/settings/tokens",
+        free=True,
+        note="One token for many providers, with ten cents of credit a month: "
+             "enough to try one link, not enough for a batch.",
+    ),
     # The two that are paid from the first token, which the page says out
     # loud: the free thing with those names is the chat, not the API. They are
     # here because they are the two protocols, and because a config that

@@ -253,6 +253,7 @@ STRINGS = {
         "free key": "key gratis",
         "in use": "en uso",
         "get a key": "sacar una key",
+        "Where the other %1 live": "Dónde viven los otros %1",
         "The key for %1 is in place.": "La key de %1 está en su lugar.",
         "There is no key yet. Paste %1=… into %2":
             "Todavía no hay key. Pegá %1=… en %2",
@@ -276,6 +277,21 @@ STRINGS = {
             "lista: guardá primero. La key nunca va en config.toml, porque "
             "esta página reescribe ese archivo.",
         # What each one costs. The rows live in ai/providers.py.
+        "Free coding models that rotate, and no card to sign up. Where "
+        "the opencode engine already goes, by API instead of by command.":
+            "Modelos de código gratis que van rotando, y sin tarjeta para "
+            "registrarse. Es donde ya va el motor opencode, pero por API en "
+            "lugar de por comando.",
+        "The GLM Flash models cost nothing at all, which is not the same "
+        "as a trial credit. No published limit.":
+            "Los modelos GLM Flash no cuestan nada, que no es lo mismo que un "
+            "crédito de prueba. No publican el límite.",
+        "A trial key: 20 requests a minute and a thousand calls a month.":
+            "Una key de prueba: 20 pedidos por minuto y mil llamadas al mes.",
+        "One token for many providers, with ten cents of credit a month: "
+        "enough to try one link, not enough for a batch.":
+            "Un token para muchos proveedores, con diez centavos de crédito "
+            "al mes: alcanza para probar un link, no para una tanda.",
         "Paid from the first token: the API is not the free chat.":
             "Se paga desde el primer token: la API no es el chat gratis.",
         "30 requests a minute, 14,400 a day. They do not train on what you send.":

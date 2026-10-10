@@ -417,3 +417,40 @@ def test_with_the_api_engine_in_the_chain_it_says_nothing_of_the_sort(tmp_path):
     cfg = Config(vault=vault, chain=("api",), engines={"api": {"provider": "groq"}})
     rebuild_indexes(cfg, "es")
     assert "not ticked" not in TestClient(create_app(cfg)).get("/settings").text
+
+
+# --- thirteen addresses, folded ----------------------------------------------
+
+def folded(body):
+    """What the page shows, and what it keeps behind the disclosure."""
+    start = body.index('<details class="providers-all">')
+    return body[:start], body[start:body.index("</details>", start)]
+
+
+def test_the_provider_in_use_is_visible_without_opening_anything(tmp_path):
+    visible, hidden = folded(with_api(tmp_path, provider="groq").get("/settings").text)
+    assert "https://api.groq.com/openai/v1/chat/completions" in visible
+    assert "api.groq.com" not in hidden
+
+
+def test_every_other_address_is_behind_the_disclosure(tmp_path):
+    """Thirteen addresses one under the other is a wall on a phone."""
+    visible, hidden = folded(with_api(tmp_path, provider="groq").get("/settings").text)
+    for p in PROVIDERS:
+        if p.id != "groq":
+            assert p.url in hidden, p.id
+            assert p.url not in visible, p.id
+
+
+def test_the_fold_says_how_many_it_is_hiding(tmp_path):
+    body = with_api(tmp_path, provider="groq").get("/settings").text
+    summary = body[body.index("<summary>"):body.index("</summary>")]
+    assert str(len(PROVIDERS) - 1) in summary
+
+
+def test_a_provider_the_table_does_not_know_leaves_the_whole_list_folded(tmp_path):
+    visible, hidden = folded(
+        with_api(tmp_path, provider="my-own-thing").get("/settings").text)
+    for p in PROVIDERS:
+        assert p.url in hidden, p.id
+        assert p.url not in visible, p.id
