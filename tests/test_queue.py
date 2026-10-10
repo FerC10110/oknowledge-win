@@ -5,7 +5,9 @@ import time
 
 import pytest
 
-from oknowledge.queue import STATUSES, UNFINISHED, Locked, Queue, state_dir
+from oknowledge import queue as queue_module
+from oknowledge.queue import (PID_ROOM, STATUSES, UNFINISHED, Locked, Queue,
+                              state_dir)
 
 
 def test_a_new_link_starts_pending(tmp_path):
@@ -111,7 +113,7 @@ def test_the_lock_is_released_even_if_the_work_explodes(tmp_path):
 
 
 def test_a_lock_file_left_behind_by_a_dead_process_is_acquired(tmp_path):
-    # flock dies with its process: a leftover file has no lock held on it.
+    # The lock dies with its process: a leftover file has nothing held on it.
     q = Queue(tmp_path)
     leftover = q.root / "locks" / "abc123.lock"
     leftover.parent.mkdir(parents=True, exist_ok=True)
@@ -120,6 +122,55 @@ def test_a_lock_file_left_behind_by_a_dead_process_is_acquired(tmp_path):
 
     with q.lock("abc123"):
         assert leftover.read_text(encoding="utf-8").strip() == str(os.getpid())
+
+
+def test_a_shorter_pid_written_over_a_longer_one_leaves_no_tail(tmp_path):
+    """The lock file is written over, never truncated: shortening a file while
+    holding a lock on its first byte is a thing Windows can refuse. So the pid
+    is padded to a fixed width, and a file that said 9999999999999999 does not
+    come back saying this pid followed by half of that one.
+    """
+    q = Queue(tmp_path)
+    leftover = q.root / "locks" / "abc123.lock"
+    leftover.parent.mkdir(parents=True, exist_ok=True)
+    # Spelled out rather than sized from PID_ROOM: a test that measures the
+    # leftover with the same constant it is checking passes at any width.
+    leftover.write_text("9" * 16 + "\n", encoding="utf-8")
+
+    with q.lock("abc123"):
+        written = leftover.read_text(encoding="utf-8")
+
+    assert written.split() == [str(os.getpid())]
+
+
+def test_the_pid_has_room_for_the_widest_one_a_system_hands_out():
+    """A Windows pid is a DWORD, so ten digits. Narrower than that and the
+    padding stops covering the line it exists to cover."""
+    assert PID_ROOM >= 10
+
+
+def test_the_handle_a_probe_gets_is_one_windows_could_have_locked(tmp_path, monkeypatch):
+    """msvcrt cannot lock a handle that was opened read-only, and its probe has
+    to take the lock for an instant because it has no shared mode. Only Windows
+    can prove that; what can be pinned here is the half this repo owns -- that
+    `held` opens the lock file for writing even though it writes nothing.
+    """
+    import fcntl
+
+    q = Queue(tmp_path)
+    with q.lock("abc123"):
+        pass
+    modes = []
+    real = queue_module.locking.probe
+
+    def watched(fd):
+        modes.append(fcntl.fcntl(fd, fcntl.F_GETFL) & os.O_ACCMODE)
+        return real(fd)
+
+    monkeypatch.setattr(queue_module.locking, "probe", watched)
+
+    assert q.held("abc123") is False
+    assert modes == [os.O_RDWR]
 
 
 def test_the_lock_file_is_never_deleted(tmp_path):

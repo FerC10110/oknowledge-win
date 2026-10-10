@@ -1,22 +1,27 @@
-"""The state of each link, in files, so the widget can read it.
+"""The state of each link, in files.
 
-Files and not a database for a concrete reason: the Omarchy plugin is QML and
-can watch a folder with a FolderListModel, but it cannot open a database.
+Files and not a database because the state has to outlive every process that
+touches it, be readable while a run is going, and survive a crash with no
+recovery step. A folder of small JSON files does all three, and the lock that
+keeps two processes off one link is a lock on a file too -- see locking.py,
+which is where the two operating systems differ.
 """
 
 from __future__ import annotations
 
 import datetime as dt
-import errno
-import fcntl
 import json
 import os
 import re
 from contextlib import contextmanager
 from pathlib import Path
 
+from . import locking
 from .atomic import atomic_write
 from .model import QueueEntry
+
+# Room for a pid, so a shorter one written over a longer one leaves no tail.
+PID_ROOM = 16
 
 STATUSES = frozenset({"pending", "ok", "partial", "failed"})
 UNFINISHED = ("partial", "failed")
@@ -198,46 +203,45 @@ class Queue:
     def held(self, link_id: str) -> bool:
         """Whether some live process is working on this link right now.
 
-        flock belongs to the open file and the kernel drops it when the holder
-        dies, so a true here is never stale: there is no timeout to guess at
-        and no crashed run left looking busy forever.
+        The lock belongs to the open file and the system drops it when the
+        holder dies, so a true here is never stale: there is no timeout to
+        guess at and no crashed run left looking busy forever.
+
+        Opened for writing even though nothing is written: Windows cannot lock
+        a read-only handle, and the probe there has to take the lock for an
+        instant because msvcrt has no shared mode.
         """
         try:
-            fd = os.open(self._lock_path(link_id), os.O_RDONLY)
+            fd = os.open(self._lock_path(link_id), os.O_RDWR)
         except FileNotFoundError:
             return False
         try:
-            fcntl.flock(fd, fcntl.LOCK_SH | fcntl.LOCK_NB)
-        except OSError as err:
-            if err.errno in (errno.EWOULDBLOCK, errno.EAGAIN):
-                return True
-            raise
+            return locking.probe(fd)
         finally:
             os.close(fd)                    # closing releases anything we took
-        return False
 
     @contextmanager
     def lock(self, link_id: str):
-        """Hold an exclusive advisory lock on a link for the with block.
+        """Hold an exclusive lock on a link for the with block.
 
-        flock belongs to the open file, and the kernel drops it when the process
-        dies, so there is no staleness to detect. The lock file is never
-        deleted: unlinking it while another process opens it would let two
-        processes hold "the" lock on different inodes.
+        The lock belongs to the open file, and the system drops it when the
+        process dies, so there is no staleness to detect. The lock file is
+        never deleted: unlinking it while another process has it open would let
+        two processes hold "the" lock on two different files.
         """
         path = self._lock_path(link_id)
         path.parent.mkdir(parents=True, exist_ok=True)
         fd = os.open(path, os.O_CREAT | os.O_RDWR, 0o666)
         try:
-            try:
-                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            except OSError as err:
-                if err.errno in (errno.EWOULDBLOCK, errno.EAGAIN):
-                    raise Locked(f"{link_id} is already being processed") from None
-                raise
+            if not locking.take(fd):
+                raise Locked(f"{link_id} is already being processed")
             # Diagnostics only: nothing reads the pid to decide anything.
-            os.ftruncate(fd, 0)
-            os.write(fd, f"{os.getpid()}\n".encode())
+            # Padded to a fixed width instead of truncating the file, because
+            # the lock on Windows is on byte 0 and shortening a file under a
+            # lock is a thing that can fail. Writing over a byte we hold the
+            # lock on is not. The handle is fresh and neither lock takes a
+            # position with it, so this writes at byte 0 with no seek.
+            os.write(fd, f"{os.getpid()}".ljust(PID_ROOM).encode() + b"\n")
             yield
         finally:
             os.close(fd)
