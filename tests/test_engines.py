@@ -640,3 +640,100 @@ def test_the_servers_message_is_still_bounded(monkeypatch):
     with pytest.raises(EngineError) as error:
         engine.complete("hola")
     assert len(str(error.value)) < 400
+
+
+# --- the provider table, and the key that comes from the .env -----------------
+
+def dotenv(monkeypatch, tmp_path, text):
+    """A .env beside a config that is not the one on this machine."""
+    config = tmp_path / "config" / "config.toml"
+    config.parent.mkdir(parents=True, exist_ok=True)
+    (config.parent / ".env").write_text(text, encoding="utf-8")
+    monkeypatch.setattr("oknowledge.env.CONFIG_PATH", config)
+    return config
+
+
+def answering(monkeypatch, seen, reply=None):
+    monkeypatch.setattr(
+        "httpx.post",
+        lambda url, headers=None, json=None, timeout=None:
+        seen.update(url=url, headers=headers, body=json)
+        or (reply or Response({"choices": [{"message": {"content": GOOD}}]})))
+
+
+def test_a_provider_from_the_table_is_called_where_the_table_says(monkeypatch):
+    seen = {}
+    monkeypatch.setenv("GROQ_API_KEY", "sk-groq")
+    answering(monkeypatch, seen)
+
+    assert ApiEngine(provider="groq", model="llama-x").complete("hola") == GOOD
+
+    assert seen["url"] == "https://api.groq.com/openai/v1/chat/completions"
+    # It speaks OpenAI's shape because the table says so, not because of its
+    # name: a bearer token, and no max_tokens.
+    assert seen["headers"]["Authorization"] == "Bearer sk-groq"
+    assert "max_tokens" not in seen["body"]
+
+
+def test_the_variable_the_key_lives_in_comes_from_the_table(monkeypatch, tmp_path):
+    # Nothing in the config but the provider's name, nothing in the shell:
+    # the table says GROQ_API_KEY and the .env beside the config holds it.
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
+    dotenv(monkeypatch, tmp_path, "GROQ_API_KEY=sk-fromfile\n")
+    seen = {}
+    answering(monkeypatch, seen)
+
+    ApiEngine(provider="groq", model="m").complete("hola")
+
+    assert seen["headers"]["Authorization"] == "Bearer sk-fromfile"
+
+
+def test_a_variable_named_in_the_config_beats_the_tables_default(monkeypatch, tmp_path):
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
+    monkeypatch.delenv("MY_OWN", raising=False)
+    dotenv(monkeypatch, tmp_path, "GROQ_API_KEY=sk-table\nMY_OWN=sk-mine\n")
+    seen = {}
+    answering(monkeypatch, seen)
+
+    ApiEngine(provider="groq", model="m", key_env="MY_OWN").complete("hola")
+
+    assert seen["headers"]["Authorization"] == "Bearer sk-mine"
+
+
+def test_a_key_written_in_the_config_still_wins_over_the_file(monkeypatch, tmp_path):
+    dotenv(monkeypatch, tmp_path, "GROQ_API_KEY=sk-fromfile\n")
+    seen = {}
+    answering(monkeypatch, seen)
+
+    ApiEngine(provider="groq", model="m", key="sk-fromconfig").complete("hola")
+
+    assert seen["headers"]["Authorization"] == "Bearer sk-fromconfig"
+
+
+def test_with_no_key_anywhere_it_says_which_variable_and_which_file(monkeypatch,
+                                                                   tmp_path):
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
+    config = dotenv(monkeypatch, tmp_path, "# nothing in here yet\n")
+    monkeypatch.setattr("httpx.post", lambda *a, **k: pytest.fail("must not post"))
+
+    with pytest.raises(EngineError) as error:
+        ApiEngine(provider="groq", model="m").complete("hola")
+
+    # Both halves of what to do next: the name to paste and where to paste it.
+    assert "GROQ_API_KEY" in str(error.value)
+    assert str(config.parent / ".env") in str(error.value)
+
+
+def test_a_provider_nobody_has_heard_of_names_the_ones_that_exist():
+    with pytest.raises(EngineError) as error:
+        ApiEngine(provider="gopher", model="m")
+    assert "gopher" in str(error.value)
+    assert "groq" in str(error.value)
+
+
+def test_a_failure_names_the_provider_you_picked_not_the_protocol(monkeypatch):
+    monkeypatch.setenv("GROQ_API_KEY", "sk-x")
+    monkeypatch.setattr("httpx.post",
+                        lambda *a, **k: Response({"error": "nope"}, status=500))
+    with pytest.raises(EngineError, match="groq failed"):
+        ApiEngine(provider="groq", model="m").complete("hola")

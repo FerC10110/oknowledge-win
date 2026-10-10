@@ -172,13 +172,25 @@ def test_a_provider_that_refuses_lists_nothing(monkeypatch):
 
 
 def test_a_gateway_of_your_own_is_asked_where_it_lives(monkeypatch):
+    """Beside its own endpoint, not at the root of its host: a compatible API
+    under a path is a different API from whatever answers at /v1/models."""
     seen = {}
     monkeypatch.setattr("oknowledge.ai.api.httpx.get",
                         lambda url, **kw: seen.update(url=url)
                         or httpx.Response(200, json={"data": []}, request=GET))
     ApiEngine(provider="openai", model="m", key="k",
               base_url="https://gw.example.com/proxy/v1/chat/completions").models()
-    assert seen["url"] == "https://gw.example.com/v1/models"
+    assert seen["url"] == "https://gw.example.com/proxy/v1/models"
+
+
+def test_a_provider_whose_api_lives_under_a_path_is_asked_under_it(monkeypatch):
+    seen = {}
+    monkeypatch.setattr("oknowledge.ai.api.httpx.get",
+                        lambda url, **kw: seen.update(url=url)
+                        or httpx.Response(200, json={"data": []}, request=GET))
+    ApiEngine(provider="gemini", model="m", key="k").models()
+    assert seen["url"] == (
+        "https://generativelanguage.googleapis.com/v1beta/openai/models")
 
 
 def test_the_openai_key_travels_as_a_bearer(monkeypatch):
