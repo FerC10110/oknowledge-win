@@ -60,6 +60,7 @@ STRINGS = {
         "The vault could not be read": "No se pudo leer el vault",
         "Check that the folder exists, is mounted and is readable.":
             "Revisá que la carpeta exista, esté montada y se pueda leer.",
+        "Paste a link": "Pegá un link",
         "Full": "Todo",
         "Summary": "Resumen",
         "Saved.": "Guardado.",
@@ -135,6 +136,17 @@ STRINGS = {
             "Tantos como diga la casilla de arriba, los m\u00e1s nuevos primero. "
             "Cada uno es una llamada al modelo, as\u00ed que tarda un rato y "
             "corre en segundo plano.",
+        "Reading that link now. It shows up in the library when it is done.":
+            "Leyendo ese link. Aparece en la biblioteca cuando termina.",
+        "You already have that link.": "Ese link ya lo tenés.",
+        "That is not a link: it has to be an address, like "
+        "https://example.com/page.":
+            "Eso no es un link: tiene que ser una dirección, como "
+            "https://example.com/pagina.",
+        "That is a page of search results, not a page. Open the result you "
+        "want and paste that one.":
+            "Esa es una página de resultados de búsqueda, no una página. Abrí "
+            "el resultado que querés y pegá ese.",
         "Analysing. This page comes back on its own; you can close it.":
             "Analizando. Esta p\u00e1gina vuelve sola; pod\u00e9s cerrarla.",
         "A batch is already running. This page shows how it is going.":

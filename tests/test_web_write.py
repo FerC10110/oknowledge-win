@@ -41,6 +41,9 @@ WRITE_ROUTES = [
     # Starting a batch of re-analysis. A cross-site POST here would spend the
     # user's model quota, which is the kind of thing an origin check is for.
     ("/retry", {}),
+    # Pasting a link. A cross-site POST here would have somebody else's page
+    # read, summarised and written into this vault.
+    ("/add", {"url": "https://e.com/zz", "content": "full"}),
     # Asking an engine for its models. A cross-site POST here would run
     # `opencode models` and reach the user's provider with their key.
     ("/settings/models/opencode", {}),

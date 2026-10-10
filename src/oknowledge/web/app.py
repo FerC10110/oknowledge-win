@@ -101,6 +101,15 @@ NOTICES = {
                              "`oknowledge reindex` once the folder is writable again.",
     "settings-failed": "The settings could not be saved. Check that the config "
                        "folder exists and that you can write to it.",
+    # Pasting a link in the header. There is no card to watch yet -- a card
+    # is a note, and the note is written at the end -- so the notice is the
+    # whole answer until it appears.
+    "reading": "Reading that link now. It shows up in the library when it is done.",
+    "already-saved": "You already have that link.",
+    "not-a-link": "That is not a link: it has to be an address, like "
+                  "https://example.com/page.",
+    "searched": "That is a page of search results, not a page. Open the result "
+                "you want and paste that one.",
     "batch-started": "Analysing. This page comes back on its own; you can close it.",
     "batch-running": "A batch is already running. This page shows how it is going.",
     "nothing-owed": "Every link has been analysed. Nothing to do.",
@@ -263,6 +272,30 @@ def count(request: Request, key: str) -> int:
         return max(0, min(int(request.query_params.get(key, "0")), 1_000_000))
     except ValueError:
         return 0
+
+
+MAX_URL = 2048
+"""Longer than this is not an address. The same ceiling the panel uses on
+Linux, and it is what keeps a pasted novel out of the queue and out of a
+file name."""
+
+
+def pasted_link(raw: str) -> str:
+    """The URL from the paste box, or "" if it is not one.
+
+    normalize() is a convenience and not a check: it turns "example.com/x"
+    into an address as cheerfully as it turns "not a link" into
+    "https://not a link/". So the question is asked of the result -- http(s),
+    no whitespace left in it, short enough to be an address -- which is the
+    panel's rule on Linux plus the typing normalize() saves.
+    """
+    raw = raw.strip()
+    if not raw or len(raw) > MAX_URL:
+        return ""
+    clean = normalize(raw)
+    if not is_web_url(clean) or any(ch.isspace() for ch in clean):
+        return ""
+    return clean
 
 
 def notice_for(request: Request, t) -> str | None:
@@ -501,6 +534,21 @@ def reanalyze(cfg: Config, url: str, engine: str | None,
         add_link(cfg, url, engine=engine, reprocess=True, trace=trace)
     except Exception:                 # a background task has nowhere to raise to
         log.exception("re-analysing %s failed", url)
+
+
+def fetch(cfg: Config, url: str, content: str | None,
+          trace: Callable | None = None) -> None:
+    """Save a pasted link outside the request, and never raise into the server.
+
+    The twin of reanalyze(), for the same reason: minutes of model calls that
+    no browser waits through. reprocess stays False, so a link that already
+    has a note is left exactly as it is -- which is what the page said when it
+    answered that you already had it.
+    """
+    try:
+        add_link(cfg, url, content=content, trace=trace)
+    except Exception:                 # a background task has nowhere to raise to
+        log.exception("saving %s failed", url)
 
 
 def create_app(cfg: Config) -> FastAPI:
@@ -1131,6 +1179,39 @@ def create_app(cfg: Config) -> FastAPI:
         waiting = len(owed(Queue())[0])
         return page(request, "retry.html", owed=waiting,
                     size=min(live.batch, waiting), refresh=REFRESH)
+
+    # --- a link pasted into the page ---------------------------------------
+    #
+    # What the bar panel is on Omarchy. The box is in the header of every
+    # page, so this route is reached from wherever somebody happened to be
+    # and always answers with the library: that is where the note will show
+    # up when it is written.
+
+    @app.post("/add")
+    def add_pasted(background: BackgroundTasks, url: str = Form(""),
+                   content: str = Form("")):
+        """Take a pasted link, answer at once, read the page afterwards.
+
+        What this route decides is only what the page says back. The pipeline
+        never overwrites a note it did not just make, so a library index that
+        is a second out of date here costs a message and never a note.
+        """
+        clean = pasted_link(url)
+        if not clean:
+            return see_other("/", notice="not-a-link")
+        if is_search_url(clean):
+            return see_other("/", notice="searched")
+        library.refresh()
+        if library.by_id(link_id(clean)) is not None:
+            return see_other("/", notice="already-saved")
+        # Neither button pressed is not a mode: `default_content` decides,
+        # which is what the CLI does with no --full and no --summary.
+        mode = content if content in CONTENT_MODES else None
+        # After the response, not before it: see fetch(). The trace goes to
+        # the same list the Reprocessing page draws, so one pasted link can be
+        # watched there like any other work.
+        background.add_task(fetch, current["cfg"], clean, mode, trace=progress.note)
+        return see_other("/", notice="reading")
 
     @app.post("/retry")
     def start_batch(background: BackgroundTasks, debug: str = Form("")):

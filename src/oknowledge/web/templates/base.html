@@ -15,6 +15,16 @@
       <input type="search" name="q" value="{{ query }}"
              placeholder="{{ t('Search your library') }}" autofocus>
     </form>
+    {# The box the bar panel is on Omarchy. Two buttons and not one: the
+       config's `default_content` is a preference, and this is a decision
+       about this link. Type, not url: a bare example.com/x is a link the
+       server takes, and the browser would refuse to send it. #}
+    <form class="paste" action="/add" method="post">
+      <input type="text" inputmode="url" name="url" autocomplete="off"
+             placeholder="https://…" aria-label="{{ t('Paste a link') }}">
+      <button type="submit" name="content" value="full">{{ t('Full') }}</button>
+      <button type="submit" name="content" value="summary">{{ t('Summary') }}</button>
+    </form>
     <nav>
       <a href="/categories">{{ t('Categories') }}</a>
       {# The count is here and not only on the page itself: a batch runs for an

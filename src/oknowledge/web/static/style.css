@@ -29,6 +29,16 @@ header input {
 }
 header nav a { color: var(--dim); text-decoration: none; margin-left: 1rem; font-size: 0.9rem; }
 header nav a:hover { color: var(--fg); }
+/* The paste box, on a line of its own under the search, with the two ways to
+   save at the end of it. Full width rather than aligned under the search box
+   to the pixel: that would make the header a grid, and this is the only row
+   in it that would gain anything. The explicit padding is because a
+   type=text input matches the form rule further down and the header rule
+   above it, and the two boxes have to look like the same box. */
+.paste { flex: 1 1 100%; display: flex; gap: 0.5rem; }
+.paste input { flex: 1; }
+header .paste input { padding: 0.6rem 0.9rem; }
+.paste button { white-space: nowrap; }
 main { max-width: var(--measure); margin: 0 auto; padding: 0 1rem 5rem; }
 
 .chips { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 0.6rem; }
@@ -436,4 +446,10 @@ header nav b { font-weight: 600; font-variant-numeric: tabular-nums; }
   header form { flex: 1 1 10rem; }
   header nav { flex: 1 0 100%; display: flex; flex-wrap: wrap; gap: 0.2rem 1rem; }
   header nav a { margin-left: 0; }
+  /* The box on its own line and the two buttons under it, each half the
+     width: side by side with the box they would leave it four characters
+     wide, which is the state the whole media query exists to avoid. */
+  .paste { flex-wrap: wrap; }
+  .paste input { flex: 1 1 100%; }
+  .paste button { flex: 1; }
 }
