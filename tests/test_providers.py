@@ -44,9 +44,12 @@ def test_most_of_them_hand_out_a_key_for_nothing():
     assert len([p for p in PROVIDERS if p.free]) >= 5
 
 
-def test_what_the_free_tier_gives_is_written_down_and_a_paid_one_promises_nothing():
+def test_every_provider_says_what_it_will_cost_you():
+    # Including the two paid ones. The user who asked for this list believed
+    # OpenAI handed out a free API key, and the page is where that gets
+    # corrected -- so a row with nothing to say about its price is a defect.
     for p in PROVIDERS:
-        assert bool(p.note) == p.free, p.id
+        assert p.note.strip(), p.id
 
 
 def test_the_list_is_short_enough_to_read_down():

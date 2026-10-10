@@ -8,6 +8,7 @@ a button is pressed, and what it finds is kept.
 
 import json
 import stat
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -352,3 +353,52 @@ def test_a_folder_that_cannot_be_written_is_an_answer_not_a_crash(tmp_path):
         assert "env-failed" in answer.headers["location"]
     finally:
         folder.chmod(0o700)
+
+
+# --- on a phone --------------------------------------------------------------
+
+def stylesheet():
+    import oknowledge.web
+    return (Path(oknowledge.web.__file__).parent / "static" / "style.css").read_text(
+        encoding="utf-8")
+
+
+def phone_rules():
+    """The block that only applies to a narrow screen."""
+    css = stylesheet()
+    start = css.index("@media (max-width: 40rem) {\n  header")
+    return css[start:css.index("\n}", start)]
+
+
+def test_the_nine_addresses_wrap_instead_of_widening_the_page():
+    css = stylesheet()
+    block = css[css.index(".providers code"):]
+    assert "overflow-wrap: anywhere" in block[:block.index("}")]
+
+
+def test_the_header_stops_being_one_row_on_a_narrow_screen():
+    """Three things in one flex row, and in Spanish the three links alone are
+    wider than a phone: the search box was squeezed to nothing and the page
+    scrolled sideways."""
+    rules = phone_rules()
+    assert "flex-wrap: wrap" in rules
+    assert "header nav" in rules
+
+
+def test_the_links_in_the_header_wrap_among_themselves():
+    # Otherwise the nav is one unbreakable row and it is the thing that
+    # overflows, whatever the header does.
+    rules = phone_rules()
+    nav = rules[rules.index("header nav {"):]
+    assert "flex-wrap: wrap" in nav[:nav.index("}")]
+
+
+def test_a_key_written_into_the_config_counts_and_is_still_not_printed(tmp_path,
+                                                                       monkeypatch):
+    """config.toml is a bad place for it, but saying "no key" over a key that
+    works would be worse -- and the page must not print it either way."""
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
+    body = with_api(tmp_path, provider="groq",
+                    key="sk-in-the-config").get("/settings").text
+    assert "sk-in-the-config" not in body
+    assert "in place" in body

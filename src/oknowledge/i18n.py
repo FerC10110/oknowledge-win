@@ -272,7 +272,9 @@ STRINGS = {
             "Lo que dice en uso es lo que está guardado, no lo que muestra la "
             "lista: guardá primero. La key nunca va en config.toml, porque "
             "esta página reescribe ese archivo.",
-        # What each free tier gives. The rows live in ai/providers.py.
+        # What each one costs. The rows live in ai/providers.py.
+        "Paid from the first token: the API is not the free chat.":
+            "Se paga desde el primer token: la API no es el chat gratis.",
         "30 requests a minute, 14,400 a day. They do not train on what you send.":
             "30 pedidos por minuto, 14.400 por día. No entrenan con lo que les mandás.",
         "15 requests a minute, 1,500 a day. What you send on the free tier "

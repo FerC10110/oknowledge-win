@@ -393,3 +393,39 @@ header nav b { font-weight: 600; font-variant-numeric: tabular-nums; }
    drop to its own line. */
 .row { flex-wrap: wrap; }
 .row input[type="text"], .row input:not([type]) { flex: 1 1 12rem; min-width: 0; }
+
+/* Who the api engine talks to, and where each provider lives.
+
+   A list of blocks and not a table: nine rows of long URLs would either
+   scroll sideways on a phone or shrink the address to nothing, and the
+   address is the thing worth reading. Stacked, every line wraps, so the same
+   markup is the phone layout and the desktop one. */
+.providers { list-style: none; margin: 0.4rem 0 0.6rem; padding: 0; }
+.providers li { display: flex; flex-direction: column; gap: 0.1rem;
+                padding: 0.55rem 0; border-top: 1px solid var(--line); }
+.providers li:last-child { border-bottom: 1px solid var(--line); }
+/* The one in use, marked down the side: the list is read by scanning, and a
+   mark in the margin is findable without reading a word of it. */
+.providers .now { border-left: 2px solid var(--accent); padding-left: 0.6rem; }
+.providers .who { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; }
+.providers code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+                  font-size: 0.78rem; color: var(--dim); overflow-wrap: anywhere; }
+.providers .meta { margin: 0; }
+.providers a { color: var(--accent); }
+.tag { border: 1px solid var(--line); border-radius: 999px; padding: 0 0.45rem;
+       font-size: 0.7rem; color: var(--dim); white-space: nowrap; }
+.row select { max-width: 100%; }
+
+/* On a phone. The header was three things in one flex row -- the name, the
+   search box and three links -- and in Spanish those links alone are wider
+   than the screen, so the box was squeezed to nothing and the page scrolled
+   sideways. The name and the box share the first line, the links take the
+   second, and the links wrap among themselves rather than push anything off
+   the edge. */
+@media (max-width: 40rem) {
+  header { flex-wrap: wrap; gap: 0.7rem 1rem; padding: 1rem; }
+  .brand { flex: none; }
+  header form { flex: 1 1 10rem; }
+  header nav { flex: 1 0 100%; display: flex; flex-wrap: wrap; gap: 0.2rem 1rem; }
+  header nav a { margin-left: 0; }
+}

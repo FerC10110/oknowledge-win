@@ -33,7 +33,7 @@ class Provider:
     key_env: str      # the variable the key goes in, in the .env
     console: str      # where you get that key
     free: bool        # whether it hands one out for nothing
-    note: str = ""    # what the free tier gives; empty when there is none
+    note: str         # what it costs you, free tier or not
 
 
 PROVIDERS = (
@@ -91,20 +91,21 @@ PROVIDERS = (
         note="Some models are free, with a low limit, and signing up gives you "
              "a small credit.",
     ),
-    # The two that are paid from the first token. They are here because they
-    # are the two protocols, and because a config that already says one of
-    # them has to keep working.
+    # The two that are paid from the first token, which the page says out
+    # loud: the free thing with those names is the chat, not the API. They are
+    # here because they are the two protocols, and because a config that
+    # already names one of them has to keep working.
     Provider(
         id="anthropic", label="Anthropic", protocol="anthropic",
         url="https://api.anthropic.com/v1/messages",
         key_env="ANTHROPIC_API_KEY", console="https://console.anthropic.com/settings/keys",
-        free=False,
+        free=False, note="Paid from the first token: the API is not the free chat.",
     ),
     Provider(
         id="openai", label="OpenAI", protocol="openai",
         url="https://api.openai.com/v1/chat/completions",
         key_env="OPENAI_API_KEY", console="https://platform.openai.com/api-keys",
-        free=False,
+        free=False, note="Paid from the first token: the API is not the free chat.",
     ),
 )
 
