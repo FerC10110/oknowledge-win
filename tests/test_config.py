@@ -294,3 +294,50 @@ def test_a_saved_config_loads_again_with_its_mode(tmp_path):
     again = save(load(path), tmp_path / "again.toml")
 
     assert load(again).mentions == "all"
+
+
+# --- which interface the server listens on -----------------------------------
+#
+# The default is this machine and nothing else, because that is the only
+# default that cannot expose somebody's notes by accident. Anything else is a
+# line the user wrote on purpose.
+
+def test_the_host_defaults_to_this_machine_alone(tmp_path):
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    assert load(write_config(tmp_path, f'vault = "{vault}"\n')).host == "127.0.0.1"
+
+
+def test_a_host_in_the_file_is_what_it_listens_on(tmp_path):
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    cfg = load(write_config(tmp_path, f'''vault = "{vault}"
+
+[web]
+host = "0.0.0.0"
+'''))
+    assert cfg.host == "0.0.0.0"
+
+
+def test_a_host_with_room_around_it_is_still_a_host(tmp_path):
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    cfg = load(write_config(tmp_path, f'vault = "{vault}"\n\n[web]\nhost = "  0.0.0.0  "\n'))
+    assert cfg.host == "0.0.0.0"
+
+
+@pytest.mark.parametrize("value", ['""', '"   "', "8787", "true", '"two words"'])
+def test_a_host_that_is_not_an_address_is_refused_by_name(tmp_path, value):
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    path = write_config(tmp_path, f'vault = "{vault}"\n\n[web]\nhost = {value}\n')
+    with pytest.raises(ConfigError, match="web.host"):
+        load(path)
+
+
+def test_saving_keeps_the_host(tmp_path):
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    out = tmp_path / "out.toml"
+    save(Config(vault=vault, host="0.0.0.0"), out)
+    assert load(out).host == "0.0.0.0"

@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import logging
 import signal
+import socket
 import sys
 import threading
 import time
@@ -29,6 +30,11 @@ log = logging.getLogger(__name__)
 
 # How often the watchdog looks at the timer. Shutdown can be this late.
 CHECK_EVERY = 5.0
+
+# "Every interface", which is a way of binding and not a place to go.
+WILDCARDS = frozenset({"0.0.0.0", "::", ""})
+# This machine and nobody else.
+LOOPBACK = frozenset({"127.0.0.1", "localhost", "::1"})
 
 
 class IdleTimer:
@@ -122,8 +128,48 @@ def watch(server, timer: IdleTimer, interval: float = CHECK_EVERY, sleep=time.sl
         log.exception("the idle watchdog failed; the server will not stop by itself")
 
 
+def visitable(host: str) -> str:
+    """The address to type, which is not always the address bound.
+
+    0.0.0.0 means "every interface": printing it as a URL and opening a
+    browser tab on it is a dead end.
+    """
+    return "127.0.0.1" if host in WILDCARDS else host
+
+
+def lan_address(probe: str = "192.0.2.1") -> str:
+    """This machine's address on the network it routes through, or "".
+
+    A UDP socket that is connected and never written to: no packet leaves and
+    no name is looked up, but the kernel fills in the source address it would
+    use to get there. The probe is in the documentation range, so it is not
+    somebody's actual host.
+    """
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+            sock.connect((probe, 1))
+            return str(sock.getsockname()[0])
+    except OSError:
+        return ""
+
+
+def shared_note(host: str, port: int, finder=lan_address) -> str:
+    """What to say when the server is not only this machine's, or "" when it is.
+
+    Printed because the origin check does not help here: it stops another
+    *site* from posting, not another *person* on the same wifi from opening
+    the page and pressing Delete.
+    """
+    if host in LOOPBACK:
+        return ""
+    reachable = finder() if host in WILDCARDS else host
+    where = f" at http://{reachable}:{port}/" if reachable else ""
+    return (f"oknowledge: reachable from this network{where}. "
+            "Anyone on it can read and change your vault.")
+
+
 def announce(server, url: str, open_browser: bool, opener=webbrowser.open,
-             sleep=time.sleep, out=sys.stderr) -> None:
+             sleep=time.sleep, out=sys.stderr, also: str = "") -> None:
     """Say where the library is, and open it, once the server is really up.
 
     Decided on `server.started` (set only after the bind) rather than on a
@@ -134,6 +180,8 @@ def announce(server, url: str, open_browser: bool, opener=webbrowser.open,
             return
         sleep(0.05)
     print(f"oknowledge: the library is at {url}", file=out)
+    if also:
+        print(also, file=out)
     if open_browser:
         opener(url)
 
@@ -145,12 +193,17 @@ def _terminate_like_ctrl_c(signum, frame):
 def serve(cfg: Config, open_browser: bool = False) -> None:
     timer = IdleTimer(cfg.idle_timeout)
     server = uvicorn.Server(uvicorn.Config(
-        build_app(cfg, timer), host="127.0.0.1", port=cfg.port, log_level="warning",
+        build_app(cfg, timer), host=cfg.host, port=cfg.port, log_level="warning",
     ))
 
     if cfg.idle_timeout > 0:               # 0 means never: nothing to watch
         Thread(target=watch, args=(server, timer), daemon=True).start()
-    Thread(target=announce, args=(server, f"http://127.0.0.1:{cfg.port}/", open_browser),
+    # The URL is the one a browser on this machine can use, whatever was
+    # bound; the second line is for the phone, and the warning that comes
+    # with it.
+    Thread(target=announce,
+           args=(server, f"http://{visitable(cfg.host)}:{cfg.port}/", open_browser),
+           kwargs={"also": shared_note(cfg.host, cfg.port)},
            daemon=True).start()
 
     # uvicorn finishes its graceful shutdown and then re-raises the signal it
@@ -171,6 +224,6 @@ def serve(cfg: Config, open_browser: bool = False) -> None:
         if installed:
             signal.signal(signal.SIGTERM, previous)
     if not server.started and not interrupted:
-        raise PortUnavailable(f"could not listen on 127.0.0.1:{cfg.port}. "
+        raise PortUnavailable(f"could not listen on {cfg.host}:{cfg.port}. "
                               "Is another copy already running? "
                               "Otherwise set another web.port in the config.")

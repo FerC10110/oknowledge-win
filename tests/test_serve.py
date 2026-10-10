@@ -6,6 +6,7 @@ timer test drives an injected clock; nothing here sleeps.
 """
 
 import asyncio
+import dataclasses
 import io
 import signal
 
@@ -270,8 +271,11 @@ class RecordedThread:
     """Stands in for runner.Thread: remembers what it was asked to run."""
     made = []
 
-    def __init__(self, target=None, args=(), daemon=None, **kwargs):
+    # The signature mirrors threading.Thread's, keyword arguments and all:
+    # `kwargs` is the dict the thread passes on, not this call's leftovers.
+    def __init__(self, target=None, args=(), kwargs=None, daemon=None, **rest):
         self.target, self.args, self.daemon = target, args, daemon
+        self.kwargs = dict(kwargs or {})
         RecordedThread.made.append(self)
 
     def start(self):
@@ -497,3 +501,82 @@ def test_a_bad_config_is_exit_2_and_never_starts_a_server(tmp_path, monkeypatch,
     monkeypatch.setattr(runner, "serve", lambda *a: pytest.fail("a server was started"))
     assert main(["--config", str(bad), "serve"]) == 2
     assert "Traceback" not in capsys.readouterr().err
+
+
+# --- which interface it listens on, and the address you can type -------------
+
+def test_serve_listens_where_the_config_says(vault_cfg, stub_uvicorn):
+    runner.serve(dataclasses.replace(vault_cfg, host="0.0.0.0"), open_browser=False)
+    assert stub_uvicorn.instances[0].config.host == "0.0.0.0"
+
+
+def test_every_interface_is_not_an_address_you_can_visit():
+    # Printing http://0.0.0.0:8787/ and opening a browser tab on it is a dead
+    # end: it means "every interface", not a place.
+    assert runner.visitable("0.0.0.0") == "127.0.0.1"
+    assert runner.visitable("::") == "127.0.0.1"
+    assert runner.visitable("192.168.1.9") == "192.168.1.9"
+
+
+def test_listening_only_here_says_nothing_about_the_network():
+    for host in ("127.0.0.1", "localhost", "::1"):
+        assert runner.shared_note(host, 8787) == "", host
+
+
+def test_listening_on_every_interface_names_the_address_and_the_risk():
+    said = runner.shared_note("0.0.0.0", 8787, finder=lambda: "192.168.100.178")
+    assert "http://192.168.100.178:8787/" in said
+    # The point of the line: who else can reach it, and what they can do.
+    assert "Anyone" in said and "change" in said
+
+
+def test_a_machine_with_no_address_is_warned_without_half_a_url():
+    said = runner.shared_note("0.0.0.0", 8787, finder=lambda: "")
+    assert "Anyone" in said
+    # Not "at http://:8787/", which is a URL with the address missing.
+    assert "http://" not in said
+
+
+def test_a_host_that_is_already_an_address_is_the_one_named():
+    # The finder answers something else on purpose: a config that names one
+    # interface must not be advertised at another. (Passing no finder let this
+    # pass by luck on a machine whose own address was the one in the test.)
+    said = runner.shared_note("10.1.1.1", 8787, finder=lambda: "192.168.1.254")
+    assert "http://10.1.1.1:8787/" in said
+    assert "192.168.1.254" not in said
+
+
+def test_the_address_of_this_machine_is_found_without_sending_anything():
+    found = runner.lan_address()
+    assert found == "" or found.count(".") == 3
+
+
+def test_a_probe_that_is_not_an_address_is_not_a_crash():
+    assert runner.lan_address(probe="not an address at all") == ""
+
+
+def test_what_the_server_prints_is_where_to_go_and_who_else_can_get_there(
+        vault_cfg, stub_uvicorn):
+    runner.serve(dataclasses.replace(vault_cfg, host="0.0.0.0"), open_browser=False)
+    (helper,) = [t for t in RecordedThread.made if t.target is runner.announce]
+    _, url, _ = helper.args
+    # The URL is for the browser on this machine; the warning is the half that
+    # is about the phone, and about everybody else on that wifi.
+    assert url == f"http://127.0.0.1:{vault_cfg.port}/"
+    assert "Anyone on it" in helper.kwargs["also"]
+
+
+def test_listening_only_here_prints_no_second_line(vault_cfg, stub_uvicorn):
+    runner.serve(vault_cfg, open_browser=False)
+    (helper,) = [t for t in RecordedThread.made if t.target is runner.announce]
+    assert helper.kwargs["also"] == ""
+
+
+def test_the_second_line_comes_after_the_url_and_only_when_there_is_one():
+    out = io.StringIO()
+    server = Booting(up_after=1)
+    announce(server, "http://127.0.0.1:9123/", False, opener=lambda url: None,
+             sleep=server.sleep, out=out, also="oknowledge: and from the wifi")
+    assert out.getvalue().splitlines() == [
+        "oknowledge: the library is at http://127.0.0.1:9123/",
+        "oknowledge: and from the wifi"]

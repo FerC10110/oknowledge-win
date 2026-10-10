@@ -44,6 +44,12 @@ class Config:
     """Which mentions to ask a video for: tools | all | discussed. Only videos
     are asked at all -- see the design doc."""
     engines: dict[str, dict] = field(default_factory=dict)
+    host: str = "127.0.0.1"
+    """Which interface the web listens on. This machine and nothing else by
+    default: it is the only default that cannot put somebody's notes on a
+    network they did not mean to put them on. "0.0.0.0" to reach it from a
+    phone on the same wifi -- and then anyone on that wifi can reach it too,
+    which the server says out loud when it starts."""
     port: int = 8787
     idle_timeout: int = 900
     trace_to: str = ""
@@ -85,6 +91,21 @@ def _integer(table: dict, key: str, default: int, where: str) -> int:
     if isinstance(value, bool) or not isinstance(value, int):
         raise ConfigError(f"{where} must be a whole number, not {value!r}")
     return value
+
+
+def _host(web: dict) -> str:
+    """The interface to listen on, or a ConfigError naming the key.
+
+    Not resolved here: whether an address exists is the kernel's answer at
+    bind time, and a config that refuses a hostname this machine cannot see
+    yet would be a config that breaks when the network comes back. All this
+    checks is that it is one word of text.
+    """
+    value = web.get("host", "127.0.0.1")
+    host = value.strip() if isinstance(value, str) else ""
+    if not host or any(ch.isspace() for ch in host):
+        raise ConfigError(f"web.host must be an address to listen on, not {value!r}")
+    return host
 
 
 def load(path: Path = CONFIG_PATH) -> Config:
@@ -171,6 +192,7 @@ def load(path: Path = CONFIG_PATH) -> Config:
         language=language,
         mentions=mentions,
         engines=engines,
+        host=_host(web),
         port=_integer(web, "port", 8787, "web.port"),
         idle_timeout=_integer(web, "idle_timeout", 900, "web.idle_timeout"),
         trace_to=trace_run() if tracing else "",
@@ -203,7 +225,8 @@ def save(cfg: Config, path: Path | None = None) -> Path:
         "ai": {"chain": list(cfg.chain), "language": cfg.language,
                "mentions": cfg.mentions,
                **{name: dict(options) for name, options in cfg.engines.items()}},
-        "web": {"port": cfg.port, "idle_timeout": cfg.idle_timeout},
+        "web": {"host": cfg.host, "port": cfg.port,
+                "idle_timeout": cfg.idle_timeout},
         # Written only when it is on: a `trace = false` in everybody's config
         # file is a line that explains nothing and has to be read anyway.
         **({"debug": {"trace": True}} if cfg.trace_to else {}),
