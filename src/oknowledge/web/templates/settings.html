@@ -32,7 +32,52 @@
       </p>
     {% endfor %}
     <p class="meta">{{ t('Looking for models asks that engine and reloads this page, so save anything you have typed first. A list from a month ago is still a list: the date beside each button says which.') }}</p>
-    <p class="meta">{{ t('The API key is not written here: it goes in config.toml as key_env, or in the environment variable that field names.') }}</p>
+
+    {# Who the api engine talks to. The select is the choice; the list under it
+       is the whole table, addresses and all, because seeing where you are
+       pointing is half of what makes this understandable. Nine rows read down
+       a phone, which is why each one is a block and not a table row. #}
+    <h2>{{ t('Who the api engine talks to') }}</h2>
+    <p class="row">
+      <label>{{ t('Provider') }}
+        <select name="api_provider" aria-label="{{ t('Provider') }}">
+          {% for p in providers %}
+            <option value="{{ p.id }}"{% if p.id == picked %} selected{% endif %}>{{ p.label }}{% if p.free %} · {{ t('free key') }}{% endif %}</option>
+          {% endfor %}
+        </select>
+      </label>
+    </p>
+    {% if stranger %}
+      <p class="meta">{{ t('config.toml names a provider this list does not have: %1. Saving will not replace it.', stranger) }}</p>
+    {% endif %}
+    {% if by_hand %}
+      <p class="meta">{{ t('config.toml sends this engine to %1 by hand, and that address wins over the list.', by_hand) }}</p>
+    {% endif %}
+    {% if key.ok %}
+      <p class="meta">{{ t('The key for %1 is in place.', key.name) }}</p>
+    {% else %}
+      {# The one thing somebody stuck here needs: the name to paste and the
+         file to paste it into. The button belongs to a form of its own,
+         declared at the end of the page. #}
+      <p class="warn-block">{{ t('There is no key yet. Paste %1=… into %2', key.name, key.file) }}
+        {% if not key.exists %}
+          <button type="submit" form="make-env">{{ t('Create that file') }}</button>
+        {% endif %}
+      </p>
+    {% endif %}
+    {% if key.exposed %}
+      <p class="warn-block">{{ t('Anyone else with an account on this machine can read %1. Make it yours alone with chmod 600.', key.file) }}</p>
+    {% endif %}
+    <ul class="providers">
+      {% for p in providers %}
+        <li{% if p.id == picked %} class="now"{% endif %}>
+          <span class="who"><b>{{ p.label }}</b>{% if p.id == picked %}<span class="tag">{{ t('in use') }}</span>{% endif %}{% if p.free %}<span class="tag">{{ t('free key') }}</span>{% endif %}</span>
+          <code>{{ p.url }}</code>
+          <span class="meta">{{ p.key_env }} · <a href="{{ p.console }}" target="_blank" rel="noreferrer">{{ t('get a key') }}</a>{% if p.note %} · {{ t(p.note) }}{% endif %}</span>
+        </li>
+      {% endfor %}
+    </ul>
+    <p class="meta">{{ t('What is marked in use is what is saved, not what the box shows: save first. The key itself never goes in config.toml -- this page rewrites that file.') }}</p>
 
     {# Both groups loop over the same order. Written out by hand they had drifted
        into opposite orders, so clicking the first option of each -- two groups
@@ -97,4 +142,5 @@
   {% for name in engines %}
     <form id="find-{{ name }}" action="/settings/models/{{ name }}" method="post"></form>
   {% endfor %}
+  <form id="make-env" action="/settings/env" method="post"></form>
 {% endblock %}

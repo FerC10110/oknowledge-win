@@ -244,6 +244,72 @@ STRINGS = {
         # The step list on the batch page, and the box that writes the files.
         "What it is doing": "Qué está haciendo",
         # Choosing a model from a list instead of typing it from memory.
+        # Who the api engine talks to, and the key it needs.
+        "Who the api engine talks to": "Con quién habla el motor api",
+        "Provider": "Proveedor",
+        "free key": "key gratis",
+        "in use": "en uso",
+        "get a key": "sacar una key",
+        "The key for %1 is in place.": "La key de %1 está en su lugar.",
+        "There is no key yet. Paste %1=… into %2":
+            "Todavía no hay key. Pegá %1=… en %2",
+        "Create that file": "Crear ese archivo",
+        "Anyone else with an account on this machine can read %1. Make it yours "
+        "alone with chmod 600.":
+            "Cualquier otra cuenta de esta máquina puede leer %1. Dejalo sólo "
+            "para vos con chmod 600.",
+        "config.toml names a provider this list does not have: %1. Saving will "
+        "not replace it.":
+            "config.toml nombra un proveedor que esta lista no tiene: %1. "
+            "Guardar no lo va a reemplazar.",
+        "config.toml sends this engine to %1 by hand, and that address wins "
+        "over the list.":
+            "config.toml manda este motor a %1 a mano, y esa dirección gana "
+            "sobre la lista.",
+        "What is marked in use is what is saved, not what the box shows: save "
+        "first. The key itself never goes in config.toml -- this page rewrites "
+        "that file.":
+            "Lo que dice en uso es lo que está guardado, no lo que muestra la "
+            "lista: guardá primero. La key nunca va en config.toml, porque "
+            "esta página reescribe ese archivo.",
+        # What each free tier gives. The rows live in ai/providers.py.
+        "30 requests a minute, 14,400 a day. They do not train on what you send.":
+            "30 pedidos por minuto, 14.400 por día. No entrenan con lo que les mandás.",
+        "15 requests a minute, 1,500 a day. What you send on the free tier "
+        "may be used to improve their models.":
+            "15 pedidos por minuto, 1.500 por día. Lo que mandás en el tier "
+            "gratis lo pueden usar para mejorar sus modelos.",
+        "A million tokens a day, in a context of 8K: enough for a page, "
+        "not for a long video.":
+            "Un millón de tokens por día, con contexto de 8K: alcanza para una "
+            "página, no para un video largo.",
+        "The models whose name ends in :free, 50 a day. One shop front for "
+        "many providers.":
+            "Los modelos cuyo nombre termina en :free, 50 por día. Un solo "
+            "mostrador para muchos proveedores.",
+        "A free tier you switch on in the console, which asks for a phone number.":
+            "Un tier gratis que se activa en la consola, que pide un teléfono.",
+        "A thousand credits when you sign up, and the open models of "
+        "everyone else to spend them on.":
+            "Mil créditos al registrarte, y los modelos abiertos de todo el "
+            "mundo para gastarlos.",
+        "Some models are free, with a low limit, and signing up gives you "
+        "a small credit.":
+            "Algunos modelos son gratis, con un límite bajo, y al registrarte "
+            "te dan un crédito chico.",
+        # The three answers of the button that makes the .env.
+        "The file is there, with the variable ready. Paste the key "
+        "after the = sign and save it.":
+            "El archivo está, con la variable lista. Pegá la key después del = "
+            "y guardalo.",
+        "That file already exists, so nothing was touched. Add the "
+        "variable to it yourself.":
+            "Ese archivo ya existe, así que no se tocó nada. Agregale la "
+            "variable a mano.",
+        "The file could not be created. Check that its folder can "
+        "be written.":
+            "No se pudo crear el archivo. Revisá que se pueda escribir en su "
+            "carpeta.",
         "Find models": "Buscar modelos",
         "Looked up %1": "Consultado el %1",
         "Looking for models asks that engine and reloads this page, so save "
@@ -318,10 +384,6 @@ STRINGS = {
         "To change the order, edit the file by hand.":
             "La prioridad va de arriba hacia abajo. El motor que no esté tildado "
             "no se usa. Para cambiar el orden, editá el archivo a mano.",
-        "The API key is not written here: it goes in config.toml as key_env, "
-        "or in the environment variable that field names.":
-            "La API key no se escribe acá: va en config.toml como key_env, "
-            "o en la variable de entorno que ese campo nombre.",
         "Shared with my other Omarchy plugins, so this changes all of them at once.":
             "Es compartido con mis otros plugins de Omarchy: los cambia a todos juntos.",
         "Mentions of a video": "Menciones de un video",

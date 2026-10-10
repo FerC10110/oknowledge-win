@@ -29,8 +29,11 @@ from fastapi.templating import Jinja2Templates
 from starlette.datastructures import Headers
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from .. import env
 from ..ai import build_engine
 from ..ai.base import normalize_collections
+from ..ai.providers import PROVIDERS
+from ..ai.providers import find as find_provider
 from ..config import CONFIG_PATH, CONTENT_MODES, ENGINE_NAMES, MENTION_MODES, Config
 from ..config import save as save_config
 from ..i18n import LANGUAGES, NATIVE_NAMES, set_ui_language, translator, ui_language
@@ -114,6 +117,15 @@ NOTICES = {
     "models-none": "No models could be listed. The engine may not be "
                    "installed, running or reachable -- you can still type "
                    "the name by hand.",
+    # The three answers of the button that makes the .env. None of them names
+    # the file: the block right below the button already shows its path, and a
+    # notice cannot carry anything but numbers.
+    "env-made": "The file is there, with the variable ready. Paste the key "
+                "after the = sign and save it.",
+    "env-there": "That file already exists, so nothing was touched. Add the "
+                 "variable to it yourself.",
+    "env-failed": "The file could not be created. Check that its folder can "
+                  "be written.",
     "nothing-picked": "No cards were selected, so nothing changed.",
     "collected-one": "The note was added to the collection.",
     "collected": "%1 notes added to the collection.",
@@ -930,14 +942,47 @@ def create_app(cfg: Config) -> FastAPI:
         file the rest of the process does not read, and still say "saved"."""
         return current["cfg"].source or CONFIG_PATH
 
+    def api_key_state() -> dict:
+        """What the page is allowed to know about the key: whether there is one.
+
+        Never the value. The page asks `present`, which answers yes or no, and
+        the only text it draws is the name of the variable and the path of the
+        file -- both of which the user has to be told to get any further.
+        """
+        api = current["cfg"].engines.get("api", {})
+        row = find_provider(str(api.get("provider", "anthropic")))
+        name = str(api.get("key_env") or (row.key_env if row else ""))
+        where = env.path(config_file())
+        return {
+            "name": name,
+            # A key written into config.toml counts: it is a bad place for it,
+            # but saying "no key" over a key that works is worse.
+            "ok": bool(api.get("key")) or bool(name and env.present(name, config_file())),
+            "file": where,
+            "exists": where.exists(),
+            "exposed": env.exposed(config_file()),
+        }
+
     @app.get("/settings", response_class=HTMLResponse)
     def settings_page(request: Request):
         saved = current["cfg"]
         order = [name for name in saved.chain if name in WEB_ENGINES]
         order += [name for name in WEB_ENGINES if name not in order]
         waiting = len(owed(Queue())[0])
+        api = saved.engines.get("api", {})
+        known = find_provider(str(api.get("provider", "anthropic")))
         return page(request, "settings.html", cfg=saved, ui=ui_language(),
                     engines=order, config_path=config_file(),
+                    # The whole table, not only the one in use: the addresses
+                    # are the point. Picking a provider should teach you what
+                    # you are pointing at.
+                    providers=PROVIDERS,
+                    picked=known.id if known else "",
+                    # A provider somebody wrote by hand that this does not
+                    # know. Said out loud rather than quietly unselected.
+                    stranger="" if known else str(api.get("provider", "")),
+                    by_hand=str(api.get("base_url", "")),
+                    key=api_key_state(),
                     # Read from disk, never asked for here: three engines with
                     # their timeouts is up to twelve seconds to open a page,
                     # and the slow case -- a server that is down -- is the
@@ -958,7 +1003,7 @@ def create_app(cfg: Config) -> FastAPI:
                       batch: str = Form(""),
                       interface: str = Form("", alias="ui_language"),
                       opencode_model: str = Form(""), ollama_model: str = Form(""),
-                      api_model: str = Form("")):
+                      api_model: str = Form(""), api_provider: str = Form("")):
         saved = current["cfg"]
         engines = {name: dict(options) for name, options in saved.engines.items()}
         for name, raw in (("opencode", opencode_model), ("ollama", ollama_model),
@@ -970,6 +1015,11 @@ def create_app(cfg: Config) -> FastAPI:
                 engines.setdefault(name, {})["model"] = model
             elif name in engines:
                 engines[name].pop("model", None)
+        # A provider the table does not have is not written: the file may name
+        # a gateway of somebody's own, and this form must not be the thing
+        # that replaces it with a guess.
+        if find_provider(api_provider.strip()):
+            engines.setdefault("api", {})["provider"] = api_provider.strip()
         # Every value is checked here, because config.load() would refuse the
         # file afterwards and the whole tool would stop reading its own config.
         picked = tuple(name for name in chain if name in ENGINE_NAMES)
@@ -1045,6 +1095,26 @@ def create_app(cfg: Config) -> FastAPI:
         if not found:
             return see_other("/settings", notice="models-none")
         return see_other("/settings", notice="models-found", n=len(found))
+
+    @app.post("/settings/env")
+    def make_env_file():
+        """An empty .env with the right variable in it, to paste a key into.
+
+        The variable is the one the *saved* provider needs. This button sits
+        in a form of its own and carries no fields -- it must not save the
+        settings form half-typed -- so the selection on screen is not
+        something it can see, and guessing would make the file for the wrong
+        provider.
+
+        An existing file is never written to. What would be overwritten is a
+        secret that exists nowhere else.
+        """
+        state = api_key_state()
+        if state["exists"]:
+            return see_other("/settings", notice="env-there")
+        if not env.create(state["name"] or "API_KEY", config_file()):
+            return see_other("/settings", notice="env-failed")
+        return see_other("/settings", notice="env-made")
 
     # --- analysing a batch of what the import left ---------------------------
     #

@@ -43,6 +43,9 @@ WRITE_ROUTES = [
     # Asking an engine for its models. A cross-site POST here would run
     # `opencode models` and reach the user's provider with their key.
     ("/settings/models/opencode", {}),
+    # Making the .env. A cross-site POST here would write a file into the
+    # user's config folder, which is nobody else's business.
+    ("/settings/env", {}),
     ("/collections/add", {"name": "Casa", "id": ["a1"]}),
     ("/collections/remove", {"name": "Casa", "id": ["a1"]}),
     ("/item/a1/collections", {"add": "Casa"}),
@@ -1438,3 +1441,21 @@ def test_the_note_page_draws_the_two_buttons_it_promises(setup):
     client.post(chip.group(1), data={chip.group(2): chip.group(3)})
 
     assert find_note(cfg, "a1")[1].collections == []
+
+
+def test_picking_a_provider_saves_it(setup, config_path):
+    _, client = setup
+    client.post("/settings", data={"chain": ["api"], "api_provider": "groq"})
+    saved = tomllib.loads(config_path.read_text(encoding="utf-8"))
+    assert saved["ai"]["api"]["provider"] == "groq"
+
+
+def test_a_provider_nobody_knows_does_not_replace_the_one_that_is_saved(setup,
+                                                                       config_path):
+    """The file may name a gateway of your own, by hand. This form must not be
+    the thing that replaces it with a guess."""
+    _, client = setup
+    client.post("/settings", data={"chain": ["api"], "api_provider": "groq"})
+    client.post("/settings", data={"chain": ["api"], "api_provider": "my-own-thing"})
+    saved = tomllib.loads(config_path.read_text(encoding="utf-8"))
+    assert saved["ai"]["api"]["provider"] == "groq"
