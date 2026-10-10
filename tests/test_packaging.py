@@ -12,6 +12,14 @@ from pathlib import PurePosixPath
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
+# Declared for development, imported by a library instead of by us. Each one
+# needs a reason here and a test below that fails when the reason stops being
+# true -- otherwise this is just a hole in the guard.
+THROUGH_ANOTHER_PACKAGE = {
+    "httpx2": "starlette.testclient imports it; without it every TestClient "
+              "test warns, and this suite runs with -W error",
+}
+
 
 def dev_dependencies():
     data = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
@@ -26,13 +34,27 @@ def test_every_dev_dependency_is_one_the_repo_uses():
                      for folder in ("src", "tests")
                      for p in (ROOT / folder).rglob("*.py"))
     unused = [name for name in dev_dependencies()
-              if not re.search(rf"\b{re.escape(name.replace('-', '_'))}\b", code)]
+              if name not in THROUGH_ANOTHER_PACKAGE
+              and not re.search(rf"\b{re.escape(name.replace('-', '_'))}\b", code)]
     assert unused == [], f"declared for development and imported by nothing: {unused}"
 
 
 def test_the_dev_extra_is_not_empty_either():
     """So the test above cannot pass by the list disappearing."""
     assert "pytest" in dev_dependencies()
+
+
+def test_the_test_client_really_is_the_one_that_wants_httpx2():
+    """The reason the exception above exists, stated as something that can fail.
+
+    starlette.testclient takes httpx2 when it is installed and warns when it
+    has to fall back to httpx. The day it stops caring, this test says so and
+    the dependency comes back out of pyproject.
+    """
+    import starlette.testclient
+
+    assert "httpx2" in THROUGH_ANOTHER_PACKAGE
+    assert starlette.testclient.httpx.__name__ == "httpx2"
 
 
 def shipped(relative: str, globs) -> bool:
