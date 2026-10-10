@@ -24,7 +24,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .i18n import translator
-from .queue import state_dir
+from .places import state_dir
 
 
 @dataclass(frozen=True)

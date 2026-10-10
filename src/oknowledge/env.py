@@ -6,7 +6,8 @@ page rewrites from scratch. In the shell's profile it never arrives at all:
 the panel launches the CLI and the server from the graphical session, which
 never read a .bashrc.
 
-So: ~/.config/oknowledge/.env, read here and nowhere else. Two rules that the
+So: a .env beside the config.toml -- wherever places.py puts that -- read
+here and nowhere else. Two rules that the
 rest of the program depends on and that the tests pin:
 
 - what is read never reaches os.environ. The pipeline launches opencode as a

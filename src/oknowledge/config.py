@@ -11,10 +11,33 @@ import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from . import places
 from .atomic import atomic_write
 from .trace import trace_run
 
-CONFIG_PATH = Path.home() / ".config" / "oknowledge" / "config.toml"
+FILE = "config.toml"
+
+
+def config_path() -> Path:
+    """Where the config would be, asked now rather than at import.
+
+    CONFIG_PATH below is the same answer frozen, because that is what the CLI
+    needs for its --config default and what three modules import. This is the
+    form a test can ask without reloading the module.
+    """
+    return places.config_dir() / FILE
+
+
+CONFIG_PATH = config_path()
+
+# The first mistake somebody on Windows makes, and it is not their fault: a
+# path copied from the address bar, put in the double quotes TOML asks for,
+# turns \U into a unicode escape (an error) or \t and \n into a tab and a
+# newline (no error at all, and a vault nobody can find).
+QUOTED_PATH = ('a path with backslashes cannot go in double quotes: TOML reads '
+               r'\U, \t and \n as escape codes. Write it with forward slashes, '
+               '"C:/Users/you/vault", or in single quotes, '
+               r"'C:\Users\you\vault'.")
 ENGINE_NAMES = ("opencode", "ollama", "api", "fake")
 CONTENT_MODES = ("full", "summary")
 MENTION_MODES = ("tools", "all", "discussed")
@@ -117,17 +140,26 @@ def load(path: Path = CONFIG_PATH) -> Config:
     if not path.exists():
         raise ConfigError(f"no config file at {path}")
     try:
-        data = tomllib.loads(path.read_text(encoding="utf-8"))
+        text = path.read_text(encoding="utf-8")
     except UnicodeDecodeError:
         raise ConfigError(f"{path} is not valid UTF-8 text") from None
+    try:
+        data = tomllib.loads(text)
     except tomllib.TOMLDecodeError as error:
-        raise ConfigError(f"{path} is not valid TOML: {error}") from None
+        hint = f" {QUOTED_PATH}" if "\\" in text else ""
+        raise ConfigError(f"{path} is not valid TOML: {error}{hint}") from None
 
     raw_vault = data.get("vault")
     if not raw_vault:
         raise ConfigError("vault is required in the config file")
     if not isinstance(raw_vault, str):
         raise ConfigError(f"vault must be a path in quotes, not {raw_vault!r}")
+    if not raw_vault.isprintable():
+        # The half of the mistake above that TOML accepts. Caught here rather
+        # than left to "not a directory", which would print the tab and the
+        # newline and explain nothing.
+        raise ConfigError(f"vault {raw_vault!r} came out with an escape code in "
+                          f"it. {QUOTED_PATH}")
     try:
         vault = Path(raw_vault).expanduser()
     except RuntimeError:                      # "~nosuchuser/x": no such home directory

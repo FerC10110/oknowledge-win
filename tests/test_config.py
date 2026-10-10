@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from oknowledge.config import Config, ConfigError, load, save
+from oknowledge.config import Config, ConfigError, config_path, load, save
 
 
 def write_config(tmp_path, body):
@@ -341,3 +341,53 @@ def test_saving_keeps_the_host(tmp_path):
     out = tmp_path / "out.toml"
     save(Config(vault=vault, host="0.0.0.0"), out)
     assert load(out).host == "0.0.0.0"
+
+
+# --- the first mistake a Windows user makes -----------------------------------
+
+def test_a_windows_path_in_double_quotes_says_how_to_write_it(tmp_path):
+    r"""`vault = "C:\Users\fer\vault"` is not valid TOML: \U starts a unicode
+    escape. The message has to say what to write instead, because the file is
+    hand-written and this is the first line of it.
+    """
+    path = write_config(tmp_path, 'vault = "C:\\Users\\fer\\vault"\n')
+
+    with pytest.raises(ConfigError) as caught:
+        load(path)
+
+    said = str(caught.value)
+    assert "C:/Users" in said and "'" in said
+
+
+def test_a_windows_path_whose_escapes_happen_to_parse_is_caught_too(tmp_path):
+    r"""The nastier half: `"C:\temp\new"` is *valid* TOML and means C:<tab>emp<lf>ew.
+    Without this check the answer is "vault is not a directory" followed by a
+    path with a newline in the middle of it, which explains nothing.
+    """
+    path = write_config(tmp_path, 'vault = "C:\\temp\\new"\n')
+
+    with pytest.raises(ConfigError) as caught:
+        load(path)
+
+    said = str(caught.value)
+    assert "C:/Users" in said and "not a directory" not in said
+
+
+def test_a_vault_with_no_backslashes_gets_the_ordinary_message(tmp_path):
+    """So the hint stays attached to the mistake it explains."""
+    path = write_config(tmp_path, 'vault = "\n')
+
+    with pytest.raises(ConfigError) as caught:
+        load(path)
+
+    assert "C:/Users" not in str(caught.value)
+
+
+def test_the_config_file_sits_in_the_config_directory(monkeypatch, tmp_path):
+    """conftest redirects CONFIG_PATH for every test in the suite -- it has to,
+    or a test could overwrite the real one -- so this asks the question the
+    constant was built from instead of asking the constant."""
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg-config"))
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "xdg-state"))
+
+    assert config_path() == tmp_path / "xdg-config" / "oknowledge" / "config.toml"

@@ -20,7 +20,7 @@ import zipfile
 from pathlib import Path
 
 from ..atomic import atomic_write
-from ..queue import state_dir
+from ..places import state_dir
 
 # Six years of one busy group is 198 KB. Nothing near this cap is a real
 # export, and the whole upload is held in memory to be parsed.

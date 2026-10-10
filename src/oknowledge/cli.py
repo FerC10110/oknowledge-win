@@ -37,6 +37,7 @@ import re
 import sys
 from pathlib import Path
 
+from . import places
 from .config import CONFIG_PATH, ENGINE_NAMES, ConfigError, PortUnavailable
 from .config import load as load_config
 from .pipeline import Result, add, backfill_icons, backfill_mentions, import_links, retry
@@ -50,9 +51,21 @@ no config file at {path}
 
 Create it with at least a line pointing at your Obsidian vault:
 
-    vault = "/path/to/your/obsidian/vault"
+    vault = {example}
 
 Everything else has a default. Notes are written to <vault>/oknowledge/."""
+
+
+def vault_example() -> str:
+    """A path the reader can edit rather than one they have to translate.
+
+    With no config file yet, this message is the whole manual, and a Windows
+    user handed a unix path translates it -- which is where `vault =
+    "C:\\Users\\..."` comes from, and that line does not parse. Forward
+    slashes are valid TOML, valid on Windows, and need no explaining.
+    """
+    return ('"C:/Users/you/Documents/vault"' if places.WINDOWS
+            else '"/path/to/your/obsidian/vault"')
 
 
 # How many urls one reason lists in the `not saved` report before it stops. A
@@ -447,7 +460,8 @@ def _run(argv: list[str] | None) -> int:
     try:
         cfg = load_config(args.config)
     except ConfigError as error:
-        message = NO_CONFIG.format(path=args.config) if not args.config.exists() else error
+        message = (NO_CONFIG.format(path=args.config, example=vault_example())
+                   if not args.config.exists() else error)
         print(f"oknowledge: {message}", file=sys.stderr)
         return 2
     except OSError as error:

@@ -303,14 +303,6 @@ def test_stray_things_in_the_queue_dir_are_ignored(tmp_path):
     assert [e.id for e in q.entries()] == ["good"]
 
 
-def test_a_relative_state_home_is_ignored(monkeypatch, tmp_path):
-    monkeypatch.setenv("HOME", str(tmp_path))
-    monkeypatch.setenv("XDG_STATE_HOME", "relative/dir")
-    assert state_dir() == tmp_path / ".local" / "state" / "oknowledge"
-    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "abs"))
-    assert state_dir() == tmp_path / "abs" / "oknowledge"
-
-
 def test_the_queue_syncs_the_directory_entry(tmp_path, monkeypatch):
     synced = []
     real = os.fsync

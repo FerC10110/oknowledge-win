@@ -9,6 +9,7 @@ import sys
 
 import pytest
 
+from oknowledge import cli
 from oknowledge.cli import main
 from oknowledge.config import Config
 from oknowledge.extract import Unreadable
@@ -953,3 +954,22 @@ def test_a_reader_that_closes_the_pipe_early_is_not_an_error(tmp_path, monkeypat
     assert "BrokenPipeError" not in done.stderr
     assert "Exception ignored" not in done.stderr
     assert done.returncode == 0
+
+
+# --- the message somebody with no config file gets ----------------------------
+
+def test_the_example_vault_is_a_path_this_system_could_have(monkeypatch, tmp_path, capsys):
+    """The config does not exist yet, so this message is the whole manual at
+    that moment. A Windows user handed a /path/to/your/vault has to translate
+    it first, and the translation is where the backslash mistake comes from."""
+    missing = tmp_path / "nowhere" / "config.toml"
+
+    monkeypatch.setattr(cli.places, "WINDOWS", True)
+    assert main(["--config", str(missing), "status"]) == 2
+    said = capsys.readouterr().err
+    assert 'vault = "C:/Users' in said
+    assert "\\" not in said
+
+    monkeypatch.setattr(cli.places, "WINDOWS", False)
+    assert main(["--config", str(missing), "status"]) == 2
+    assert 'vault = "/path/to' in capsys.readouterr().err

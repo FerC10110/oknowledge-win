@@ -20,7 +20,7 @@ from pathlib import Path
 
 from .ai.base import clean_models
 from .atomic import atomic_write
-from .queue import state_dir
+from .places import state_dir
 
 FILE = "models.json"
 

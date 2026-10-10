@@ -19,6 +19,7 @@ from pathlib import Path
 from . import locking
 from .atomic import atomic_write
 from .model import QueueEntry
+from .places import state_dir
 
 # Room for a pid, so a shorter one written over a longer one leaves no tail.
 PID_ROOM = 16
@@ -31,13 +32,6 @@ _ID = re.compile(r"[A-Za-z0-9_-]+")
 
 class Locked(Exception):
     """Another process is already working on this link."""
-
-
-def state_dir() -> Path:
-    base = os.environ.get("XDG_STATE_HOME", "")
-    if not base or not os.path.isabs(base):        # the XDG spec: relative means unset
-        base = str(Path.home() / ".local" / "state")
-    return Path(base) / "oknowledge"
 
 
 def _now() -> str:
