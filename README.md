@@ -7,8 +7,6 @@ library from a page in your own browser.
 
 ![The library](preview.png)
 
-*(The paste box in the header is newer than this picture.)*
-
 **This is a fork of oknowledge for people without
 [Omarchy](https://omarchy.org/).** The original is a Linux tool
 with a panel in the system bar; everything that needed that bar — or needed
