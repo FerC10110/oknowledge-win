@@ -7,6 +7,7 @@ hanging while an engine thinks, a settings save that wipes the shared
 preference file other plugins write to.
 """
 
+import dataclasses
 import json
 import os
 import re
@@ -97,6 +98,12 @@ def config_path(tmp_path, monkeypatch):
     path = tmp_path / "config" / "config.toml"
     monkeypatch.setattr("oknowledge.web.app.CONFIG_PATH", path)
     return path
+
+
+def in_spanish(cfg):
+    """The same vault with the interface in Spanish. The language is part of
+    the Config now, so this is a different app and not a different file."""
+    return TestClient(create_app(dataclasses.replace(cfg, ui_language="es")))
 
 
 @pytest.fixture
@@ -307,6 +314,19 @@ def test_the_two_language_pickers_offer_the_same_order(setup):
     assert offered("ui_language") == offered("language")
 
 
+def test_the_language_in_use_is_the_one_already_ticked(setup):
+    """Otherwise the page is in Spanish with English ticked, and the next save
+    -- of anything at all -- posts English back and switches the interface
+    somebody never asked to switch."""
+    cfg, _ = setup
+
+    def ticked(body):
+        return re.findall(r'name="ui_language" value="([a-z]+)"\s*checked', body)
+
+    assert ticked(in_spanish(cfg).get("/settings").text) == ["es"]
+    assert ticked(TestClient(create_app(cfg)).get("/settings").text) == ["en"]
+
+
 def test_settings_warns_that_saving_rewrites_the_file(setup):
     """Comments are not the only thing lost: any key load() does not read goes
     too, and the file is the one we tell the user to hand-write."""
@@ -317,11 +337,12 @@ def test_settings_warns_that_saving_rewrites_the_file(setup):
     assert "config.toml.bak" in body
 
 
-def test_saving_settings_writes_the_config_and_the_shared_language(
-        setup, tmp_path, config_path, monkeypatch):
+def test_saving_settings_writes_both_languages_into_the_one_file(
+        setup, config_path):
+    """Two axes, two tables, one save. The summaries in English and the buttons
+    in Spanish is a real combination somebody wants, and the form has to be
+    able to say it."""
     _, client = setup
-    shared = tmp_path / "plugin-language.json"
-    monkeypatch.setattr("oknowledge.i18n.SHARED_FILE", shared)
 
     client.post("/settings", data={
         "chain": ["ollama", "opencode"], "language": "en",
@@ -332,19 +353,7 @@ def test_saving_settings_writes_the_config_and_the_shared_language(
     assert saved["ai"]["chain"] == ["ollama", "opencode"]
     assert saved["ai"]["language"] == "en"
     assert saved["default_content"] == "summary"
-    assert json.loads(shared.read_text(encoding="utf-8"))["language"] == "es"
-
-
-def test_saving_settings_keeps_the_rest_of_the_shared_file(setup, tmp_path, monkeypatch):
-    _, client = setup
-    shared = tmp_path / "plugin-language.json"
-    shared.write_text(json.dumps({"theme": "nord"}), encoding="utf-8")
-    monkeypatch.setattr("oknowledge.i18n.SHARED_FILE", shared)
-
-    client.post("/settings", data={"chain": ["ollama"], "ui_language": "es"})
-
-    assert json.loads(shared.read_text(encoding="utf-8")) == {
-        "theme": "nord", "language": "es"}
+    assert saved["web"]["language"] == "es"
 
 
 def test_saving_settings_keeps_the_models(setup, config_path):
@@ -656,11 +665,18 @@ def test_a_model_name_that_is_not_one_keeps_what_was_saved(setup, config_path):
     assert saved["ai"]["ollama"]["model"] == "qwen3:8b"
 
 
-def test_an_interface_language_we_do_not_have_leaves_the_shared_file_alone(
-        setup, isolated_ui_language):
+def test_an_interface_language_we_do_not_have_leaves_the_saved_one_alone(
+        setup, config_path):
+    """The form is a list of radio buttons, so this only arrives from a posted
+    form somebody built by hand -- and config.load() would refuse the file
+    afterwards, which would stop the whole program reading its own config."""
     _, client = setup
+
     client.post("/settings", data={"chain": ["ollama"], "ui_language": "fr"})
-    assert not isolated_ui_language.exists()
+
+    saved = tomllib.loads(config_path.read_text(encoding="utf-8"))
+    assert saved["web"]["language"] == "en"
+    assert load(config_path).ui_language == "en"
 
 
 # --- counting and merging in words (m6, m10) --------------------------------
@@ -831,10 +847,9 @@ def test_a_partial_rename_counts_in_words_that_agree(setup, monkeypatch, moved,
     assert "1 notes" not in body
 
 
-def test_a_partial_rename_agrees_in_spanish(setup, isolated_ui_language,
-                                            monkeypatch):
-    cfg, client = setup
-    isolated_ui_language.write_text(json.dumps({"language": "es"}), encoding="utf-8")
+def test_a_partial_rename_agrees_in_spanish(setup, monkeypatch):
+    cfg, _ = setup
+    client = in_spanish(cfg)
     write_note(cfg, note("n0", "Uno", "Mixta"), "es")
     write_note(cfg, note("n1", "Dos", "Mixta"), "es")
     flaky_writes(monkeypatch, {"n1"})
@@ -863,22 +878,27 @@ def test_reprocess_asks_on_its_own_button(setup):
     assert "confirm(this.form.dataset.ask)" in form
 
 
-# --- a half-saved settings write says which half (F3) -----------------------
+# --- a settings write has no halves left (was F3) ---------------------------
 
-def test_a_config_saved_without_the_shared_language_says_so(setup, config_path,
-                                                            monkeypatch):
+def test_a_settings_write_that_fails_does_not_switch_the_language_either(
+        setup, config_path, monkeypatch):
+    """The interface language used to go into a file of Omarchy's, so a save
+    could land half: the config written, the language not, and a notice for
+    exactly that. One file means one outcome -- and the page that comes back
+    from a failed save is still in the language that is on disk.
+    """
     _, client = setup
 
-    def boom(language, path=None):
-        raise PermissionError(13, "~/.config/omarchy is read-only")
+    def boom(*args, **kwargs):
+        raise PermissionError(13, "the config folder is read-only")
 
-    monkeypatch.setattr("oknowledge.web.app.set_ui_language", boom)
-    body = client.post("/settings", data={"chain": ["ollama"], "ui_language": "es"}).text
+    monkeypatch.setattr("oknowledge.web.app.save_config", boom)
+    body = client.post("/settings",
+                       data={"chain": ["ollama"], "ui_language": "es"}).text
 
-    saved = tomllib.loads(config_path.read_text(encoding="utf-8"))
-    assert saved["ai"]["chain"] == ["ollama"]          # this half did land
-    assert "interface language" in body
-    assert "could not be saved" not in body           # ... so do not say that
+    assert not config_path.exists()
+    assert "could not be saved" in body
+    assert "Ajustes" not in body                   # not switched to Spanish
 
 
 # --- a change that landed with indexes that did not (F4) --------------------

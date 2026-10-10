@@ -36,7 +36,7 @@ from ..ai.providers import PROVIDERS
 from ..ai.providers import find as find_provider
 from ..config import CONFIG_PATH, CONTENT_MODES, ENGINE_NAMES, MENTION_MODES, Config
 from ..config import save as save_config
-from ..i18n import LANGUAGES, NATIVE_NAMES, set_ui_language, translator, ui_language
+from ..i18n import LANGUAGES, NATIVE_NAMES, translator
 from ..pipeline import add as add_link
 from ..pipeline import icon_path, import_links, is_domain, owed
 from ..models_cache import read as read_models
@@ -101,9 +101,6 @@ NOTICES = {
                              "`oknowledge reindex` once the folder is writable again.",
     "settings-failed": "The settings could not be saved. Check that the config "
                        "folder exists and that you can write to it.",
-    "language-not-saved": "The settings were saved, but the interface language is "
-                          "shared with my other plugins and that file could not be "
-                          "written.",
     "batch-started": "Analysing. This page comes back on its own; you can close it.",
     "batch-running": "A batch is already running. This page shows how it is going.",
     "nothing-owed": "Every link has been analysed. Nothing to do.",
@@ -528,7 +525,10 @@ def create_app(cfg: Config) -> FastAPI:
     app.mount("/static", StaticFiles(directory=str(WEB.joinpath("static"))), name="static")
 
     def page(request: Request, name: str, status_code: int = 200, **context) -> HTMLResponse:
-        language = ui_language()
+        # From the config in use, not from the one this app was built with: the
+        # settings page saves a new Config, and the page that comes back has to
+        # be in the language that was just picked.
+        language = current["cfg"].ui_language
         t = translator(language)
         base = {"t": t, "lang": language, "query": "",
                 "unreadable": library.unreadable, "links_dir": cfg.links_dir,
@@ -971,7 +971,7 @@ def create_app(cfg: Config) -> FastAPI:
         waiting = len(owed(Queue())[0])
         api = saved.engines.get("api", {})
         known = find_provider(str(api.get("provider", "anthropic")))
-        return page(request, "settings.html", cfg=saved, ui=ui_language(),
+        return page(request, "settings.html", cfg=saved, ui=saved.ui_language,
                     engines=order, config_path=config_file(),
                     # The whole table, not only the one in use: the addresses
                     # are the point. Picking a provider should teach you what
@@ -1038,6 +1038,10 @@ def create_app(cfg: Config) -> FastAPI:
                              else saved.default_content),
             mentions=mentions if mentions in MENTION_MODES else saved.mentions,
             batch=batch_size(batch, saved.batch),
+            # One file, one save: the interface language used to go to a
+            # separate file of Omarchy's, which is where the "saved, except
+            # the language" notice came from. There is nothing left to half-fail.
+            ui_language=interface if interface in LANGUAGES else saved.ui_language,
             engines=engines,
         )
         try:
@@ -1048,14 +1052,6 @@ def create_app(cfg: Config) -> FastAPI:
             log.warning("the config could not be saved: %s", error)
             return see_other("/settings", notice="settings-failed")
         current["cfg"] = updated
-        try:
-            if interface in LANGUAGES:
-                set_ui_language(interface)
-        except OSError as error:
-            # The config itself did land. Saying it did not would be a lie
-            # about the half that worked.
-            log.warning("the shared language file could not be written: %s", error)
-            return see_other("/settings", notice="language-not-saved")
         return see_other("/settings", notice="saved")
 
     @app.get("/item/{link_id}/state")
@@ -1193,7 +1189,7 @@ def create_app(cfg: Config) -> FastAPI:
         if text is None:
             # A refresh re-posts this form, and the upload is gone by then.
             # Saying so is what stops a second copy of every note.
-            t = translator(ui_language())
+            t = translator(current["cfg"].ui_language)
             return page(request, "import.html", status_code=400,
                         problem=t("That upload is no longer here. "
                                   "Choose the file again."))

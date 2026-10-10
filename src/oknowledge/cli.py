@@ -1,4 +1,4 @@
-"""The front door. The Omarchy plugin talks to the system through here.
+"""The front door: every command, and the exit codes a script can read.
 
 Messages are in English: they are answers for people at a terminal and for
 scripts, not interface text. With --json, a command prints exactly one JSON
@@ -6,7 +6,7 @@ document on stdout (an object for `add`, an array for `status` and `retry`),
 so a caller can parse the whole output in one go. Anything the user should
 know that is not the answer (warnings, errors) goes to stderr.
 
-Exit codes, which the Omarchy plugin relies on:
+Exit codes, which a caller can rely on:
     0  it worked.
     1  it ran, but the link is unfinished (partial, failed, locked by another
        process, or a `retry` that left some links undone).
@@ -142,7 +142,7 @@ def _parser() -> argparse.ArgumentParser:
 
 def serve(cfg, open_browser: bool) -> None:
     # Imported here: the web stack costs a few hundred milliseconds, and every
-    # `add` the Omarchy plugin runs would pay it for a command that never serves.
+    # `add` would pay it for a command that never serves.
     from .web.runner import serve as run
 
     run(cfg, open_browser)

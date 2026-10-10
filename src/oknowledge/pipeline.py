@@ -332,10 +332,10 @@ def _partial_note(cfg: Config, link: str, url: str, content: str,
 def _telling(q: Queue, link: str, trace: Tracer) -> Tracer:
     """`trace`, and the queue entry along with it.
 
-    The entry is the only thing a second process can read: the Omarchy panel
-    runs the CLI, so the in-memory list the web page draws is invisible to it
-    and a file is the only place these two can meet. It is the same reason the
-    queue is files and not a database.
+    The entry is the only thing a second process can read: a run started from
+    the command line cannot see the in-memory list the web page draws, and a
+    file is the only place the two can meet. It is the same reason the queue is
+    files and not a database.
 
     Only a `start` is written, so the entry names the stage being worked on
     rather than the last one that ended, and it is cleared by the status that
@@ -458,8 +458,8 @@ def add(cfg: Config, url: str, content: str | None = None, engine: str | None = 
 def _mode(cfg: Config, content: str | None, existing: Note | None) -> tuple[str, list[str]]:
     """The content mode to save under, and anything the user should hear about.
 
-    The mode reaches here from the queue's JSON file, which the QML widget
-    reads and a user can therefore hand-edit, and from a note's frontmatter,
+    The mode reaches here from the queue's JSON file, which is plain text a
+    user can hand-edit, and from a note's frontmatter,
     which they edit by design. Anything other than "full" means "keep no body",
     so an unknown value must not be taken at face value. An existing note's own
     mode is inherited, so a plain --reprocess under a `summary` default does not
@@ -771,8 +771,8 @@ def _reconcile(cfg: Config, q: Queue, entry: QueueEntry) -> Result | None:
     really does still owe work and add() should take it from here.
 
     This exists because of one reachable sequence. add() writes the note, the
-    process dies before its final set_status -- the Omarchy shell restarting
-    mid-save is enough, and its own notes call that normal -- so the entry
+    process dies before its final set_status -- closing the terminal or
+    logging out mid-save is enough -- so the entry
     stays pending and orphaned() offers it to every retry from then on. Days
     later the user has edited that note by hand. A retry whose extraction and
     analysis both succeed would write a fresh note straight over it: _process()
@@ -819,7 +819,7 @@ def _reconcile(cfg: Config, q: Queue, entry: QueueEntry) -> Result | None:
         path, note = found
         # The error of the last attempt stays in `error`, as _give_up() leaves
         # it: an `ok` entry's error is a note for anyone who looks, and the
-        # widget shows it only on an unfinished row.
+        # page shows it only on an unfinished row.
         trouble = _record(q, entry.id, "ok", entry.error or "", note.title)
         return Result(id=entry.id, url=entry.url, path=path.resolve(), status="ok",
                       skipped=True, warnings=[RECONCILED, *trouble])

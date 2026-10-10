@@ -1,7 +1,8 @@
 """La configuración del usuario, con sus defaults y su validación.
 
-El idioma de la interfaz no vive acá: es una preferencia del escritorio,
-compartida con los demás plugins, y la lee i18n.py.
+Dos idiomas, dos ejes: `[ai] language` es el de los resúmenes y `[web]
+language` el de la interfaz. En la versión de Omarchy el segundo vivía en un
+archivo compartido con los demás plugins; acá no hay otros plugins.
 """
 
 from __future__ import annotations
@@ -13,6 +14,7 @@ from pathlib import Path
 
 from . import places
 from .atomic import atomic_write
+from .i18n import LANGUAGES
 from .perms import only_you
 from .trace import trace_run
 
@@ -76,6 +78,11 @@ class Config:
     which the server says out loud when it starts."""
     port: int = 8787
     idle_timeout: int = 900
+    ui_language: str = "en"
+    """What the buttons say: `[web] language`. A different axis from
+    `language` above, which is what the summaries are written in, and they
+    were always two. English by default because the keys in the code are the
+    English text, so it is the one language that cannot be half-translated."""
     trace_to: str = ""
     """The run folder this process writes prompt-and-reply traces into, or ""
     for the usual case of not tracing at all. One value and not a flag plus a
@@ -130,6 +137,19 @@ def _host(web: dict) -> str:
     if not host or any(ch.isspace() for ch in host):
         raise ConfigError(f"web.host must be an address to listen on, not {value!r}")
     return host
+
+
+def _ui_language(web: dict) -> str:
+    """The one place a language the program has no words for is refused.
+
+    Not quietly degraded to English: it is a hand-written file, and a line
+    that is silently ignored is a setting somebody will keep retyping.
+    """
+    value = web.get("language", "en")
+    if value not in LANGUAGES:
+        raise ConfigError(f"web.language must be one of {', '.join(LANGUAGES)}, "
+                          f"not {value!r}")
+    return value
 
 
 def load(path: Path = CONFIG_PATH) -> Config:
@@ -228,6 +248,7 @@ def load(path: Path = CONFIG_PATH) -> Config:
         host=_host(web),
         port=_integer(web, "port", 8787, "web.port"),
         idle_timeout=_integer(web, "idle_timeout", 900, "web.idle_timeout"),
+        ui_language=_ui_language(web),
         trace_to=trace_run() if tracing else "",
         source=path,
     )
@@ -259,7 +280,7 @@ def save(cfg: Config, path: Path | None = None) -> Path:
                "mentions": cfg.mentions,
                **{name: dict(options) for name, options in cfg.engines.items()}},
         "web": {"host": cfg.host, "port": cfg.port,
-                "idle_timeout": cfg.idle_timeout},
+                "idle_timeout": cfg.idle_timeout, "language": cfg.ui_language},
         # Written only when it is on: a `trace = false` in everybody's config
         # file is a line that explains nothing and has to be read anyway.
         **({"debug": {"trace": True}} if cfg.trace_to else {}),

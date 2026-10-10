@@ -93,15 +93,14 @@ def test_an_unknown_item_is_a_404(client):
     assert client.get("/item/zzzz").status_code == 404
 
 
-def test_the_interface_follows_the_shared_language_file(tmp_path, isolated_ui_language):
+def test_the_interface_follows_the_config(tmp_path):
     vault = tmp_path / "vault"
     (vault / "oknowledge" / "links").mkdir(parents=True)
-    isolated_ui_language.write_text('{"language": "es"}', encoding="utf-8")
-    body = TestClient(create_app(Config(vault=vault))).get("/").text
+    body = TestClient(create_app(Config(vault=vault, ui_language="es"))).get("/").text
     assert "Buscá en tu biblioteca" in body
 
 
-def test_the_interface_is_english_without_the_shared_file(client):
+def test_the_interface_is_english_unless_the_config_says_otherwise(client):
     body = client.get("/").text
     assert "Search your library" in body
     assert "Buscá" not in body
@@ -195,12 +194,13 @@ def test_a_note_that_cannot_be_read_is_counted_in_the_page(tmp_path):
     assert "1 note could not be read and is not shown" in body
 
 
-def test_the_unreadable_count_is_plural_and_translated(tmp_path, isolated_ui_language):
+def test_the_unreadable_count_is_plural_and_translated(tmp_path):
+    import dataclasses
+
     cfg = make_cfg(tmp_path)
     for i in range(2):
         break_note(write_note(cfg, note(f"x{i}", f"T{i}", "Redes", ["x"], "S."), "es"))
-    isolated_ui_language.write_text('{"language": "es"}', encoding="utf-8")
-    body = TestClient(create_app(cfg)).get("/").text
+    body = TestClient(create_app(dataclasses.replace(cfg, ui_language="es"))).get("/").text
     assert "2 notas no se pudieron leer y no se muestran" in body
 
 

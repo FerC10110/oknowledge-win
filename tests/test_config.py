@@ -391,3 +391,50 @@ def test_the_config_file_sits_in_the_config_directory(monkeypatch, tmp_path):
     monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "xdg-state"))
 
     assert config_path() == tmp_path / "xdg-config" / "oknowledge" / "config.toml"
+
+
+# --- the interface language, which used to live in a file of Omarchy's --------
+
+def test_the_interface_language_comes_from_the_web_table(tmp_path):
+    """Two languages, two axes, and they were always separate: [ai] language is
+    what the summaries are written in, [web] language is what the buttons say.
+    On a machine with no Omarchy there is no shared file to keep it in, so it
+    lives here, where the Settings page can write it."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+
+    body = f'vault = "{vault}"\n[web]\nlanguage = "es"\n'
+    assert load(write_config(tmp_path, body)).ui_language == "es"
+
+
+def test_the_interface_language_defaults_to_english(tmp_path):
+    """English and not Spanish, like the translator it feeds: the keys in the
+    code are the English text, so English is the one language that cannot be
+    half-translated."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+
+    cfg = load(write_config(tmp_path, f'vault = "{vault}"\n'))
+
+    assert cfg.ui_language == "en"
+    assert cfg.language == "es"             # the summaries, untouched
+
+
+@pytest.mark.parametrize("value", ['"fr"', '"es-AR"', "true", '""'])
+def test_an_interface_language_nobody_translated_is_refused_by_name(tmp_path, value):
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    path = write_config(tmp_path, f'vault = "{vault}"\n[web]\nlanguage = {value}\n')
+
+    with pytest.raises(ConfigError, match="web.language"):
+        load(path)
+
+
+def test_saving_keeps_the_interface_language(tmp_path):
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    out = tmp_path / "out.toml"
+
+    save(Config(vault=vault, ui_language="es"), out)
+
+    assert load(out).ui_language == "es"

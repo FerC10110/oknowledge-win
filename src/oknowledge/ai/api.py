@@ -113,7 +113,7 @@ class ApiEngine:
         # Every branch below passes its text through _redact, including the
         # ones whose message looks safe today: the key can arrive in the URL
         # (a gateway base_url with ?key=), and from an EngineError it reaches
-        # the queue entry, the CLI's stderr and the widget's toast.
+        # the queue entry, the CLI's stderr and the page in the browser.
         except EngineError:
             raise
         except httpx.TimeoutException as error:

@@ -42,18 +42,6 @@ def no_network_and_no_subprocess(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
-def isolated_ui_language(tmp_path, monkeypatch):
-    """The UI language comes from a shared file under ~/.config. No test may read
-    the real one: point it at a path that does not exist (so: English) unless the
-    test writes there itself."""
-    from oknowledge import i18n
-
-    path = tmp_path / "omarchy-plugin-language.json"
-    monkeypatch.setattr(i18n, "SHARED_FILE", path)
-    return path
-
-
-@pytest.fixture(autouse=True)
 def isolated_config_path(tmp_path, monkeypatch):
     """No test may write the real ~/.config/oknowledge/config.toml.
 

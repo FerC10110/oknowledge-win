@@ -331,22 +331,6 @@ def test_long_titles_may_wrap_anywhere():
         assert selector in block
 
 
-@pytest.mark.parametrize("value,expected", [
-    ("es", "es"), ("ES", "es"), ("es-AR", "es"), ("es_AR", "es"), (" es-ar ", "es"),
-    ("en-US", "en"), ("fr", "en"), (None, "en"), (5, "en"), ("", "en"),
-])
-def test_language_codes_are_normalised(tmp_path, value, expected):
-    path = tmp_path / "l.json"
-    path.write_text(json.dumps({"language": value}), encoding="utf-8")
-    assert i18n.ui_language(path) == expected
-
-
-def test_a_pathologically_nested_language_file_falls_back(tmp_path):
-    path = tmp_path / "l.json"
-    path.write_text("[" * 200000, encoding="utf-8")
-    assert i18n.ui_language(path) == "en"
-
-
 def test_an_unknown_item_is_an_html_404(tmp_path):
     _, client = app_with(tmp_path, note("n1", "Uno"))
     response = client.get("/item/nope")

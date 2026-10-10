@@ -1,20 +1,17 @@
 """The interface language: English by default, Spanish opt-in.
 
-The preference is not this project's: it lives in the shared Omarchy file that
-all my plugins read. The English text is the key, so a missing translation
-degrades to English and nothing breaks. This is a separate axis from the
-language the AI writes summaries in (`[ai] language`).
+The preference lives in the config, as `[web] language`, and the Settings page
+writes it there. (On Omarchy it came out of a JSON file shared with my other
+plugins; there are no other plugins here, and a machine without Omarchy has no
+such file.) The English text is the key, so a missing translation degrades to
+English and nothing breaks. This is a separate axis from the language the AI
+writes summaries in, `[ai] language`.
 """
 
 from __future__ import annotations
 
-import json
 import re
-from pathlib import Path
 
-from .atomic import atomic_write
-
-SHARED_FILE = Path.home() / ".config" / "omarchy" / "plugin-language.json"
 LANGUAGES = ("en", "es")
 # Each language written in itself, which is how a language picker names them --
 # "Español", never "Spanish". Deliberately not in STRINGS: these are the one
@@ -389,10 +386,6 @@ STRINGS = {
             "La nota se movió a la carpeta trash de tu vault, pero no se "
             "pudieron rehacer los índices. Corré `oknowledge reindex` cuando "
             "la carpeta vuelva a ser escribible.",
-        "The settings were saved, but the interface language is shared with "
-        "my other plugins and that file could not be written.":
-            "Los ajustes se guardaron, pero el idioma de la interfaz es "
-            "compartido con mis otros plugins y ese archivo no se pudo escribir.",
         "Renaming into a category that already exists merges the two.":
             "Si el nombre nuevo ya existe, las dos categorías se fusionan.",
         "Move this note to the trash folder?":
@@ -407,50 +400,12 @@ STRINGS = {
         "To change the order, edit the file by hand.":
             "La prioridad va de arriba hacia abajo. El motor que no esté tildado "
             "no se usa. Para cambiar el orden, editá el archivo a mano.",
-        "Shared with my other Omarchy plugins, so this changes all of them at once.":
-            "Es compartido con mis otros plugins de Omarchy: los cambia a todos juntos.",
         "Mentions of a video": "Menciones de un video",
         "Tools and companies": "Herramientas y empresas",
         "Everything named": "Todo lo nombrado",
         "Only what it discusses": "Sólo lo que discute",
     },
 }
-
-
-def ui_language(path: Path | None = None) -> str:
-    target = Path(path) if path else SHARED_FILE
-    try:
-        value = json.loads(target.read_text(encoding="utf-8")).get("language")
-    except (OSError, ValueError, AttributeError, RecursionError):
-        return "en"
-    if not isinstance(value, str):
-        return "en"
-    primary = value.strip().lower().replace("_", "-").split("-")[0]   # "es-AR" -> "es"
-    return primary if primary in LANGUAGES else "en"
-
-
-def set_ui_language(language: str, path: Path | None = None) -> Path:
-    """Write the shared preference, and say where it went.
-
-    The file is not ours: every Omarchy plugin of mine reads and writes it, so
-    this reads what is there, changes the one key we own and writes the whole
-    object back. Writing {"language": ...} wholesale would quietly destroy
-    whatever another plugin keeps there. A file that is missing, unreadable or
-    not a JSON object starts from an empty object rather than failing: the
-    preference is worth more than whatever could not be parsed.
-    """
-    if language not in LANGUAGES:
-        raise ValueError(f"unsupported language: {language!r}")
-    target = Path(path) if path else SHARED_FILE
-    try:
-        existing = json.loads(target.read_text(encoding="utf-8"))
-    except (OSError, UnicodeDecodeError, ValueError, RecursionError):
-        existing = None
-    data = dict(existing) if isinstance(existing, dict) else {}
-    data["language"] = language
-    target.parent.mkdir(parents=True, exist_ok=True)
-    atomic_write(target, json.dumps(data, ensure_ascii=False, indent=2) + "\n")
-    return target
 
 
 def translator(language: str):

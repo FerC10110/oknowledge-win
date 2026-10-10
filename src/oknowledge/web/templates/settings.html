@@ -119,7 +119,6 @@
       <label><input type="radio" name="ui_language" value="{{ code }}"
                     {% if ui == code %}checked{% endif %}> {{ language_names[code] }}</label>
     {% endfor %}
-    <p class="meta">{{ t('Shared with my other Omarchy plugins, so this changes all of them at once.') }}</p>
 
     <h2>{{ t('Keep by default') }}</h2>
     <label><input type="radio" name="default_content" value="full"
