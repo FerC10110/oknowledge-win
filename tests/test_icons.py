@@ -13,6 +13,7 @@ import os
 
 import pytest
 
+from marks import posix_only
 from oknowledge.config import Config
 from oknowledge.net import Fetched
 from oknowledge.model import Note
@@ -92,6 +93,7 @@ def test_a_domain_is_lowercased_rather_than_refused(cfg, monkeypatch):
     assert fetch.asked == ["https://github.com/favicon.ico"]
 
 
+@posix_only
 def test_nothing_is_written_outside_the_managed_folder(cfg, monkeypatch, tmp_path):
     """attachments/ symlinked elsewhere is an ordinary Obsidian habit."""
     outside = tmp_path / "outside"
@@ -105,6 +107,7 @@ def test_nothing_is_written_outside_the_managed_folder(cfg, monkeypatch, tmp_pat
     assert list(outside.iterdir()) == []
 
 
+@posix_only
 def test_a_symlinked_icon_is_left_alone(cfg, monkeypatch, tmp_path):
     """A link the user put there is theirs, and stays a link.
 
@@ -148,6 +151,7 @@ def test_a_fetch_that_explodes_is_swallowed(cfg, monkeypatch):
 
 
 @pytest.mark.skipif(os.geteuid() == 0, reason="root ignores the mode bits")
+@posix_only
 def test_an_unwritable_attachments_folder_is_swallowed(cfg, monkeypatch):
     monkeypatch.setattr("oknowledge.pipeline.fetch", served())
     cfg.attachments_dir.mkdir(parents=True)

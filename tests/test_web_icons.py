@@ -9,6 +9,7 @@ filesystem lookups and free of 100 broken-image icons.
 import pytest
 from fastapi.testclient import TestClient
 
+from marks import posix_only
 from oknowledge.config import Config
 from oknowledge.model import Note
 from oknowledge.vault import rebuild_indexes, write_note
@@ -110,6 +111,7 @@ def test_a_domain_that_is_not_one_never_serves_a_file(setup, domain):
     assert not served_from_disk
 
 
+@posix_only
 def test_an_icon_outside_the_folder_is_not_served(setup, tmp_path):
     """The icon name comes off a note's `source`, which the user can edit."""
     cfg, client = setup

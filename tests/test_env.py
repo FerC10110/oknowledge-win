@@ -12,6 +12,7 @@ import stat
 
 import pytest
 
+from marks import posix_only
 from oknowledge import env
 
 
@@ -147,6 +148,7 @@ def test_a_file_that_already_exists_is_never_touched(config):
     assert env.path(config).read_text(encoding="utf-8") == "GROQ_API_KEY=sk-mine\n"
 
 
+@posix_only
 def test_a_folder_that_cannot_be_written_is_an_answer_not_a_crash(config):
     config.parent.mkdir(parents=True)
     config.parent.chmod(0o500)
@@ -156,6 +158,7 @@ def test_a_folder_that_cannot_be_written_is_an_answer_not_a_crash(config):
         config.parent.chmod(0o700)
 
 
+@posix_only
 def test_a_file_the_rest_of_the_machine_can_read_is_worth_saying(config):
     written(config, "GROQ_API_KEY=sk-x\n")
     # Both halves of "anyone else": the group alone and the world alone.
@@ -171,6 +174,7 @@ def test_a_file_that_is_not_there_is_not_exposed(config):
     assert env.exposed(config) is False
 
 
+@posix_only
 def test_on_windows_the_mode_is_not_worth_saying(config, monkeypatch):
     """Windows reports 0o666 for everything, so this check would warn that
     anyone can read your key, forever, on every machine. A warning that is

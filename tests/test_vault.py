@@ -1,5 +1,6 @@
 import pytest
 
+from marks import posix_only
 from oknowledge.config import Config
 from oknowledge.model import Mention, Note
 from oknowledge.urls import search_url
@@ -132,6 +133,7 @@ def test_a_path_climbing_out_with_dotdot_is_refused(tmp_path):
     assert not (cfg.vault / "escape.md").exists()
 
 
+@posix_only
 def test_a_symlink_pointing_outside_is_refused(tmp_path):
     cfg = make_config(tmp_path)
     outside = tmp_path / "outside.md"
@@ -142,6 +144,7 @@ def test_a_symlink_pointing_outside_is_refused(tmp_path):
     assert not outside.exists()
 
 
+@posix_only
 def test_a_symlinked_directory_pointing_outside_is_refused(tmp_path):
     cfg = make_config(tmp_path)
     elsewhere = tmp_path / "elsewhere"
@@ -282,6 +285,7 @@ def test_separators_in_saved_or_id_still_write_a_flat_file(tmp_path):
     assert not (cfg.links_dir / "2026").exists()
 
 
+@posix_only
 def test_new_notes_honor_the_umask(tmp_path):
     import os
     old = os.umask(0o077)

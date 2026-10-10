@@ -432,8 +432,8 @@ def translator(language: str):
                 return match.group(0)        # not a marker we were given
             return str(args[n - 1])
 
-        # One pass, like plugin/I18n.js: a loop would re-scan its own output
-        # and substitute a marker that arrived inside an argument.
+        # One pass: a loop would re-scan its own output and substitute a
+        # marker that arrived inside an argument.
         return re.sub(r"%(\d+)", value, out)
 
     return t

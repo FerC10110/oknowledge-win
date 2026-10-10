@@ -16,12 +16,12 @@ def test_spanish_translates_what_it_knows_and_passes_through_the_rest():
     assert t("a string nobody translated") == "a string nobody translated"
 
 
-# --- one substitution pass, like plugin/I18n.js (F8) ------------------------
+# --- one substitution pass (F8) ---------------------------------------------
 
 def test_a_marker_inside_an_argument_is_not_substituted_again():
-    """plugin/I18n.js:55 documents avoiding exactly this, and the two
-    implementations of the same function must not disagree about a hazard one
-    of them names."""
+    """A loop would re-scan its own output and substitute a marker that
+    arrived inside an argument -- which is how a translated string gets a
+    value it was never given."""
     t = i18n.translator("en")
     assert t("%1 and %2", "%2", "x") == "%2 and x"
 
@@ -32,9 +32,10 @@ def test_a_marker_with_no_argument_is_left_alone():
     assert t("%0 is not a marker", "x") == "%0 is not a marker"
 
 
-def test_the_python_and_the_javascript_substitute_the_same_way():
-    """The cases that tell a one-pass implementation from a loop, asserted
-    against the table in plugin/I18n.js by hand -- node runs the other half."""
+def test_the_cases_that_tell_one_pass_from_a_loop():
+    """A percent sign in the value, the same marker twice, and a two-digit
+    marker that is not one: each of the three comes out differently if the
+    substitution is a loop."""
     t = i18n.translator("en")
     assert t("%1", "100%") == "100%"
     assert t("%1 %2 %1", "a", "b") == "a b a"

@@ -3,6 +3,7 @@ import os
 
 import pytest
 
+from marks import posix_only
 from oknowledge.config import Config
 from oknowledge.model import Note
 from oknowledge.vault import (
@@ -182,6 +183,7 @@ def test_a_clean_rebuild_blocks_nothing(tmp_path):
     assert result.blocked == [] and result.skipped == []
 
 
+@posix_only
 def test_an_index_symlinked_outside_the_folder_is_not_written(tmp_path):
     cfg = make_config(tmp_path)
     outside = tmp_path / "elsewhere.md"
@@ -273,6 +275,7 @@ def test_the_heading_is_singular_for_one_link_and_no_empty_backticks(tmp_path):
 
 
 @pytest.mark.skipif(os.geteuid() == 0, reason="chmod 000 does not bite as root")
+@posix_only
 def test_a_note_that_cannot_be_read_is_reported_and_keeps_the_other_indexes(tmp_path):
     cfg = make_config(tmp_path)
     locked = write_note(cfg, note("a1", "WireGuard", "Redes"), "es")
@@ -286,6 +289,7 @@ def test_a_note_that_cannot_be_read_is_reported_and_keeps_the_other_indexes(tmp_
     assert index_path(cfg, "Cocina").exists()
 
 
+@posix_only
 def test_an_escaping_symlink_reaches_blocked_in_a_rebuild(tmp_path):
     cfg = make_config(tmp_path)
     outside = tmp_path / "elsewhere.md"

@@ -1,6 +1,7 @@
 import os
 import stat
 
+from marks import posix_only
 from oknowledge import atomic
 from oknowledge.atomic import atomic_write
 
@@ -43,6 +44,7 @@ def test_on_windows_the_directory_is_not_opened_at_all(tmp_path, monkeypatch):
     assert [p for p in opened if os.path.isdir(p)] == []
 
 
+@posix_only
 def test_an_existing_files_mode_survives_a_rewrite(tmp_path):
     """The docstring promises it and config.save's 0600 depends on nothing else
     loosening it. The temp file is created 0o666 minus the umask, so without
@@ -57,6 +59,7 @@ def test_an_existing_files_mode_survives_a_rewrite(tmp_path):
     assert target.read_text(encoding="utf-8") == "second"
 
 
+@posix_only
 def test_a_new_file_is_left_to_the_umask(tmp_path):
     """The other half of the same line: nothing is chmodded on a first write."""
     target = tmp_path / "b.txt"

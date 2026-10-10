@@ -7,6 +7,7 @@ import os
 
 import pytest
 
+from marks import posix_only
 from oknowledge import pipeline
 from oknowledge.ai.base import Analysis
 from oknowledge.config import Config
@@ -674,6 +675,7 @@ def test_retry_does_no_work_after_a_protected_failure(cfg, q, monkeypatch):
     assert read_note(first.path) == good
 
 
+@posix_only
 def test_every_branch_reports_one_spelling_of_the_path(tmp_path, q, monkeypatch):
     # find_note() globs the configured path and write_note() resolves it, so a
     # vault reached through a symlink could give two paths for one note.
@@ -700,6 +702,7 @@ def test_every_branch_reports_one_spelling_of_the_path(tmp_path, q, monkeypatch)
 
 
 @pytest.mark.skipif(os.geteuid() == 0, reason="chmod 0o500 does not bite as root")
+@posix_only
 def test_an_unwritable_state_tree_still_leaves_a_note(cfg, tmp_path, monkeypatch):
     # The state tree lives under $XDG_STATE_HOME and the vault is usually on
     # another filesystem: a full /home, a locks/ left root-owned by one sudo
@@ -764,6 +767,7 @@ def test_the_duplicate_scan_happens_inside_the_lock(cfg, q, monkeypatch):
 # --- The vault's containment, and the user's own edits ------------------------
 
 
+@posix_only
 def test_the_rename_never_leaves_the_vault(cfg, q, tmp_path, monkeypatch):
     # The ideal path is resolved before anything moves onto it, so a dangling
     # symlink at that name resolves to its target and the note is written
@@ -906,6 +910,7 @@ def test_a_plain_reprocess_keeps_a_saved_body(cfg, q, monkeypatch):
     assert (note.content, note.body) == ("full", PAGE.text)      # inherited
 
 
+@posix_only
 def test_a_symlink_at_the_ideal_name_is_treated_as_taken(cfg, q, monkeypatch):
     # A symlink resolving inside the folder passes containment, and a dangling
     # one is invisible to exists(). The ideal path is resolved before the move,
@@ -934,6 +939,7 @@ def test_a_symlink_at_the_ideal_name_is_treated_as_taken(cfg, q, monkeypatch):
 
 
 @pytest.mark.skipif(os.geteuid() == 0, reason="chmod 0o500 does not bite as root")
+@posix_only
 def test_a_status_that_cannot_be_recorded_still_names_and_indexes_the_note(
         cfg, tmp_path, monkeypatch):
     # With an entry already on disk, set_status() reaches atomic_write and a
@@ -965,6 +971,7 @@ def test_a_status_that_cannot_be_recorded_still_names_and_indexes_the_note(
 
 
 @pytest.mark.skipif(os.geteuid() == 0, reason="chmod 0o500 does not bite as root")
+@posix_only
 def test_a_protected_note_survives_a_queue_it_cannot_write(cfg, tmp_path, monkeypatch):
     extraction(monkeypatch, PAGE)
     no_pictures(monkeypatch)
@@ -1226,6 +1233,7 @@ def cover_fetches(monkeypatch):
     monkeypatch.setattr("oknowledge.pipeline.fetch", lambda url, **kw: Jpeg())
 
 
+@posix_only
 def test_a_cover_is_not_written_through_a_symlinked_attachments_folder(
         cfg, q, monkeypatch, tmp_path):
     extraction(monkeypatch, PAGE)
@@ -1242,6 +1250,7 @@ def test_a_cover_is_not_written_through_a_symlinked_attachments_folder(
     assert result.status == "ok"             # a refused cover never costs the note
 
 
+@posix_only
 def test_a_cover_does_not_replace_the_file_a_symlink_points_at(
         cfg, q, monkeypatch, tmp_path):
     extraction(monkeypatch, PAGE)
@@ -1300,6 +1309,7 @@ def test_a_cover_replaces_the_old_file_instead_of_writing_into_it(cfg, q, monkey
     assert cover.stat().st_ino != before, "the bytes went into the file in place"
 
 
+@posix_only
 def test_a_cover_does_not_replace_a_link_the_user_made_inside_the_vault(
         cfg, q, monkeypatch):
     """The containment check alone would allow this one: the symlink resolves

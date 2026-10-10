@@ -12,6 +12,7 @@ import stat
 
 import pytest
 
+from marks import posix_only
 from oknowledge import perms
 
 
@@ -31,6 +32,7 @@ def test_on_posix_the_file_ends_up_yours_alone(tmp_path, monkeypatch):
     assert stat.S_IMODE(path.stat().st_mode) == 0o600
 
 
+@posix_only
 def test_on_windows_nothing_is_touched(tmp_path, monkeypatch):
     """Not a no-op out of laziness: a chmod there returns success and changes
     nothing, which is the most expensive kind of line to have in a file about

@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
+from marks import posix_only
 from oknowledge.config import Config
 from oknowledge import web
 from oknowledge.i18n import STRINGS
@@ -233,6 +234,7 @@ def test_an_unreadable_vault_renders_a_page_with_the_path(tmp_path, monkeypatch)
     assert str(cfg.links_dir) in page.text
 
 
+@posix_only
 def test_an_unreadable_links_folder_is_a_readable_page(tmp_path):
     if os.geteuid() == 0:
         pytest.skip("root ignores permissions")
@@ -311,6 +313,7 @@ def test_a_cover_that_escapes_and_comes_back_is_a_404(tmp_path):
     assert client.get("/cover/a1").status_code == 404
 
 
+@posix_only
 def test_an_attachment_that_is_a_symlink_to_outside_is_a_404(tmp_path):
     outside = tmp_path / "outside.txt"
     outside.write_text("SECRET")

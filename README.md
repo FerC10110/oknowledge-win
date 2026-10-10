@@ -1,11 +1,22 @@
-# oknowledge
+# oknowledge — the Windows edition
 
 Paste a link, get a note. oknowledge downloads the page, summarizes it with an
 AI engine that needs no API key, gives it a category and tags, and writes it as
-a Markdown note into your Obsidian vault. Later you browse and search the
-library from the Omarchy bar or a local web page.
+a Markdown note into your Obsidian vault. Then you browse and search your
+library from a page in your own browser.
 
 ![The library](preview.png)
+
+*(The paste box in the header is newer than this picture.)*
+
+**This is a fork of oknowledge for people without
+[Omarchy](https://omarchy.org/).** The original is a Linux tool
+with a panel in the system bar; everything that needed that bar — or needed
+`flock`, or `chmod`, or a shared preference file — is gone or has a Windows
+half. What is left is the same program: the same pipeline, the same notes, the
+same vault. A note written here opens in Obsidian on Linux and the other way
+round. The differences are listed under
+[What is not the same](#what-is-not-the-same-as-the-linux-version).
 
 ## What it does
 
@@ -17,128 +28,135 @@ library from the Omarchy bar or a local web page.
   a category and 3 to 8 tags, plus one index note per category.
 - **Never loses a link.** If extraction or the AI fails, the note is still
   created, marked `status: partial`, and can be finished later.
-- Ships an Omarchy bar widget (paste or save from the clipboard) and a local
-  web UI (library, search, categories, settings).
+- Runs a local web page: paste a link, library, search, categories, settings.
 
 There is no database. The vault is the only source of truth, and every index is
 rebuilt by reading the Markdown.
 
 ## Install
 
-Requirements: Python 3.13 or newer, `yt-dlp` on the PATH (it ships with
-Omarchy), Omarchy for the bar widget, and at least one AI engine (see
-[Engines](#engines)).
+You need [uv](https://docs.astral.sh/uv/) and nothing else — it installs
+Python itself. In PowerShell:
 
-**1. The Python package, in its own venv.** The plugin calls this exact path, so
-use it:
-
-```bash
-python -m venv ~/.local/share/oknowledge/venv
-~/.local/share/oknowledge/venv/bin/pip install /path/to/oknowledge
+```powershell
+winget install --id=astral-sh.uv -e
 ```
 
-For development use `pip install -e '/path/to/oknowledge[dev]'` instead.
+Then, from the folder you unpacked this into:
 
-**2. The config file**, `~/.config/oknowledge/config.toml`. Only `vault` is
-required; everything else has a default:
+```powershell
+uv run oknowledge serve
+```
+
+That is the whole install: `uv` builds the environment the first time and
+prints the address of your library. To have it as a plain command instead:
+
+```powershell
+uv tool install .
+oknowledge serve
+```
+
+**For YouTube links you also need `yt-dlp` on the PATH** (`uv tool install
+yt-dlp`, or `winget install yt-dlp`). Everything else works without it.
+
+### The config file
+
+`%APPDATA%\oknowledge\config.toml`. Only `vault` is required; everything else
+has a default. Run `oknowledge status` once and it tells you where the file
+goes and what the shortest one looks like.
 
 ```toml
-vault = "/home/you/Documents/obsidian"   # notes go to <vault>/oknowledge/
-folder = "oknowledge"                    # the folder inside the vault
-default_content = "full"                 # "full" keeps the original text, "summary" does not
-batch = 10                               # links the web UI analyses per Analyse click
+vault = "C:/Users/you/Documents/obsidian"  # notes go to <vault>/oknowledge/
+folder = "oknowledge"                      # the folder inside the vault
+default_content = "full"                   # "full" keeps the original text, "summary" does not
+batch = 10                                 # links the Analyse button does per click
 
 [ai]
-chain = ["opencode"]                     # engines to try, in order
-language = "es"                          # language of the generated content: "es" or "en"
-mentions = "tools"                       # what to list for a YouTube video: "tools", "all" or "discussed"
+chain = ["opencode"]                       # engines to try, in order
+language = "es"                            # language of the generated content: "es" or "en"
+mentions = "tools"                         # what to list for a YouTube video: "tools", "all" or "discussed"
 
 [ai.opencode]
-model = "opencode/ling-3.1-flash-free"   # default
+model = "opencode/ling-3.1-flash-free"
 
 [ai.ollama]
-model = "qwen2.5:7b"                     # must be a model you have pulled
+model = "qwen2.5:7b"                       # must be a model you have pulled
 url = "http://localhost:11434"
 
 [ai.api]
-provider = "anthropic"                   # "anthropic" or "openai"
-model = "claude-sonnet-5"
-key_env = "ANTHROPIC_API_KEY"            # read the key from this environment variable
+provider = "groq"                          # see Settings for the whole list
+model = "llama-3.3-70b-versatile"
 
 [web]
+host = "127.0.0.1"                         # this machine only
 port = 8787
-idle_timeout = 900                       # seconds; 0 = never shut down
+language = "en"                            # the interface: "en" or "es"
+idle_timeout = 900                         # seconds; 0 = never shut down
 ```
 
-Keep the file readable only by you (`chmod 600`) if it holds an API key.
-
-**3. The bar plugin.** Copy the folder; do not symlink it, because
-`omarchy plugin validate` rejects symlinked plugin directories:
-
-```bash
-cp -r plugin ~/.config/omarchy/plugins/io.github.ferc10110.oknowledge
-omarchy plugin validate ~/.config/omarchy/plugins/io.github.ferc10110.oknowledge
-omarchy plugin enable io.github.ferc10110.oknowledge
-```
-
-A change to the plugin's code needs a shell restart to take effect. Copy the
-folder again after pulling an update.
-
-**4. A keybinding (optional)** in `~/.config/hypr/bindings.lua`, to save the
-clipboard without opening anything:
-
-```lua
-o.bind("SUPER + ALT + SHIFT + K", "Save to oknowledge", "omarchy-shell io.github.ferc10110.oknowledge save")
-```
-
-`SUPER + ALT + K` looks natural but is Omarchy's stock "Tmux keybindings", so
-this uses `SUPER + ALT + SHIFT + K`. `SUPER + ALT + O` and `SUPER + ALT + L` are
-also unused by default if you want something shorter.
+> **Write Windows paths with forward slashes.** `"C:/Users/you/vault"` is
+> valid TOML and Windows understands it. `"C:\Users\you\vault"` is not: in
+> double quotes, `\U` starts a unicode escape and `\t` is a tab, so the line
+> either fails to parse or quietly points somewhere that does not exist.
+> Single quotes also work: `'C:\Users\you\vault'`. oknowledge says so when it
+> sees one, but it is easier not to hit it.
 
 ## Use
 
-**The bar.** Open the panel: if the clipboard holds a URL it is offered with
-two buttons, **Full** and **Summary**. The icon shows a count while links are
-being processed, and the panel lists recent and unfinished links, with Retry
-and a button that opens the library.
+**The paste box** is in the header of every page: paste a link, then **Full**
+(keeps the original text in the note) or **Summary** (does not). The page comes
+back at once and the note shows up in the library when the engine is done —
+seconds to a minute, depending on the engine.
 
-A link that fails permanently (a page that will never yield text) keeps the
-count red, because the link really is unfinished. The way out is to delete it
-from the web UI. A link whose note *did* land, and whose entry only looks
-unfinished, is cleared by `retry` without rewriting the note.
+**The rest of the page:** Library (cards, filter by category and tag), Search
+(title, summary, points, tags, what a video mentioned, and the full text, with
+the matching fragment), Item (change category, edit tags, reprocess, delete),
+Categories (rename and merge, rewriting the affected notes and indexes),
+Import (a WhatsApp export, previewed before it is written), Analyse (a batch of
+the links still waiting, with a bar) and Settings.
 
-**The terminal.** Global option `--config PATH` goes before the subcommand.
+- It shuts itself down after `idle_timeout` seconds without requests (default
+  900; `0` means never). The watchdog polls every 5 seconds, so the shutdown
+  can be up to 5 seconds late.
+- If the port is taken it exits with code 2 and suggests setting `web.port`.
+- **Delete moves the note to `<vault>\oknowledge\trash\`**, so you can recover
+  it from Obsidian. Nothing in this project unlinks a note.
+- **Saving settings rewrites the config file.** Comments and keys it does not
+  know are not preserved; the previous file is kept as `config.toml.bak`.
+
+**Reaching it from your phone.** `[web] host = "0.0.0.0"` makes the server
+listen on your whole network instead of only this machine, and it prints the
+address to type on the phone. Windows will ask once whether to allow Python
+through the firewall — answer for *private networks* only. Anyone on that
+wifi can then read and change your vault, which the server also says out loud
+when it starts. The default, `127.0.0.1`, is this machine and nothing else.
+
+### The terminal
+
+The global option `--config PATH` goes before the subcommand.
 
 | Command | What it does |
 |---|---|
 | `oknowledge add URL [--full\|--summary] [--engine NAME] [--reprocess] [--json]` | process one link end to end |
 | `oknowledge status [--json]` | note count, and every link that is pending, partial or failed |
 | `oknowledge reindex` | rebuild every category index from the notes |
-| `oknowledge retry [--limit N] [--json]` | finish the links left half done, newest first (see the note below) |
-| `oknowledge mentions [--limit N] [--json]` | add the list of what a video names to the videos already saved (see the note below) |
+| `oknowledge retry [--limit N] [--json]` | finish the links left half done, newest first |
+| `oknowledge mentions [--limit N] [--json]` | add the list of what a video names to the videos already saved |
 | `oknowledge icons` | fetch the favicon of every site in the library, once per site |
 | `oknowledge import FILE [--dry-run] [--json]` | import the links out of a WhatsApp export, dated when you sent them |
-| `oknowledge serve [--open]` | start the web UI |
+| `oknowledge serve [--open]` | start the web page |
+
+With `uv` and no `uv tool install`, each of those is `uv run oknowledge …`.
 
 **`import` reads a WhatsApp chat export** (`Export chat` → `Without media`,
 which gives a `_chat.txt`) and saves every link in it as an unfinished note
 dated the day you sent it. Phone numbers, notes to self and anything else
 without a link are skipped. Nothing is analysed: that is `retry`'s job, and
-`retry --limit 50` does it in batches.
-
-Run it with `--dry-run` first. It lists what it would capture in three
-groups — the links written with `https://`, the ones written as a bare
-domain, and the messages that looked like they had a link and did not match.
-The second group is where a false positive would be; the third is where a
-missed link would be.
-
-**From the browser:** Settings → Import a WhatsApp export. It takes the `.zip`
-WhatsApp gives you or the `.txt` inside it, and there the dry run is not
-optional: choosing the file shows what it found and writes nothing until you
-press the button. It says how it read the dates and lists every bare domain,
-which are the two things a written note no longer shows. The upload is held
-in `~/.local/state/oknowledge/import/` between the two steps and deleted when
-you confirm; one nobody confirmed is swept an hour later.
+`retry --limit 50` does it in batches. Run it with `--dry-run` first; it lists
+what it would capture in three groups — the links written with `https://`, the
+ones written as a bare domain, and the messages that looked like they had a
+link and did not match. From the browser it is Settings → Import a WhatsApp
+export, and there the dry run is not optional.
 
 Saving the same link twice gives one note (`already saved`). Pasting a link
 whose note is `partial` finishes it instead.
@@ -149,62 +167,44 @@ plus every `pending` entry no live process is working on. Then, for each one,
 it asks the vault first:
 
 - **The note is there and its status is not `partial`** — the note is finished,
-  so `retry` writes nothing. It marks the entry `ok` and moves on, saying *the
-  note is already saved and finished, so the queue entry was brought into line
-  with it instead of re-analysing the link*. No page is fetched, no engine is
-  asked.
+  so `retry` writes nothing. It marks the entry `ok` and moves on. No page is
+  fetched, no engine is asked.
 - **The note is `partial`, or there is no note** — this is the case `retry` is
-  for: the link is processed the rest of the way, and the note is written or
-  finished.
+  for: the link is processed the rest of the way.
 - **Another process holds the link** — it is left alone and reported as
   `pending`, for whoever holds it.
 
 This matters because a queue entry can outlive the work it describes. If the
 process is killed between writing the note and recording that it finished —
-restarting the Omarchy shell mid-save does it — the entry stays `pending`
-forever while the note on disk is complete. Weeks of your own writing can be
-sitting in that note. `retry` treats the note as the real artifact and the
-queue as bookkeeping: when they disagree and the note is finished, it is the
-bookkeeping that gets corrected.
+closing the terminal mid-save does it — the entry stays `pending` forever while
+the note on disk is complete, and weeks of your own writing can be sitting in
+that note. `retry` treats the note as the real artifact and the queue as
+bookkeeping: when they disagree and the note is finished, it is the bookkeeping
+that gets corrected.
 
 One consequence, on purpose: a link saved as a summary whose entry asked for
-full content stays a summary. `retry` will not upgrade it, because it cannot
-tell an untouched note from one you spent an evening on. Ask for the upgrade
-when you want it, with `add --reprocess` or the web's Reprocess button — the
-one thing that does replace a note's content.
-
-`retry` never touches a note that has no queue entry, and never touches a file
-without the `oknowledge: 1` marker. Exit 1 means some links are still
-unfinished; `--json` prints one object per link with what happened to it.
+full content stays a summary. Ask for the upgrade when you want it, with
+`add --reprocess` or the web's Reprocess button — the one thing that does
+replace a note's content.
 
 `--limit N` finishes at most N links and stops, newest first. That is how a
 large import gets analysed: 1215 links are 10 to 20 hours of fetching and
 model time, so `oknowledge retry --limit 50` once a day works through them
-without a run that never ends. The quota counts links it actually worked on,
-so an entry that turned out to be already saved does not use one up. The exit
-code describes those links and not the backlog behind them: a limited run
-exits 0 when the links it worked on are fine, and 1 when one of them is still
-unfinished.
+without a run that never ends.
 
 **`mentions` gives the videos already in the library their list.** A YouTube
-note now carries what the video named, written when the link is first
-processed; this command does the same for the ones saved before. It writes the
-mentions section and nothing else: the title, the summary and the points you
-have already read are left as they are. It asks each video once, even when the
-answer is empty, so running it again only looks at videos it never asked. A
-note saved with its full text reuses it, so most of a run needs no network.
-`--limit N` stops after N videos, newest first, and the exit code describes
-those videos and not the backlog behind them. It spends model calls on your
-library, so it runs only when you type it, never by itself. A note whose
-`## Menciones` heading has nothing under it was asked and the video named
-nothing; that is not a broken note.
+note carries what the video named, written when the link is first processed;
+this command does the same for the ones saved before. It writes the mentions
+section and nothing else. It asks each video once, even when the answer is
+empty. A note whose `## Menciones` heading has nothing under it was asked and
+the video named nothing; that is not a broken note.
 
 ### Exit codes
 
 | Code | Meaning |
 |---|---|
 | 0 | it worked |
-| 1 | it ran, but the link is unfinished: a partial note, an entry locked by another process, a `retry` that left some links undone, or a `mentions` run with a video it could not finish |
+| 1 | it ran, but the link is unfinished: a partial note, an entry locked by another process, a `retry` that left some links undone |
 | 2 | your input or config is wrong: bad arguments, an empty URL, a missing or malformed config, a port already in use |
 | 3 | something unexpected: a disk or permission error, a refused write, a bug |
 
@@ -212,59 +212,61 @@ nothing; that is not a broken note.
 exists but is not fully analysed. Exit 3 prints whether the link reached the
 queue. The rule the project is built around is that a link is never lost.
 
-### The web UI
+## Engines
 
-`oknowledge serve` prints `oknowledge: the library is at http://127.0.0.1:8787/`
-to stderr and, with `--open`, opens the browser. Screens: Library (cards, filter
-by category and tag), Search (title, summary, points, tags, what a video
-mentioned and full text, with the matching fragment), Item (change category, edit tags, reprocess, delete),
-Categories (rename and merge, rewriting the affected notes and indexes),
-Import (a WhatsApp export, previewed before it is written), Analyse (a batch of
-the links that are still waiting, with a bar) and Settings.
+`[ai] chain` is both the switch and the priority: engines are tried in the
+order listed, and an engine not in the list is never used. `--engine NAME`
+forces one for a single link.
 
-- It shuts itself down after `idle_timeout` seconds without requests (default
-  900; `0` means never). The watchdog polls every 5 seconds, so the shutdown
-  can be up to 5 seconds late.
-- A request that hangs forever keeps the server up forever. That is deliberate:
-  the alternative would kill an analysis that is still running.
-- If the port is taken it exits with code 2 and suggests setting `web.port`.
-- **Delete moves the note to `<vault>/oknowledge/trash/`**, so you can recover
-  it from Obsidian. Nothing in this project unlinks a note.
-- **A card whose note was never analysed carries a re-analyse glyph**, on the
-  library and in the search results. It does not stop to ask: there is no
-  analysis in that note yet to write over. The button on the note's own page
-  does ask, because there usually is one. Either way the work happens after the
-  answer is sent, so the browser never waits for a model.
-  - With JavaScript it keeps the page exactly where it is, and the glyph spins
-    until the work is done — the server is asked every few seconds whether
-    anything still holds that link, so the spin stops when the work does, and
-    the glyph goes away if the link came back analysed. Reloading the page
-    forgets which cards were spinning; the work carries on regardless, and
-    clicking a link that is already being worked on costs nothing (the second
-    run finds the lock taken and leaves).
-  - Without JavaScript it is an ordinary form post that comes back to the
-    listing it was clicked on, at the top of it.
-- **The Analyse page runs a batch of them.** `batch` in the config says how
-  many (default 10), the page draws a `<progress>` bar and comes back on its
-  own every 10 seconds; closing the tab does not stop the run. One batch at a
-  time: a second click while one is in flight is refused rather than starting
-  a second run over the same links. The progress is held in memory, so a
-  server that restarts mid-batch loses the bar and no links -- what is still
-  owed is in the queue on disk, and the next run picks it up.
-- **Saving settings rewrites the config file.** Comments and keys it does not
-  know are not preserved; the previous file is kept as `config.toml.bak`.
-  Settings are always saved to `~/.config/oknowledge/config.toml`, whatever
-  `--config` says.
+| Engine | How | Leaves your machine |
+|---|---|---|
+| `opencode` | `opencode run --pure` in an empty temp directory | yes, to opencode's gateway |
+| `ollama` | local `/api/chat` with JSON output | **no**: the only fully local engine |
+| `api` | any OpenAI- or Anthropic-shaped provider, with your key | yes, to the provider |
+
+Both `opencode` and `ollama` have Windows builds; install either one and put it
+on the PATH. With neither, use `api`.
+
+**`api` and the key.** Settings lists thirteen providers with the address each
+one lives at and which of them hand out a free key. Pick one and paste the key
+into a `.env` file next to your config —
+`%APPDATA%\oknowledge\.env` — one `NAME=value` per line:
+
+```
+GROQ_API_KEY=gsk_…
+```
+
+Settings has a button that creates that file for you with the right variable
+name already in it. The key is read only when a request is about to be made:
+it never goes into an environment variable (a subprocess would inherit it),
+never into the config file the settings page rewrites, and never onto a page.
+
+**`fake` is a test double.** It shows up in `oknowledge add --engine --help`
+because it is a valid engine name, but it only replays canned replies for the
+test suite. Do not select it: it produces no real analysis.
+
+## The two languages
+
+They are independent, and it is common to mix them up.
+
+| | Where it comes from | Default | Supported |
+|---|---|---|---|
+| The interface | `[web] language` in `config.toml`, or the radio buttons in Settings | English | `en`, `es` |
+| AI content (summary, points, category, tags, index boilerplate) | `[ai] language` in `config.toml` | `es` | `es`, `en` |
+
+An English interface with Spanish summaries is a normal setup. Changing the
+interface language never touches saved notes, and changing the content language
+only affects notes saved afterwards.
 
 ## The vault
 
 ```
-<vault>/oknowledge/
+<vault>\oknowledge\
   Networking.md              category index, generated
-  links/
+  links\
     2026-10-03-wireguard-vs-openvpn.md
-  attachments/               cover images
-  trash/                     notes deleted from the web UI
+  attachments\               cover images
+  trash\                     notes deleted from the web page
 ```
 
 A note:
@@ -279,6 +281,7 @@ type: article        # article | youtube | github | pdf | social | other
 source: example.com
 saved: 2026-10-03
 content: full        # full | summary
+engine: opencode     # which engine wrote this, when it is known
 status: ok           # ok | partial | failed
 id: 9f2a1c4b8e07
 oknowledge: 1
@@ -299,57 +302,63 @@ category and tags come out in the language of `[ai] language`.
 Obsidian and run `oknowledge reindex`: the indexes follow. Delete a note and it
 leaves its index.
 
-**The safety rules.** oknowledge writes only inside `<vault>/oknowledge/`, and
+**The safety rules.** oknowledge writes only inside `<vault>\oknowledge\`, and
 only into files whose frontmatter has `oknowledge: 1`. A file without that
 marker is never modified or deleted, even inside that folder.
 
-**`status` is a contract.** `partial` is ours: the machinery may rewrite it. Any
-other value, including one you type yourself (`status: done`, `reviewed`), is
-yours: the machinery will not overwrite that note on its own. An explicit
-reprocess (the web's Reprocess button, or `add --reprocess`) is the one thing
-that replaces a note's content, because that is what asking for a fresh
-analysis means.
+**`status` is a contract.** `partial` is ours: the machinery may rewrite it.
+Any other value, including one you type yourself (`status: done`, `reviewed`),
+is yours: the machinery will not overwrite that note on its own.
 
-## Engines
+## Where everything lives
 
-`[ai] chain` is both the switch and the priority: engines are tried in the
-order listed, and an engine not in the list is never used. `--engine NAME`
-forces one for a single link.
+| Path | What |
+|---|---|
+| `%APPDATA%\oknowledge\config.toml` | your config (and `.bak` after a web save) |
+| `%APPDATA%\oknowledge\.env` | your API key, if you use the `api` engine |
+| `%LOCALAPPDATA%\oknowledge\` | `queue\` and `locks\`, one file per link, plus the model list and any traces |
+| `<vault>\oknowledge\` | your notes |
 
-| Engine | How | Leaves your machine |
+The config roams with a domain account and the queue does not, which is on
+purpose: the config is a file you wrote, and the queue is locks and
+half-finished work belonging to the machine that started it. On Linux the same
+two are `~/.config/oknowledge/` and `$XDG_STATE_HOME/oknowledge/`, and setting
+`XDG_CONFIG_HOME` or `XDG_STATE_HOME` moves them on either system.
+
+To remove it: `uv tool uninstall oknowledge` if you installed it that way, then
+delete those two folders. Your notes in `<vault>\oknowledge\` are left alone.
+
+## What is not the same as the Linux version
+
+| | There | Here |
 |---|---|---|
-| `opencode` | `opencode run --pure` in an empty temp directory | yes, to opencode's gateway |
-| `ollama` | local `/api/chat` with JSON output | **no**: the only fully local engine |
-| `api` | Anthropic or OpenAI, with your key | yes, to the provider |
+| Pasting a link | a panel in the Omarchy bar, with a global keybinding | the box in the page header |
+| The queue's lock | `fcntl.flock` | `msvcrt.locking` on one byte of the same file |
+| Where the files go | `~/.config`, `$XDG_STATE_HOME` | `%APPDATA%`, `%LOCALAPPDATA%` |
+| File permissions | `chmod 600` on the config and the `.env` | nothing: the mode decides nothing on Windows, and the folder's permissions are what guard the file |
+| The interface language | a JSON file shared with the other Omarchy plugins | `[web] language` in the config |
+| A note's durability | the directory is `fsync`ed after each write | it is not: a directory has no handle on Windows. The write itself is still atomic |
 
-If `ollama` is in the chain and installed but not running, oknowledge starts it
-through its systemd user unit (or a detached `ollama serve`) before giving up.
-
-**The API key** is never written to the vault or the repo. Put it in an
-environment variable named by `key_env`, or in `key` in the config file (keep
-it `chmod 600`).
-
-**`fake` is a test double.** It shows up in `oknowledge add --engine --help`
-because it is a valid engine name, but it only replays canned replies for the
-test suite. Do not select it: it produces no real analysis.
-
-## The two languages
-
-They are independent, and it is common to mix them up.
-
-| | Where it comes from | Default | Supported |
-|---|---|---|---|
-| Interface (panel, web UI) | `~/.config/omarchy/plugin-language.json`, e.g. `{"language": "es"}`, shared with the other Omarchy plugins | English | `en`, `es` |
-| AI content (summary, points, category, tags, index boilerplate) | `[ai] language` in `config.toml` | `es` | `es`, `en` |
-
-An English interface with Spanish summaries is the normal setup. Changing the
-interface language never touches saved notes, and changing the content
-language only affects notes saved afterwards. Hand-set values outside the
-supported ones are not supported: the settings page then shows no radio
-selected, and generated boilerplate falls back to English.
+The lock keeps the one promise the queue is built on: it belongs to the open
+file, so when a process dies the system drops it. There is no timeout to guess
+at and no crashed run that leaves a link looking busy forever. `msvcrt` has no
+shared mode, though, so *asking* whether a link is busy takes the lock for an
+instant there — a second process asking at that exact moment believes the link
+is busy and leaves it for the next run. Never two runs on one note, sometimes
+one link postponed.
 
 ## Known limits
 
+- **This has not been run on Windows.** It was written on a Linux machine,
+  against the documented behaviour of `msvcrt.locking` and `%APPDATA%`, and
+  tested with a stand-in for `msvcrt`. That proves the logic and not the
+  operating system. If you are the first to run it there, the things to watch
+  are the lock (two `oknowledge retry` at once must not both take a link) and
+  the paths (the folders above should appear by themselves).
+- **The test suite skips 42 tests on Windows**, the ones whose subject is a
+  POSIX file mode, a fork, a flock, a symlink or a umask. They are not deleted,
+  because on Linux they are the proof they always were. The first real run on
+  Windows may find a few more that need marking.
 - **First page load is slow on a big library.** Building the search index was
   measured at 6.1 seconds for 3000 notes. It is not broken.
 - **Reddit can answer a default User-Agent with 403.** Then the note is saved
@@ -361,51 +370,33 @@ selected, and generated boilerplate falls back to English.
 - Pages that need JavaScript or a login become `partial`.
 - PDFs: first 20 pages, text layer only (no OCR).
 
-## Files
-
-| Path | What |
-|---|---|
-| `~/.config/oknowledge/config.toml` | your config (and `.bak` after a web save) |
-| `~/.config/omarchy/plugin-language.json` | shared interface language |
-| `~/.config/omarchy/plugins/io.github.ferc10110.oknowledge/` | the plugin |
-| `~/.local/share/oknowledge/venv/` | the Python environment |
-| `$XDG_STATE_HOME/oknowledge/` (default `~/.local/state/oknowledge/`) | `queue/` and `locks/`, one file per link |
-| `<vault>/oknowledge/` | your notes |
-
-## Remove
-
-```bash
-omarchy plugin remove io.github.ferc10110.oknowledge
-rm -rf ~/.local/share/oknowledge ~/.local/state/oknowledge ~/.config/oknowledge
-```
-
-Your notes in `<vault>/oknowledge/` are left alone; delete that folder yourself
-if you want them gone. Remove the keybinding line from `bindings.lua` too.
-
 ## Development
 
-```bash
-python -m venv ~/.local/share/oknowledge/venv
-~/.local/share/oknowledge/venv/bin/pip install -e '.[dev]'
-~/.local/share/oknowledge/venv/bin/python -m pytest -W error     # Python
-(cd plugin && node --test)                                       # plugin logic
-omarchy plugin validate plugin
+```powershell
+uv run --extra dev pytest -W error
 ```
 
-No test touches the network. Layout:
+No test touches the network or starts a program. `-W error` is not optional in
+this project: a warning that is allowed to print is a warning nobody reads.
 
 ```
 src/oknowledge/
   cli.py         add, import, status, reindex, retry, serve
   pipeline.py    one link end to end; queue.py the state files
+  locking.py     the queue's lock, one implementation per system
+  places.py      where the config and the state live, per system
+  perms.py       making a file yours alone, where that means anything
   whatsapp.py    an export to dated links; no disk, no network
   extract/       article, youtube, github, pdf, social
-  ai/            opencode, ollama, api, fake; prompts/analyze.txt
+  ai/            opencode, ollama, api, fake; providers.py; prompts/
   vault.py       the only layer that writes Markdown
   web/           FastAPI app, templates, static
-plugin/          the Omarchy plugin (manifest.json, QML, JS)
-docs/            design and plan
+docs/            design and plan documents, in Spanish
 ```
+
+Fixes come from upstream rather than being written twice: `origin` is the
+Linux repository, and this fork was cut from its `feat/mentions-search`
+branch, so `git pull origin feat/mentions-search` brings them here.
 
 ## License
 

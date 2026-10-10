@@ -9,6 +9,7 @@ import sys
 
 import pytest
 
+from marks import posix_only
 from oknowledge import cli
 from oknowledge.cli import main
 from oknowledge.config import Config
@@ -271,6 +272,7 @@ def test_counts_are_singular_when_there_is_one(cfg, monkeypatch, capsys):
     assert "1 index rewritten" in out
 
 
+@posix_only
 def test_an_unreadable_config_is_a_message_not_a_traceback(tmp_path, capsys):
     path = tmp_path / "config.toml"
     path.write_text('vault = "/x"\n')
@@ -439,6 +441,7 @@ def test_retry_survives_an_unreadable_queue_listing(cfg, monkeypatch, capsys):
     assert "could not list the queue" in results[0].error
 
 
+@posix_only
 def test_an_unprobeable_lock_costs_one_link_not_the_whole_list(cfg, monkeypatch):
     no_pictures(monkeypatch)
     from oknowledge.pipeline import retry

@@ -11,6 +11,7 @@ import os
 
 import pytest
 
+from marks import posix_only
 from oknowledge.config import Config
 from oknowledge.pipeline import import_links
 from oknowledge.queue import Queue
@@ -194,6 +195,7 @@ def test_a_link_whose_note_could_not_be_written_keeps_its_queue_entry(cfg, q, mo
     assert entry.status == "pending"
 
 
+@posix_only
 def test_nothing_is_written_outside_the_managed_folder(cfg, q, tmp_path):
     """links/ pointed elsewhere is an Obsidian habit, not an attack."""
     outside = tmp_path / "outside"
@@ -255,6 +257,7 @@ def test_a_failed_vault_scan_says_how_many_links_it_took_down(cfg, q, monkeypatc
 
 
 @pytest.mark.skipif(os.geteuid() == 0, reason="a read-only directory does not bite as root")
+@posix_only
 def test_an_unlockable_state_tree_does_not_cost_the_batch_its_notes(cfg, q):
     """add() makes the same call for the same reason, and says why in a comment.
 
@@ -281,6 +284,7 @@ def test_an_unlockable_state_tree_does_not_cost_the_batch_its_notes(cfg, q):
 
 
 @pytest.mark.skipif(os.geteuid() == 0, reason="a read-only directory does not bite as root")
+@posix_only
 def test_an_unwritable_queue_does_not_cost_the_batch_its_notes(cfg, q):
     """The queue is bookkeeping and the note is the durable artifact."""
     queue_dir = q.dir

@@ -5,6 +5,7 @@ import time
 
 import pytest
 
+from marks import posix_only
 from oknowledge import queue as queue_module
 from oknowledge.queue import (PID_ROOM, STATUSES, UNFINISHED, Locked, Queue,
                               state_dir)
@@ -149,6 +150,7 @@ def test_the_pid_has_room_for_the_widest_one_a_system_hands_out():
     assert PID_ROOM >= 10
 
 
+@posix_only
 def test_the_handle_a_probe_gets_is_one_windows_could_have_locked(tmp_path, monkeypatch):
     """msvcrt cannot lock a handle that was opened read-only, and its probe has
     to take the lock for an instant because it has no shared mode. Only Windows
@@ -180,6 +182,7 @@ def test_the_lock_file_is_never_deleted(tmp_path):
     assert (q.root / "locks" / "abc123.lock").exists()
 
 
+@posix_only
 def test_a_live_process_in_another_process_holds_the_lock(tmp_path):
     q = Queue(tmp_path)
     ready_r, ready_w = os.pipe()
@@ -293,6 +296,7 @@ def test_a_non_string_optional_field_rejects_the_entry(tmp_path):
     assert q.get("x") is None
 
 
+@posix_only
 def test_stray_things_in_the_queue_dir_are_ignored(tmp_path):
     q = Queue(tmp_path)
     q.enqueue("good", "https://e.com/x", "full")
@@ -395,6 +399,7 @@ def test_a_step_for_a_link_with_no_entry_is_quiet(tmp_path):
     assert q.get("a1") is None
 
 
+@posix_only
 def test_a_step_that_cannot_be_written_costs_nothing(tmp_path):
     """It is told between the stages of a run that is holding a model open.
     Nothing about it may reach the link."""

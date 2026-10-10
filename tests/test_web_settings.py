@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
+from marks import posix_only
 from oknowledge import models_cache
 from oknowledge.ai.base import EngineError
 from oknowledge.ai.providers import PROVIDERS
@@ -301,6 +302,7 @@ def test_a_provider_the_table_does_not_know_is_said_and_not_swallowed(tmp_path):
     assert "selected" not in chosen(body)
 
 
+@posix_only
 def test_a_file_the_rest_of_the_machine_can_read_is_called_out(tmp_path):
     dotenv(tmp_path, "GROQ_API_KEY=sk-x\n").chmod(0o644)
     body = with_api(tmp_path, provider="groq").get("/settings").text
@@ -324,6 +326,7 @@ def test_on_windows_the_page_says_where_the_key_is_instead_of_how_to_chmod_it(
     assert "sk-x" not in body                  # the key itself, never
 
 
+@posix_only
 def test_on_linux_that_line_is_not_said_at_all(tmp_path):
     """On a system where the mode decides who can read the file, "as private as
     the folder" is the wrong sentence: the answer is the mode, and when the
@@ -384,6 +387,7 @@ def test_a_file_that_is_already_there_is_never_overwritten(tmp_path):
         "GROQ_API_KEY=sk-mine\n")
 
 
+@posix_only
 def test_a_folder_that_cannot_be_written_is_an_answer_not_a_crash(tmp_path):
     folder = tmp_path / "config"
     folder.mkdir(parents=True, exist_ok=True)

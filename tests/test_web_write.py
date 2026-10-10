@@ -17,6 +17,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
+from marks import posix_only
 from oknowledge.config import Config, load
 from oknowledge.model import Mention, Note
 from oknowledge.urls import search_url
@@ -607,6 +608,7 @@ def test_the_refusal_names_every_character_it_refuses():
 # --- a write that cannot happen says so (m3) --------------------------------
 
 @pytest.mark.skipif(os.geteuid() == 0, reason="a folder we cannot write does not bite as root")
+@posix_only
 def test_a_vault_that_cannot_be_written_says_so(setup):
     cfg, client = setup
     cfg.links_dir.chmod(0o500)
@@ -627,6 +629,7 @@ def test_a_trash_folder_that_cannot_be_made_says_so(setup):
 
 
 @pytest.mark.skipif(os.geteuid() == 0, reason="a folder we cannot write does not bite as root")
+@posix_only
 def test_settings_that_cannot_be_saved_say_so(setup, config_path):
     _, client = setup
     config_path.parent.mkdir(parents=True, exist_ok=True)
@@ -1120,6 +1123,7 @@ def test_what_the_web_saves_is_what_the_cli_then_reads(tmp_path, monkeypatch):
 # say what landed, not what the first flag suggests -- carried into rename.
 
 @pytest.mark.skipif(os.geteuid() == 0, reason="a read-only folder does not bite as root")
+@posix_only
 def test_a_rename_that_moved_nothing_does_not_say_it_saved(setup, monkeypatch):
     cfg, client = setup
     break_reindex(monkeypatch)
