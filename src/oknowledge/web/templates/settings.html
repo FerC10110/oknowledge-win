@@ -47,6 +47,12 @@
         </select>
       </label>
     </p>
+    {% if 'api' not in cfg.chain %}
+      {# Said here and not only by the unticked box above: somebody who pastes
+         a key and sees nothing happen should find out why on the page that
+         sent them for the key. #}
+      <p class="meta">{{ t('The api engine is not ticked above, so none of this is in use yet.') }}</p>
+    {% endif %}
     {% if stranger %}
       <p class="meta">{{ t('config.toml names a provider this list does not have: %1. Saving will not replace it.', stranger) }}</p>
     {% endif %}

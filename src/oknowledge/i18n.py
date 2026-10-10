@@ -247,6 +247,9 @@ STRINGS = {
         # Who the api engine talks to, and the key it needs.
         "Who the api engine talks to": "Con quién habla el motor api",
         "Provider": "Proveedor",
+        "The api engine is not ticked above, so none of this is in use yet.":
+            "El motor api no está tildado arriba, así que todavía nada de esto "
+            "se usa.",
         "free key": "key gratis",
         "in use": "en uso",
         "get a key": "sacar una key",

@@ -402,3 +402,18 @@ def test_a_key_written_into_the_config_counts_and_is_still_not_printed(tmp_path,
                     key="sk-in-the-config").get("/settings").text
     assert "sk-in-the-config" not in body
     assert "in place" in body
+
+
+def test_the_page_says_when_the_api_engine_is_not_even_switched_on(tmp_path):
+    """Somebody who pastes a key and sees nothing happen should find out why
+    on the page that sent them for the key."""
+    body = with_api(tmp_path, provider="groq").get("/settings").text
+    assert "not ticked" in body
+
+
+def test_with_the_api_engine_in_the_chain_it_says_nothing_of_the_sort(tmp_path):
+    vault = tmp_path / "on-vault"
+    (vault / "oknowledge" / "links").mkdir(parents=True)
+    cfg = Config(vault=vault, chain=("api",), engines={"api": {"provider": "groq"}})
+    rebuild_indexes(cfg, "es")
+    assert "not ticked" not in TestClient(create_app(cfg)).get("/settings").text
