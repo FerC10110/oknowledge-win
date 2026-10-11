@@ -23,6 +23,7 @@ explain -- not a traceback over a link somebody pasted.
 from __future__ import annotations
 
 import os
+from collections.abc import Iterable
 from pathlib import Path
 
 from . import places
@@ -92,6 +93,22 @@ def present(name: str, config: Path | None = None) -> bool:
     What the settings page asks. It has no business holding the key itself.
     """
     return bool(value(name, config))
+
+
+def present_each(names: Iterable[str], config: Path | None = None) -> dict[str, bool]:
+    """The same answer as present(), for many names and one read of the file.
+
+    What the settings page asks. It draws a row per provider -- thirteen of
+    them -- and present() reads the file per call, so a row a read is the same
+    small file opened thirteen times to render one page.
+
+    The rule is present()'s rule, written out again because the file is read
+    up front here: the real environment first, and a variable set to nothing
+    is not a key. A test pins the two against each other.
+    """
+    found = read(config)
+    return {name: bool(os.environ.get(name, "") or found.get(name, ""))
+            for name in names}
 
 
 def create(name: str, config: Path | None = None) -> bool:

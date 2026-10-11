@@ -990,26 +990,53 @@ def create_app(cfg: Config) -> FastAPI:
         file the rest of the process does not read, and still say "saved"."""
         return current["cfg"].source or CONFIG_PATH
 
-    def api_key_state() -> dict:
-        """What the page is allowed to know about the key: whether there is one.
+    def saved_provider() -> str:
+        """Who the api engine talks to according to the file on disk."""
+        return str(current["cfg"].engines.get("api", {}).get("provider",
+                                                             "anthropic"))
 
-        Never the value. The page asks `present`, which answers yes or no, and
-        the only text it draws is the name of the variable and the path of the
-        file -- both of which the user has to be told to get any further.
+    def key_variable(provider: str) -> str:
+        """The variable the key for `provider` goes in.
+
+        The table names one per provider, and config.toml can name its own.
+        That one belongs to the provider the config names and to no other:
+        ticking a different row must not send somebody to read a key out of a
+        variable that was never meant for it.
         """
         api = current["cfg"].engines.get("api", {})
-        row = find_provider(str(api.get("provider", "anthropic")))
-        name = str(api.get("key_env") or (row.key_env if row else ""))
+        override = str(api.get("key_env") or "")
+        if override and provider == saved_provider():
+            return override
+        row = find_provider(provider)
+        return row.key_env if row else override or "API_KEY"
+
+    def provider_keys() -> dict[str, dict]:
+        """Per provider: the variable, and whether a key can be found in it.
+
+        Never the value. The page asks whether one is there, which is all it
+        needs to say "paste it here" or "it is in place", and it asks for
+        every row because every row is one tick away from being the one in
+        use. One read of the .env answers the lot.
+        """
+        api = current["cfg"].engines.get("api", {})
+        names = {p.id: key_variable(p.id) for p in PROVIDERS}
+        found = env.present_each(set(names.values()), config_file())
+        # A key written into config.toml counts: it is a bad place for it, but
+        # saying "no key" over a key that works is worse. It is not tied to a
+        # variable, so it counts for whichever row you tick.
+        anywhere = bool(api.get("key"))
+        return {pid: {"name": name, "ok": anywhere or found[name]}
+                for pid, name in names.items()}
+
+    def env_file_state() -> dict:
+        """The .env itself: where it is, whether it is there, who can read it.
+
+        About the file and not about any key -- which row needs which variable
+        is `provider_keys`, and the value is nobody's business here.
+        """
         where = env.path(config_file())
-        return {
-            "name": name,
-            # A key written into config.toml counts: it is a bad place for it,
-            # but saying "no key" over a key that works is worse.
-            "ok": bool(api.get("key")) or bool(name and env.present(name, config_file())),
-            "file": where,
-            "exists": where.exists(),
-            "exposed": env.exposed(config_file()),
-        }
+        return {"file": where, "exists": where.exists(),
+                "exposed": env.exposed(config_file())}
 
     @app.get("/settings", response_class=HTMLResponse)
     def settings_page(request: Request):
@@ -1021,19 +1048,18 @@ def create_app(cfg: Config) -> FastAPI:
         known = find_provider(str(api.get("provider", "anthropic")))
         return page(request, "settings.html", cfg=saved, ui=saved.ui_language,
                     engines=order, config_path=config_file(),
-                    # The whole table, not only the one in use: the addresses
-                    # are the point. Picking a provider should teach you what
-                    # you are pointing at.
+                    # The whole table, every row a choice: the addresses are
+                    # the point. Picking a provider should teach you what you
+                    # are pointing at, and tell you where its key comes from
+                    # before you have saved anything.
                     providers=PROVIDERS,
                     picked=known.id if known else "",
-                    # The row drawn outside the fold, or None when the file
-                    # names a provider this does not know.
-                    current=known,
+                    keys=provider_keys(),
                     # A provider somebody wrote by hand that this does not
-                    # know. Said out loud rather than quietly unselected.
+                    # know. Said out loud rather than quietly unticked.
                     stranger="" if known else str(api.get("provider", "")),
                     by_hand=str(api.get("base_url", "")),
-                    key=api_key_state(),
+                    key=env_file_state(),
                     # So the page can stop talking about chmod on a system
                     # where the mode decides nothing. Not inside `key`: it is
                     # a fact about the machine, not about the key.
@@ -1148,22 +1174,24 @@ def create_app(cfg: Config) -> FastAPI:
         return see_other("/settings", notice="models-found", n=len(found))
 
     @app.post("/settings/env")
-    def make_env_file():
+    def make_env_file(provider: str = Form("")):
         """An empty .env with the right variable in it, to paste a key into.
 
-        The variable is the one the *saved* provider needs. This button sits
-        in a form of its own and carries no fields -- it must not save the
-        settings form half-typed -- so the selection on screen is not
-        something it can see, and guessing would make the file for the wrong
-        provider.
+        The variable is the one the row you pressed needs. A form cannot nest
+        inside the settings form -- and this press must not save that form
+        half typed -- so each row carries a one-field form of its own, and
+        the field is which provider it belongs to. A name the table does not
+        have chooses nothing: the file falls back to the saved row rather
+        than growing a line named after whatever was posted.
 
         An existing file is never written to. What would be overwritten is a
         secret that exists nowhere else.
         """
-        state = api_key_state()
-        if state["exists"]:
+        wanted = provider.strip()
+        name = key_variable(wanted if find_provider(wanted) else saved_provider())
+        if env_file_state()["exists"]:
             return see_other("/settings", notice="env-there")
-        if not env.create(state["name"] or "API_KEY", config_file()):
+        if not env.create(name, config_file()):
             return see_other("/settings", notice="env-failed")
         return see_other("/settings", notice="env-made")
 

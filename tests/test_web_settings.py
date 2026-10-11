@@ -228,26 +228,84 @@ def dotenv(tmp_path, text):
     return target
 
 
-def chosen(body):
-    """The select, on its own: the rest of the page names providers too."""
-    start = body.index('name="api_provider"')
-    return body[start:body.index("</select>", start)]
+def rows(body):
+    """The provider list, cut into one chunk a row and keyed by provider.
+
+    The list is the picker now: one radio a row, and the row you tick opens.
+    Every claim about a provider is a claim about its own row, which is what
+    makes "the page says NVIDIA_API_KEY somewhere" not good enough.
+    """
+    start = body.index('<ul class="providers">')
+    whole = body[start:body.index("</ul>", start)]
+    return {chunk.split('id="provider-', 1)[1].split('"', 1)[0]: chunk
+            for chunk in whole.split("<li>")[1:]}
 
 
-def test_the_page_offers_every_provider_and_marks_the_one_in_use(tmp_path):
-    body = with_api(tmp_path, provider="groq").get("/settings").text
-    offered = chosen(body)
+def test_every_provider_is_a_row_you_can_tick(tmp_path):
+    drawn = rows(with_api(tmp_path, provider="groq").get("/settings").text)
+    assert set(drawn) == {p.id for p in PROVIDERS}
     for p in PROVIDERS:
-        assert f'value="{p.id}"' in offered, p.id
-    assert 'value="groq" selected' in offered
+        assert 'name="api_provider"' in drawn[p.id], p.id
+        assert f'value="{p.id}"' in drawn[p.id], p.id
+
+
+def test_the_saved_provider_is_the_one_already_ticked(tmp_path):
+    drawn = rows(with_api(tmp_path, provider="groq").get("/settings").text)
+    assert [pid for pid, chunk in drawn.items() if "checked" in chunk] == ["groq"]
+
+
+def test_a_row_is_ticked_by_its_name_and_not_only_by_the_dot(tmp_path):
+    """The label carries the name, so the whole row is the target. A radio on
+    its own is a 13-pixel circle, which on a phone is a miss."""
+    drawn = rows(with_api(tmp_path, provider="groq").get("/settings").text)
+    for p in PROVIDERS:
+        assert f'id="provider-{p.id}"' in drawn[p.id], p.id
+        assert f'for="provider-{p.id}"' in drawn[p.id], p.id
 
 
 def test_the_page_shows_where_each_provider_lives(tmp_path):
-    body = with_api(tmp_path, provider="groq").get("/settings").text
+    drawn = rows(with_api(tmp_path, provider="groq").get("/settings").text)
     for p in PROVIDERS:
-        assert p.url in body, p.id
-        assert p.key_env in body, p.id
-        assert p.console in body, p.id
+        assert p.url in drawn[p.id], p.id
+        assert p.key_env in drawn[p.id], p.id
+        assert p.console in drawn[p.id], p.id
+
+
+def test_a_provider_you_have_not_saved_still_tells_you_how_to_get_its_key(
+        tmp_path, monkeypatch):
+    """The whole point. Ticking NVIDIA used to leave the page explaining the
+    Anthropic key, because every line of it was drawn from the saved row."""
+    for name in ("NVIDIA_API_KEY", "ANTHROPIC_API_KEY"):
+        monkeypatch.delenv(name, raising=False)
+    drawn = rows(with_api(tmp_path, provider="anthropic").get("/settings").text)
+    nvidia = drawn["nvidia"]
+    assert "NVIDIA_API_KEY" in nvidia
+    assert "https://build.nvidia.com/" in nvidia
+    assert str(tmp_path / "config" / ".env") in nvidia
+    assert "ANTHROPIC_API_KEY" not in nvidia
+
+
+def test_each_row_answers_for_its_own_key_and_not_for_the_saved_one(
+        tmp_path, monkeypatch):
+    for name in ("GROQ_API_KEY", "NVIDIA_API_KEY"):
+        monkeypatch.delenv(name, raising=False)
+    dotenv(tmp_path, "GROQ_API_KEY=sk-x\n")
+    drawn = rows(with_api(tmp_path, provider="groq").get("/settings").text)
+    assert "in place" in drawn["groq"]
+    assert "in place" not in drawn["nvidia"]
+    assert "NVIDIA_API_KEY=" in drawn["nvidia"]
+
+
+def test_the_whole_table_costs_one_read_of_the_env_file(tmp_path, monkeypatch):
+    """Thirteen rows, one file. A read a row was the easy way to write this
+    and it opens the same small file thirteen times to draw one page."""
+    from oknowledge import env as env_module
+    reads = []
+    real = env_module.read
+    monkeypatch.setattr(env_module, "read",
+                        lambda where=None: reads.append(where) or real(where))
+    with_api(tmp_path, provider="groq").get("/settings")
+    assert len(reads) == 1
 
 
 def test_a_provider_that_gives_a_key_away_says_so_and_says_what_it_gives(tmp_path):
@@ -283,8 +341,32 @@ def test_a_key_in_the_environment_counts_as_a_key(tmp_path, monkeypatch):
 def test_a_variable_named_in_the_config_is_the_one_the_page_asks_about(tmp_path,
                                                                       monkeypatch):
     monkeypatch.delenv("MY_OWN", raising=False)
-    body = with_api(tmp_path, provider="groq", key_env="MY_OWN").get("/settings").text
-    assert "MY_OWN" in body
+    drawn = rows(with_api(tmp_path, provider="groq",
+                          key_env="MY_OWN").get("/settings").text)
+    assert "MY_OWN" in drawn["groq"]
+    # Everywhere in that row, not only in one of the two lines that name a
+    # variable: the one it tells you to paste and the one it says is in place
+    # have to be the same variable.
+    assert "GROQ_API_KEY" not in drawn["groq"]
+    # It belongs to the row the config names, not to every row: picking
+    # another provider does not make that provider read somebody else's
+    # variable.
+    assert "MY_OWN" not in drawn["nvidia"]
+    assert "NVIDIA_API_KEY" in drawn["nvidia"]
+
+
+def test_the_row_with_its_own_variable_says_that_one_is_the_one_in_place(
+        tmp_path, monkeypatch):
+    """The other half of the line above: a key found in the variable the
+    config names is reported as that variable, not as the table's."""
+    monkeypatch.setenv("MY_OWN", "sk-x")
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
+    drawn = rows(with_api(tmp_path, provider="groq",
+                          key_env="MY_OWN").get("/settings").text)
+    assert "in place" in drawn["groq"]
+    assert "MY_OWN" in drawn["groq"]
+    assert "GROQ_API_KEY" not in drawn["groq"]
+    assert "sk-x" not in drawn["groq"]
 
 
 def test_an_address_set_by_hand_is_said_to_win(tmp_path):
@@ -299,7 +381,7 @@ def test_a_provider_the_table_does_not_know_is_said_and_not_swallowed(tmp_path):
     # Hand-written in config.toml. The page must not look like it agrees.
     body = with_api(tmp_path, provider="my-own-thing").get("/settings").text
     assert "my-own-thing" in body
-    assert "selected" not in chosen(body)
+    assert [pid for pid, chunk in rows(body).items() if "checked" in chunk] == []
 
 
 @posix_only
@@ -348,18 +430,30 @@ def test_on_windows_a_file_that_is_not_there_is_not_described(tmp_path, monkeypa
     body = with_api(tmp_path, provider="groq").get("/settings").text
 
     assert "private as the folder" not in body
-    assert 'form="make-env"' in body           # the button to make it, instead
+    assert 'form="make-env-' in body          # the button to make it, instead
 
 
 def test_the_button_that_makes_the_file_is_only_there_when_there_is_no_file(
         tmp_path, monkeypatch):
     monkeypatch.delenv("GROQ_API_KEY", raising=False)
-    # The button, not the form it submits: the form is always on the page, and
-    # the route it posts to is safe on its own.
-    assert 'form="make-env"' in with_api(tmp_path, provider="groq").get("/settings").text
+    assert 'form="make-env-' in with_api(tmp_path, provider="groq").get("/settings").text
     dotenv(tmp_path, "GROQ_API_KEY=sk-x\n")
-    assert 'form="make-env"' not in with_api(tmp_path,
+    assert 'form="make-env-' not in with_api(tmp_path,
                                              provider="groq").get("/settings").text
+
+
+def test_every_row_sends_its_own_provider_to_the_button(tmp_path, monkeypatch):
+    """A form cannot nest inside the settings form, so the button cannot see
+    what is ticked. Each row carries its own one-field form instead."""
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
+    body = with_api(tmp_path, provider="groq").get("/settings").text
+    drawn = rows(body)
+    for p in PROVIDERS:
+        assert f'form="make-env-{p.id}"' in drawn[p.id], p.id
+        start = body.index(f'<form id="make-env-{p.id}"')
+        form = body[start:body.index("</form>", start)]
+        assert 'action="/settings/env"' in form, p.id
+        assert f'name="provider" value="{p.id}"' in form, p.id
 
 
 # --- making that file --------------------------------------------------------
@@ -371,6 +465,26 @@ def test_the_file_is_made_with_the_variable_the_saved_provider_needs(tmp_path):
     made = tmp_path / "config" / ".env"
     assert "GROQ_API_KEY=" in made.read_text(encoding="utf-8")
     assert "sk" not in made.read_text(encoding="utf-8")   # a place to paste, no key
+
+
+def test_the_file_is_made_for_the_provider_you_ticked(tmp_path):
+    client = with_api(tmp_path, provider="groq")
+    answer = client.post("/settings/env", data={"provider": "nvidia"},
+                         follow_redirects=False)
+    assert answer.status_code == 303
+    assert "NVIDIA_API_KEY=" in (tmp_path / "config"
+                                 / ".env").read_text(encoding="utf-8")
+
+
+def test_a_name_that_is_not_in_the_table_cannot_choose_the_variable(tmp_path):
+    """The provider arrives from a form, so it is whatever somebody posts. A
+    name the table does not have falls back to the saved row rather than
+    writing a line named after it."""
+    client = with_api(tmp_path, provider="groq")
+    client.post("/settings/env", data={"provider": "../../etc/passwd"})
+    text = (tmp_path / "config" / ".env").read_text(encoding="utf-8")
+    assert "GROQ_API_KEY=" in text
+    assert "passwd" not in text
 
 
 def test_the_file_it_makes_is_yours_alone(tmp_path):
@@ -464,38 +578,21 @@ def test_with_the_api_engine_in_the_chain_it_says_nothing_of_the_sort(tmp_path):
     assert "not ticked" not in TestClient(create_app(cfg)).get("/settings").text
 
 
-# --- thirteen addresses, folded ----------------------------------------------
+# --- the row that is open ----------------------------------------------------
+#
+# No script on this page: a checked radio and the block beside it, which is a
+# selector every browser has had for fifteen years.
 
-def folded(body):
-    """What the page shows, and what it keeps behind the disclosure."""
-    start = body.index('<details class="providers-all">')
-    return body[:start], body[start:body.index("</details>", start)]
-
-
-def test_the_provider_in_use_is_visible_without_opening_anything(tmp_path):
-    visible, hidden = folded(with_api(tmp_path, provider="groq").get("/settings").text)
-    assert "https://api.groq.com/openai/v1/chat/completions" in visible
-    assert "api.groq.com" not in hidden
+def block(selector):
+    css = stylesheet()
+    start = css.index(selector + " {")
+    return css[start:css.index("}", start)]
 
 
-def test_every_other_address_is_behind_the_disclosure(tmp_path):
-    """Thirteen addresses one under the other is a wall on a phone."""
-    visible, hidden = folded(with_api(tmp_path, provider="groq").get("/settings").text)
-    for p in PROVIDERS:
-        if p.id != "groq":
-            assert p.url in hidden, p.id
-            assert p.url not in visible, p.id
+def test_a_row_keeps_its_detail_shut_until_it_is_ticked():
+    assert "display: none" in block(".providers .detail")
 
 
-def test_the_fold_says_how_many_it_is_hiding(tmp_path):
-    body = with_api(tmp_path, provider="groq").get("/settings").text
-    summary = body[body.index("<summary>"):body.index("</summary>")]
-    assert str(len(PROVIDERS) - 1) in summary
-
-
-def test_a_provider_the_table_does_not_know_leaves_the_whole_list_folded(tmp_path):
-    visible, hidden = folded(
-        with_api(tmp_path, provider="my-own-thing").get("/settings").text)
-    for p in PROVIDERS:
-        assert p.url in hidden, p.id
-        assert p.url not in visible, p.id
+def test_the_row_you_tick_is_the_one_that_opens():
+    shown = block('.providers input[type="radio"]:checked ~ .detail')
+    assert "display: block" in shown

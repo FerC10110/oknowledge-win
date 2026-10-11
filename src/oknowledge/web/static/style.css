@@ -410,14 +410,22 @@ header nav b { font-weight: 600; font-variant-numeric: tabular-nums; }
    scroll sideways on a phone or shrink the address to nothing, and the
    address is the thing worth reading. Stacked, every line wraps, so the same
    markup is the phone layout and the desktop one. */
+/* The thirteen providers, one row each and the row you tick opened. The
+   radio sits beside the name and above the detail rather than inside the
+   label, because `:checked ~` only reaches a sibling -- which is what lets
+   this work with no script at all: picking a provider shows you its key
+   before you have saved anything. */
 .providers { list-style: none; margin: 0.4rem 0 0.6rem; padding: 0; }
-.providers li { display: flex; flex-direction: column; gap: 0.1rem;
+.providers li { display: grid; grid-template-columns: auto 1fr; gap: 0.1rem 0.5rem;
                 padding: 0.55rem 0; border-top: 1px solid var(--line); }
 .providers li:last-child { border-bottom: 1px solid var(--line); }
-/* The one in use, marked down the side: the list is read by scanning, and a
-   mark in the margin is findable without reading a word of it. */
-.providers .now { border-left: 2px solid var(--accent); padding-left: 0.6rem; }
-.providers .who { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; }
+.providers input[type="radio"] { margin: 0.35rem 0 0; }
+.providers .detail { grid-column: 2; display: none; }
+.providers input[type="radio"]:checked ~ .detail { display: block; }
+/* The row that is open is the one in hand: its name stops being dim. */
+.providers input[type="radio"]:checked ~ .who b { color: var(--accent); }
+.providers .who { grid-column: 2; display: flex; flex-wrap: wrap;
+                  align-items: center; gap: 0.4rem; cursor: pointer; }
 .providers code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
                   font-size: 0.78rem; color: var(--dim); overflow-wrap: anywhere; }
 .providers .meta { margin: 0; }
@@ -425,14 +433,6 @@ header nav b { font-weight: 600; font-variant-numeric: tabular-nums; }
 .tag { border: 1px solid var(--line); border-radius: 999px; padding: 0 0.45rem;
        font-size: 0.7rem; color: var(--dim); white-space: nowrap; }
 .row select { max-width: 100%; }
-/* The rest of the addresses, folded. Same disclosure as the tag groups in the
-   library: the browser's own, so it needs no script, and closed it costs one
-   line instead of twelve blocks. */
-.providers-all { margin: 0 0 0.6rem; }
-.providers-all summary { display: inline-block; cursor: pointer; font-size: 0.78rem;
-                         color: var(--dim); padding: 0.1rem 0.3rem; border-radius: 999px; }
-.providers-all summary:hover, .providers-all summary:focus-visible { color: var(--fg); }
-.providers-all .providers { margin-top: 0.4rem; }
 
 /* On a phone. The header was three things in one flex row -- the name, the
    search box and three links -- and in Spanish those links alone are wider

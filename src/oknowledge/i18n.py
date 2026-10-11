@@ -262,7 +262,6 @@ STRINGS = {
         "free key": "key gratis",
         "in use": "en uso",
         "get a key": "sacar una key",
-        "Where the other %1 live": "Dónde viven los otros %1",
         "The key for %1 is in place.": "La key de %1 está en su lugar.",
         "There is no key yet. Paste %1=… into %2":
             "Todavía no hay key. Pegá %1=… en %2",

@@ -125,6 +125,46 @@ def test_a_key_that_is_there_is_present_and_one_that_is_not_is_not(config):
     assert not env.present("OPENAI_API_KEY", config)
 
 
+def test_many_names_are_answered_at_once(config):
+    written(config, "GROQ_API_KEY=sk-x\n")
+    answers = env.present_each(("GROQ_API_KEY", "NVIDIA_API_KEY"), config)
+    assert answers == {"GROQ_API_KEY": True, "NVIDIA_API_KEY": False}
+
+
+def test_the_whole_table_costs_one_read(config, monkeypatch):
+    """What this exists for. The settings page draws a row per provider, and
+    a read a row is thirteen reads of the same small file."""
+    written(config, "GROQ_API_KEY=sk-x\n")
+    reads = []
+    real = env.read
+    monkeypatch.setattr(env, "read", lambda where=None: reads.append(where) or real(where))
+    env.present_each([f"K{n}" for n in range(13)], config)
+    assert len(reads) == 1
+
+
+def test_asking_for_nothing_answers_nothing(config):
+    written(config, "GROQ_API_KEY=sk-x\n")
+    assert env.present_each((), config) == {}
+
+
+@pytest.mark.parametrize("in_file, in_shell", [
+    (None, None), ("sk-file", None), (None, "sk-shell"), ("", None), (None, ""),
+    ("sk-file", "sk-shell"),
+])
+def test_it_answers_exactly_what_present_answers(config, monkeypatch,
+                                                 in_file, in_shell):
+    """Two functions, one rule: the shell wins, an empty value is no key. They
+    are written out separately -- one reads the file per call and one reads it
+    once -- and this is what stops them drifting apart."""
+    written(config, "" if in_file is None else f"SOME_KEY={in_file}\n")
+    if in_shell is None:
+        monkeypatch.delenv("SOME_KEY", raising=False)
+    else:
+        monkeypatch.setenv("SOME_KEY", in_shell)
+    assert env.present_each(("SOME_KEY",), config) == {
+        "SOME_KEY": env.present("SOME_KEY", config)}
+
+
 # --- making the file ----------------------------------------------------------
 
 def test_the_file_is_created_for_you_to_paste_into(config):

@@ -33,20 +33,13 @@
     {% endfor %}
     <p class="meta">{{ t('Looking for models asks that engine and reloads this page, so save anything you have typed first. A list from a month ago is still a list: the date beside each button says which.') }}</p>
 
-    {# Who the api engine talks to. The select is the choice; the list under it
-       is the whole table, addresses and all, because seeing where you are
-       pointing is half of what makes this understandable. Nine rows read down
-       a phone, which is why each one is a block and not a table row. #}
+    {# Who the api engine talks to. The list is the picker: one row a
+       provider, and the row you tick opens with its address, the variable
+       its key goes in and where to get one. It opens by CSS -- a checked
+       radio and the block beside it -- because this page has no script and
+       a provider you have not saved yet still has to be able to tell you
+       how to get its key. #}
     <h2>{{ t('Who the api engine talks to') }}</h2>
-    <p class="row">
-      <label>{{ t('Provider') }}
-        <select name="api_provider" aria-label="{{ t('Provider') }}">
-          {% for p in providers %}
-            <option value="{{ p.id }}"{% if p.id == picked %} selected{% endif %}>{{ p.label }}{% if p.free %} · {{ t('free key') }}{% endif %}</option>
-          {% endfor %}
-        </select>
-      </label>
-    </p>
     {% if 'api' not in cfg.chain %}
       {# Said here and not only by the unticked box above: somebody who pastes
          a key and sees nothing happen should find out why on the page that
@@ -59,18 +52,6 @@
     {% if by_hand %}
       <p class="meta">{{ t('config.toml sends this engine to %1 by hand, and that address wins over the list.', by_hand) }}</p>
     {% endif %}
-    {% if key.ok %}
-      <p class="meta">{{ t('The key for %1 is in place.', key.name) }}</p>
-    {% else %}
-      {# The one thing somebody stuck here needs: the name to paste and the
-         file to paste it into. The button belongs to a form of its own,
-         declared at the end of the page. #}
-      <p class="warn-block">{{ t('There is no key yet. Paste %1=… into %2', key.name, key.file) }}
-        {% if not key.exists %}
-          <button type="submit" form="make-env">{{ t('Create that file') }}</button>
-        {% endif %}
-      </p>
-    {% endif %}
     {% if key.exposed %}
       <p class="warn-block">{{ t('Anyone else with an account on this machine can read %1. Make it yours alone with chmod 600.', key.file) }}</p>
     {% elif windows and key.exists %}
@@ -79,28 +60,34 @@
          thing the reader can act on -- which file, and what guards it. #}
       <p class="meta">{{ t('The key is in %1, which is as private as the folder it sits in.', key.file) }}</p>
     {% endif %}
-    {# One row, used twice: for the provider in use and for every other one.
-       `t` is passed in because it is a context variable, and a macro does not
-       see the context it was rendered in. #}
-    {% macro row(p, t, now=False) %}
-        <li{% if now %} class="now"{% endif %}>
-          <span class="who"><b>{{ p.label }}</b>{% if now %}<span class="tag">{{ t('in use') }}</span>{% endif %}{% if p.free %}<span class="tag">{{ t('free key') }}</span>{% endif %}</span>
-          <code>{{ p.url }}</code>
-          <span class="meta">{{ p.key_env }} · <a href="{{ p.console }}" target="_blank" rel="noreferrer">{{ t('get a key') }}</a>{% if p.note %} · {{ t(p.note) }}{% endif %}</span>
+    <ul class="providers">
+      {% for p in providers %}
+        <li>
+          {# The radio, the name and the detail are three children of the row
+             and not nested: the one that opens the other has to be its
+             sibling for `:checked ~` to reach it. #}
+          <input type="radio" name="api_provider" value="{{ p.id }}"
+                 id="provider-{{ p.id }}"{% if p.id == picked %} checked{% endif %}>
+          <label class="who" for="provider-{{ p.id }}"><b>{{ p.label }}</b>{% if p.id == picked %}<span class="tag">{{ t('in use') }}</span>{% endif %}{% if p.free %}<span class="tag">{{ t('free key') }}</span>{% endif %}</label>
+          <div class="detail">
+            <code>{{ p.url }}</code>
+            <p class="meta">{{ keys[p.id].name }} · <a href="{{ p.console }}" target="_blank" rel="noreferrer">{{ t('get a key') }}</a>{% if p.note %} · {{ t(p.note) }}{% endif %}</p>
+            {% if keys[p.id].ok %}
+              <p class="meta">{{ t('The key for %1 is in place.', keys[p.id].name) }}</p>
+            {% else %}
+              {# The one thing somebody stuck here needs: the name to paste and
+                 the file to paste it into. The button belongs to this row's
+                 own form, declared at the end of the page. #}
+              <p class="warn-block">{{ t('There is no key yet. Paste %1=… into %2', keys[p.id].name, key.file) }}
+                {% if not key.exists %}
+                  <button type="submit" form="make-env-{{ p.id }}">{{ t('Create that file') }}</button>
+                {% endif %}
+              </p>
+            {% endif %}
+          </div>
         </li>
-    {% endmacro %}
-    {% if current %}
-      <ul class="providers">{{ row(current, t, true) }}</ul>
-    {% endif %}
-    {# Folded. Thirteen addresses one under the other is a wall on a phone,
-       and the one worth seeing without asking is the one in use. #}
-    {% set others = providers | rejectattr('id', 'equalto', picked) | list %}
-    <details class="providers-all">
-      <summary>{{ t('Where the other %1 live', others | length) }}</summary>
-      <ul class="providers">
-        {% for p in others %}{{ row(p, t) }}{% endfor %}
-      </ul>
-    </details>
+      {% endfor %}
+    </ul>
     <p class="meta">{{ t('What is marked in use is what is saved, not what the box shows: save first. The key itself never goes in config.toml -- this page rewrites that file.') }}</p>
 
     {# Both groups loop over the same order. Written out by hand they had drifted
@@ -165,5 +152,12 @@
   {% for name in engines %}
     <form id="find-{{ name }}" action="/settings/models/{{ name }}" method="post"></form>
   {% endfor %}
-  <form id="make-env" action="/settings/env" method="post"></form>
+  {# One per provider, each carrying its own name: the button that makes the
+     .env sits inside the settings form, so it cannot be a form itself and
+     cannot see what is ticked. Only drawn while there is no file to make. #}
+  {% if not key.exists %}
+    {% for p in providers %}
+      <form id="make-env-{{ p.id }}" action="/settings/env" method="post"><input type="hidden" name="provider" value="{{ p.id }}"></form>
+    {% endfor %}
+  {% endif %}
 {% endblock %}
