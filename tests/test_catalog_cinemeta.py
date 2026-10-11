@@ -105,6 +105,10 @@ def test_a_series_with_no_director_is_signed_by_its_writer(fake_fetch):
 @pytest.mark.parametrize("answer", [
     "", "no json at all", "{}", '{"metas": "not a list"}',
     '{"metas": [{"no_id": 1}]}', '{"meta": null}',
+    # A row that is not an object at all: `.get` on a string is the one way
+    # a catalog's nonsense could still reach somebody as a traceback.
+    '{"metas": ["not an object"]}', '{"metas": [null]}', '{"meta": "a string"}',
+    "[]", "null",
 ])
 def test_garbage_is_an_empty_answer_and_never_a_traceback(fake_fetch, answer):
     fake_fetch(answer)
