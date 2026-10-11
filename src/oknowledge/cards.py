@@ -11,6 +11,11 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
+from .ai.base import normalize_tags
+from .catalog import Card
+from .catalog.genres import as_tags
+from .model import Note
+from .urls import link_id
 from .web.index import fold
 
 PREFIXES = {
@@ -80,3 +85,49 @@ def wanted(raw: str) -> Wanted | None:
         year = found.group(1)
         query = query[:found.start()].strip()
     return Wanted(kind=kind, query=query, year=year, ref=ref)
+
+
+CATEGORIES = {
+    "es": {"movie": "Películas", "series": "Series",
+           "anime": "Anime", "book": "Libros"},
+    "en": {"movie": "Movies", "series": "Series",
+           "anime": "Anime", "book": "Books"},
+}
+"""The category a card lands in, which is its kind and nothing else. A model
+classifies a link because nobody knows what a link is until it is read; a
+film is a film before anybody asks."""
+
+
+def note_from_card(card: Card, kind: str, language: str, saved: str) -> Note:
+    """A catalog's answer as a note of ours. Pure: no disk, no network.
+
+    The poster is not downloaded here. `cover` is filled in by whoever
+    saves the note, because that is the step that has a folder to put a
+    file in.
+
+    `status` is "ok" from the start: a card is complete the moment the
+    catalog answers, and nothing is owed. `engine` stays empty, which is
+    what says no model has rewritten it yet -- and what keeps retry from
+    ever trying to scrape imdb.com.
+    """
+    names = CATEGORIES.get(language, CATEGORIES["en"])
+    return Note(
+        id=link_id(card.url),
+        url=card.url,
+        title=card.title,
+        category=names.get(kind, names["movie"]),
+        tags=normalize_tags(as_tags(card.genres, language)),
+        type=kind,
+        source=card.source,
+        saved=saved,
+        summary=card.synopsis,
+        points=[],
+        status="ok",
+        # The catalog's synopsis is the whole text there is: there is no page
+        # to extract, so there is no original content section to promise.
+        content="summary",
+        author=card.people or None,
+        published=card.released or None,
+        length=card.length,
+        rating=card.rating,
+    )
