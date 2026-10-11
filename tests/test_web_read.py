@@ -218,7 +218,7 @@ def test_an_unreadable_vault_renders_a_page_with_the_path(tmp_path, monkeypatch)
     cfg = make_cfg(tmp_path)
     client = TestClient(create_app(cfg))
 
-    def boom(cfg):
+    def boom(cfg, shelf=None):
         raise PermissionError("denied")
 
     monkeypatch.setattr(index, "fingerprint", boom)
@@ -254,7 +254,7 @@ def test_an_unreadable_links_folder_is_a_readable_page(tmp_path):
 def test_the_app_starts_even_if_the_vault_cannot_be_read_at_startup(tmp_path, monkeypatch):
     from oknowledge.web import index
 
-    def boom(cfg):
+    def boom(cfg, shelf=None):
         raise OSError("gone")
 
     monkeypatch.setattr(index, "fingerprint", boom)

@@ -21,7 +21,7 @@ import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
 
-from ..config import Config
+from ..config import Config, Shelf
 from ..model import Note
 from ..urls import is_search_url
 from ..vault import read_note, scan_file
@@ -203,17 +203,19 @@ def snippet_of(text: str, term: str) -> str | None:
     return ("…" if start else "") + piece + "…"
 
 
-def fingerprint(cfg: Config) -> dict[str, tuple[int, int]]:
+def fingerprint(cfg: Config, shelf: Shelf | None = None) -> dict[str, tuple[int, int]]:
     """name -> (mtime_ns, size) for every note file: a stat each, no reads.
 
     Raises OSError if the vault cannot be listed. A vault folder that has
     vanished is an error (it was moved or unmounted), not an empty library;
-    only a missing links/ folder under an existing root means nothing is saved.
+    only a missing shelf folder under an existing root means nothing is saved
+    -- which is every vault until the first card is written.
     """
+    shelf = shelf or cfg.links
     if not cfg.root.is_dir():
         raise FileNotFoundError(f"{cfg.root} does not exist")
     try:
-        entries = [e for e in os.scandir(cfg.links_dir) if e.name.endswith(".md")]
+        entries = [e for e in os.scandir(shelf.dir) if e.name.endswith(".md")]
     except FileNotFoundError:
         return {}
     stats = {}
@@ -227,8 +229,9 @@ def fingerprint(cfg: Config) -> dict[str, tuple[int, int]]:
 
 
 class Library:
-    def __init__(self, cfg: Config):
+    def __init__(self, cfg: Config, shelf: Shelf | None = None):
         self.cfg = cfg
+        self.shelf = shelf or cfg.links
         self.entries: list[Entry] = []
         self.unreadable = 0              # notes of ours that exist but could not be parsed
         self.error: str | None = None    # why the vault could not be read, if it could not
@@ -255,7 +258,7 @@ class Library:
 
     def _refresh(self) -> None:
         try:
-            current = fingerprint(self.cfg)
+            current = fingerprint(self.cfg, self.shelf)
             if current == self._fingerprint:
                 return
             cache = {}
@@ -264,7 +267,7 @@ class Library:
                 if old is not None and old[0] == sig:
                     cache[name] = old
                     continue
-                path = self.cfg.links_dir / name
+                path = self.shelf.dir / name
                 note, _ = scan_file(path)
                 cache[name] = (sig, _entry(path, note, sig[0]) if note else None)
         except OSError as exc:

@@ -27,7 +27,7 @@ from .ai.base import (
     MAX_CATEGORY_LENGTH, UNSAFE_IN_A_NAME, normalize_collections, normalize_tags,
 )
 from .atomic import atomic_write
-from .config import Config
+from .config import Config, Shelf
 from .model import Mention, Note
 from .queue import Locked
 from .urls import search_url
@@ -308,15 +308,16 @@ def note_stem(note: Note) -> str:
     return f"{_safe(note.saved) or 'undated'}-{slug(note.title, note.id)}"
 
 
-def note_path(cfg: Config, note: Note) -> Path:
+def note_path(cfg: Config, note: Note, shelf: Shelf | None = None) -> Path:
+    shelf = shelf or cfg.links
     stem = note_stem(note)
-    candidate = cfg.links_dir / f"{stem}.md"
+    candidate = shelf.dir / f"{stem}.md"
     n = 2
     while candidate.exists():
         existing = read_note(candidate)
         if existing is not None and existing.id == note.id:
             return candidate
-        candidate = cfg.links_dir / f"{stem}-{n}.md"
+        candidate = shelf.dir / f"{stem}-{n}.md"
         n += 1
     return candidate
 
@@ -405,13 +406,14 @@ def scan_file(path: Path) -> tuple[Note | None, bool]:
         return None, True
 
 
-def _scan(cfg: Config) -> tuple[list[tuple[Path, Note]], list[Path]]:
-    """Every readable note under links_dir, plus the files of ours it could not read."""
-    if not cfg.links_dir.is_dir():
+def _scan(cfg: Config, shelf: Shelf | None = None) -> tuple[list[tuple[Path, Note]], list[Path]]:
+    """Every readable note on the shelf, plus the files of ours it could not read."""
+    shelf = shelf or cfg.links
+    if not shelf.dir.is_dir():
         return [], []
     found: list[tuple[Path, Note]] = []
     skipped: list[Path] = []
-    for path in sorted(cfg.links_dir.glob("*.md")):
+    for path in sorted(shelf.dir.glob("*.md")):
         note, unreadable = scan_file(path)
         if note is not None:
             found.append((path, note))
@@ -420,12 +422,12 @@ def _scan(cfg: Config) -> tuple[list[tuple[Path, Note]], list[Path]]:
     return found, skipped
 
 
-def all_notes(cfg: Config) -> list[Note]:
-    return [note for _, note in _scan(cfg)[0]]
+def all_notes(cfg: Config, shelf: Shelf | None = None) -> list[Note]:
+    return [note for _, note in _scan(cfg, shelf)[0]]
 
 
-def find_note(cfg: Config, link_id: str) -> tuple[Path, Note] | None:
-    for path, note in _scan(cfg)[0]:
+def find_note(cfg: Config, link_id: str, shelf: Shelf | None = None) -> tuple[Path, Note] | None:
+    for path, note in _scan(cfg, shelf)[0]:
         if note.id == link_id:
             return path, note
     return None
@@ -444,11 +446,12 @@ def _index_name(category: str) -> str:
     return re.sub(f"[{re.escape(UNSAFE_IN_A_NAME)}]+", "-", category).strip(" .")
 
 
-def index_path(cfg: Config, category: str) -> Path:
+def index_path(cfg: Config, category: str, shelf: Shelf | None = None) -> Path:
     # The category name is written by a model: it can never leave our folder
     # or invent subdirectories. A pure function of the category, never of the language.
+    shelf = shelf or cfg.links
     name = _index_name(category) or INDEX_TEXT["es"][1]
-    return cfg.root / f"{name}.md"
+    return shelf.index_dir / f"{name}.md"
 
 
 def _plain(text: str) -> str:
@@ -456,7 +459,8 @@ def _plain(text: str) -> str:
     return " ".join(text.split())
 
 
-def write_index(cfg: Config, category: str, entries: list[tuple[Path, Note]], language: str) -> Path:
+def write_index(cfg: Config, category: str, entries: list[tuple[Path, Note]], language: str,
+                shelf: Shelf | None = None) -> Path:
     """Write the index for one category. `entries` are (real path on disk, note)
     pairs, so every wikilink names the file that actually exists."""
     notice = INDEX_TEXT.get(language, INDEX_TEXT["en"])[0]
@@ -479,7 +483,7 @@ def write_index(cfg: Config, category: str, entries: list[tuple[Path, Note]], la
             line += f"\n  {detail}"
         lines.append(line)
 
-    target = index_path(cfg, category)
+    target = index_path(cfg, category, shelf)
     resolved = ensure_inside_root(cfg, target)
     if resolved.exists() and read_front(resolved) is None:
         raise ProtectedNote(f"refusing to overwrite a file without the marker: {target}")
@@ -488,7 +492,7 @@ def write_index(cfg: Config, category: str, entries: list[tuple[Path, Note]], la
     return resolved
 
 
-def rebuild_indexes(cfg: Config, language: str) -> RebuildResult:
+def rebuild_indexes(cfg: Config, language: str, shelf: Shelf | None = None) -> RebuildResult:
     """Rewrite one index per category and delete the ones left without notes.
 
     Only reads notes; never rewrites them. Files of ours it could not read
@@ -496,7 +500,8 @@ def rebuild_indexes(cfg: Config, language: str) -> RebuildResult:
     index path is held by a user file is listed in `blocked`. Never raises
     for either.
     """
-    found, skipped = _scan(cfg)
+    shelf = shelf or cfg.links
+    found, skipped = _scan(cfg, shelf)
     grouped: dict[str, list[tuple[Path, Note]]] = {}
     for path, note in found:
         grouped.setdefault(note.category, []).append((path, note))
@@ -508,7 +513,7 @@ def rebuild_indexes(cfg: Config, language: str) -> RebuildResult:
     for category, entries in sorted(grouped.items()):
         if not _index_name(category):
             category = fallback          # nameless category: use the localized label
-        target = index_path(cfg, category)
+        target = index_path(cfg, category, shelf)
         if target in claimed:
             # Two categories sanitize to the same file name. The first in sorted
             # order wins, so the winner is stable across rebuilds.
@@ -516,14 +521,16 @@ def rebuild_indexes(cfg: Config, language: str) -> RebuildResult:
             continue
         claimed.add(target)
         try:
-            written.append(write_index(cfg, category, entries, language))
+            written.append(write_index(cfg, category, entries, language, shelf))
         except ProtectedNote:
             # One category in the way must not stop the others from updating.
             blocked.append(target)
 
     keep = {p.name for p in claimed}
-    if cfg.root.is_dir():
-        for path in cfg.root.glob("*.md"):
+    # Only this shelf's own index folder: the sweep deletes indexes left
+    # without notes, and the other shelf's notes are not in `found`.
+    if shelf.index_dir.is_dir():
+        for path in shelf.index_dir.glob("*.md"):
             front = read_front(path)
             if front is not None and front.get("kind") == "index" and path.name not in keep:
                 path.unlink()
@@ -569,10 +576,10 @@ def _checked_category(name) -> str:
     return clean
 
 
-def _finish(cfg: Config, language: str, done):
+def _finish(cfg: Config, language: str, done, shelf: Shelf | None = None):
     """Rebuild the indexes after a change that has already landed on disk."""
     try:
-        rebuild_indexes(cfg, language)
+        rebuild_indexes(cfg, language, shelf)
     except OSError as error:
         raise IndexesStale(done, error) from error
     return done
@@ -583,7 +590,8 @@ def update_note(cfg: Config, link_id: str, language: str,
                 drop_mention: str | None = None,
                 add_collection: str | None = None,
                 drop_collection: str | None = None,
-                found: tuple[Path, Note] | None = None) -> Path | None:
+                found: tuple[Path, Note] | None = None,
+                shelf: Shelf | None = None) -> Path | None:
     """Change one of our notes' classification and rebuild the indexes.
 
     `mentions` replaces the whole list. `drop_mention` removes the entries of
@@ -603,7 +611,7 @@ def update_note(cfg: Config, link_id: str, language: str,
     BadCategory for a category we refuse, before touching anything.
     """
     if found is None:
-        found = find_note(cfg, link_id)
+        found = find_note(cfg, link_id, shelf)
     if found is None:
         return None
     path, note = found
@@ -632,7 +640,7 @@ def update_note(cfg: Config, link_id: str, language: str,
     # per note while thirty of them join a project -- buys nothing.
     if category is None and tags is None:
         return written
-    return _finish(cfg, language, written)
+    return _finish(cfg, language, written, shelf)
 
 
 def trash_dir(cfg: Config) -> Path:
@@ -657,14 +665,15 @@ def _free_name(folder: Path, name: str) -> Path:
     return folder / f"{stem}-{secrets.token_hex(4)}{suffix}"
 
 
-def delete_note(cfg: Config, link_id: str, language: str) -> Path | None:
+def delete_note(cfg: Config, link_id: str, language: str,
+                shelf: Shelf | None = None) -> Path | None:
     """Move one of our notes to trash/ and rebuild the indexes.
 
     Returns the new path, or None if no note of ours has that id. Deleting
     fires from a POST in a browser, so it has to be undoable: the file keeps
     its name and content and can be dragged back from Obsidian.
     """
-    found = find_note(cfg, link_id)
+    found = find_note(cfg, link_id, shelf)
     if found is None:
         return None
     path, _ = found
@@ -678,7 +687,7 @@ def delete_note(cfg: Config, link_id: str, language: str) -> Path | None:
     except OSError:
         target.unlink(missing_ok=True)           # no empty placeholder left behind
         raise
-    return _finish(cfg, language, target)
+    return _finish(cfg, language, target, shelf)
 
 
 @dataclass(frozen=True)

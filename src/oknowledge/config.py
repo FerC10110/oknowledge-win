@@ -56,6 +56,17 @@ class PortUnavailable(Exception):
 
 
 @dataclass(frozen=True)
+class Shelf:
+    """Una carpeta de notas con sus índices. `links` es la que siempre
+    existió; `ocio` guarda las fichas. El nombre viaja porque es lo que
+    distingue una ruta de la otra en la web."""
+
+    name: str
+    dir: Path
+    index_dir: Path
+
+
+@dataclass(frozen=True)
 class Config:
     vault: Path
     folder: str = "oknowledge"
@@ -102,8 +113,26 @@ class Config:
         return self.vault / self.folder
 
     @property
+    def links(self) -> Shelf:
+        """The shelf that always existed. Its indexes sit at the root of the
+        managed folder, beside links/, which is where the ones on disk are."""
+        return Shelf("links", self.root / "links", self.root)
+
+    @property
+    def ocio(self) -> Shelf:
+        """The cards. Indexes inside the folder itself, so rebuilding one
+        shelf can never delete the other's: the sweep that removes an index
+        left without notes only ever looks in its own shelf's index_dir."""
+        return Shelf("ocio", self.root / "ocio", self.root / "ocio")
+
+    def shelf(self, name: str) -> Shelf:
+        """The shelf a name from a URL asks for. Anything but "ocio" is the
+        links shelf: an unknown name must not invent a folder."""
+        return self.ocio if name == "ocio" else self.links
+
+    @property
     def links_dir(self) -> Path:
-        return self.root / "links"
+        return self.links.dir
 
     @property
     def attachments_dir(self) -> Path:

@@ -2313,7 +2313,8 @@ def test_a_candidate_costs_one_vault_scan_not_two(videos, monkeypatch):
 
     real = vault._scan
     calls = []
-    monkeypatch.setattr(vault, "_scan", lambda cfg: (calls.append(1), real(cfg))[1])
+    monkeypatch.setattr(vault, "_scan",
+                        lambda cfg, shelf=None: (calls.append(1), real(cfg, shelf))[1])
 
     backfill_mentions(videos, limit=1)
 

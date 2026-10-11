@@ -285,7 +285,7 @@ def test_renaming_a_category_nobody_uses_moves_nothing(tmp_path):
 # --- a change that landed, with indexes that did not (F4) -------------------
 
 def break_reindex(monkeypatch):
-    def boom(cfg, language):
+    def boom(cfg, language, shelf=None):
         raise OSError(28, "No space left on device")
     monkeypatch.setattr("oknowledge.vault.rebuild_indexes", boom)
 
@@ -476,7 +476,8 @@ def spy_rebuild(monkeypatch):
     calls = []
     real = rebuild_indexes
     monkeypatch.setattr("oknowledge.vault.rebuild_indexes",
-                        lambda cfg, language: calls.append(1) or real(cfg, language))
+                        lambda cfg, language, shelf=None:
+                        calls.append(1) or real(cfg, language, shelf))
     return calls
 
 

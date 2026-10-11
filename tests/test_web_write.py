@@ -766,13 +766,13 @@ def test_the_lock_is_still_held_while_the_note_is_written(setup, monkeypatch, pa
     reindexed = vault.rebuild_indexes
     held = []
 
-    def watched(cfg, language):
+    def watched(cfg, language, shelf=None):
         try:
             with Queue().lock("a1"):
                 held.append(False)        # got it: nobody is holding it
         except Locked:
             held.append(True)
-        return reindexed(cfg, language)
+        return reindexed(cfg, language, shelf)
 
     monkeypatch.setattr(vault, "rebuild_indexes", watched)
     client.post(path, data=data)
@@ -912,7 +912,7 @@ def test_a_settings_write_that_fails_does_not_switch_the_language_either(
 def break_reindex(monkeypatch):
     from oknowledge import vault
 
-    def boom(cfg, language):
+    def boom(cfg, language, shelf=None):
         raise OSError(28, "No space left on device")
 
     monkeypatch.setattr(vault, "rebuild_indexes", boom)
@@ -1389,7 +1389,8 @@ def test_a_bulk_add_does_not_rebuild_the_indexes(setup, monkeypatch):
     rewrite the whole library thirty times."""
     cfg, client = setup
     monkeypatch.setattr("oknowledge.vault.rebuild_indexes",
-                        lambda cfg, language: pytest.fail("rebuilt the indexes"))
+                        lambda cfg, language, shelf=None:
+                        pytest.fail("rebuilt the indexes"))
 
     client.post("/collections/add", data={"name": "Casa", "id": ["a1", "b2"]})
 
