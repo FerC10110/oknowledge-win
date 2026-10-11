@@ -226,8 +226,9 @@ Both `opencode` and `ollama` have Windows builds; install either one and put it
 on the PATH. With neither, use `api`.
 
 **`api` and the key.** Settings lists thirteen providers with the address each
-one lives at and which of them hand out a free key. Pick one and paste the key
-into a `.env` file next to your config —
+one lives at and which of them hand out a free key. Tick one and that row
+opens with the variable its key goes in and a link to where you get it — no
+saving first. Then paste the key into a `.env` file next to your config —
 `%APPDATA%\oknowledge\.env` — one `NAME=value` per line:
 
 ```
