@@ -18,11 +18,16 @@ body {
   font: 16px/1.65 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
 }
 header {
-  display: flex; gap: 1.5rem; align-items: center;
+  /* Wrapping, because the paste box asks for a whole line of its own
+     (flex-basis 100%, below). Without this the header is one line forever
+     and the box takes its width out of the search box beside it, which on
+     every page narrower than the library left the search four pixels
+     wide. */
+  display: flex; flex-wrap: wrap; gap: 0.8rem 1.5rem; align-items: center;
   max-width: var(--measure); margin: 0 auto; padding: 1.5rem 1rem;
 }
 .brand { font-weight: 600; text-decoration: none; color: var(--fg); letter-spacing: -0.01em; }
-header form { flex: 1; }
+header form { flex: 1 1 12rem; }
 header input {
   width: 100%; padding: 0.6rem 0.9rem; border: 1px solid var(--line);
   border-radius: 9px; background: var(--card); color: inherit; font: inherit;
@@ -433,6 +438,20 @@ header nav b { font-weight: 600; font-variant-numeric: tabular-nums; }
 .tag { border: 1px solid var(--line); border-radius: 999px; padding: 0 0.45rem;
        font-size: 0.7rem; color: var(--dim); white-space: nowrap; }
 .row select { max-width: 100%; }
+
+/* The candidates of a search. A row is a poster, a name and a button, and
+   the poster is the fastest way to recognise the one you meant -- these are
+   six films with the same name. The box keeps its size whether the catalog
+   sent a picture or not, so the names stay in one column. */
+.candidates { list-style: none; padding: 0; margin: 1.2rem 0 0; }
+.candidates li { display: flex; align-items: center; gap: 1rem;
+                 padding: 0.7rem 0; border-bottom: 1px solid var(--line); }
+.candidates img, .candidates .noposter {
+  width: 3.4rem; height: 5rem; flex: none; border-radius: 6px;
+  object-fit: cover; background: var(--card); }
+.candidates .who { flex: 1; min-width: 0; display: flex; flex-direction: column;
+                   gap: 0.2rem; overflow-wrap: anywhere; }
+.candidates form { margin: 0; }
 
 /* On a phone. The header was three things in one flex row -- the name, the
    search box and three links -- and in Spanish those links alone are wider

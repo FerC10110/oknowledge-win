@@ -61,6 +61,11 @@ STRINGS = {
         "Check that the folder exists, is mounted and is readable.":
             "Revisá que la carpeta exista, esté montada y se pueda leer.",
         "Paste a link": "Pegá un link",
+        "Which one?": "¿Cuál?",
+        "Looking for “%1”": "Buscando “%1”",
+        "Nothing found for “%1”.": "No se encontró nada para “%1”.",
+        "The catalogue could not be reached. Try again in a moment.":
+            "No se pudo consultar el catálogo. Reintentá en un momento.",
         "Full": "Todo",
         "Summary": "Resumen",
         "Saved.": "Guardado.",
@@ -139,6 +144,9 @@ STRINGS = {
         "Reading that link now. It shows up in the library when it is done.":
             "Leyendo ese link. Aparece en la biblioteca cuando termina.",
         "You already have that link.": "Ese link ya lo tenés.",
+        "Write what to look for after the colon, like película:Terminator.":
+            "Escribí qué buscar después de los dos puntos, como "
+            "película:Terminator.",
         "That is not a link: it has to be an address, like "
         "https://example.com/page.":
             "Eso no es un link: tiene que ser una dirección, como "

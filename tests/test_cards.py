@@ -7,7 +7,7 @@ that is decided -- before anything is fetched, saved or shown.
 
 import pytest
 
-from oknowledge.cards import wanted
+from oknowledge.cards import prefixed, wanted
 
 
 @pytest.mark.parametrize("raw, kind", [
@@ -75,3 +75,16 @@ def test_a_title_that_is_not_an_id_has_no_reference():
 
 def test_a_novel_of_a_title_is_cut_at_120():
     assert len(wanted("libro:" + "x" * 300).query) == 120
+
+
+@pytest.mark.parametrize("raw", ["película:", "película:   ", "peli : ", "LIBRO:"])
+def test_a_prefix_with_no_title_is_still_about_a_card(raw):
+    """No es una búsqueda, pero tampoco es un link: la página lo dice
+    distinto."""
+    assert wanted(raw) is None
+    assert prefixed(raw) is True
+
+
+@pytest.mark.parametrize("raw", ["https://example.com/x", "nota:algo", "", ":"])
+def test_a_line_that_is_not_about_a_card_says_so(raw):
+    assert prefixed(raw) is False

@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}{{ query_text }} - oknowledge{% endblock %}
+{% block main %}
+  <h1>{{ t('Which one?') }}</h1>
+  <p class="meta">{{ t('Looking for “%1”', query_text) }}</p>
+  {% if candidates %}
+    <ul class="candidates">
+      {% for c in candidates %}
+        <li>
+          {# The poster is the catalog's, on the catalog's server: nothing is
+             saved yet, so there is no local file to show. #}
+          {% if c.poster %}
+            <img src="{{ c.poster }}" alt="" loading="lazy" referrerpolicy="no-referrer">
+          {% else %}
+            <span class="noposter" aria-hidden="true"></span>
+          {% endif %}
+          <div class="who">
+            <b>{{ c.title }}</b>
+            <span class="meta">{% if c.year %}{{ c.year }}{% endif %}{% if c.rating %} · ★ {{ c.rating }}{% endif %}</span>
+          </div>
+          <form action="/ocio/guardar" method="post">
+            <input type="hidden" name="tipo" value="{{ kind }}">
+            <input type="hidden" name="ref" value="{{ c.ref }}">
+            <input type="hidden" name="via" value="{{ c.via }}">
+            <button type="submit">{{ t('Save') }}</button>
+          </form>
+        </li>
+      {% endfor %}
+    </ul>
+  {% elif failed %}
+    <section class="empty">
+      <p>{{ t('The catalogue could not be reached. Try again in a moment.') }}</p>
+      <p class="meta">{{ failed }}</p>
+    </section>
+  {% else %}
+    <section class="empty">
+      <p>{{ t('Nothing found for “%1”.', query_text) }}</p>
+    </section>
+  {% endif %}
+{% endblock %}

@@ -133,3 +133,18 @@ def test_the_query_is_escaped(fake_fetch):
     fake_fetch("{}")
     search("movie", "9 1/2 weeks?")
     assert "9%201%2F2%20weeks%3F" in fake_fetch.url
+
+
+def test_an_anime_can_be_looked_for_among_the_films(fake_fetch):
+    """Cowboy Bebop is a series and a film; what it is saved as is what you
+    asked for, not which catalog answered."""
+    fake_fetch(recorded("cinemeta-search-terminator.json"))
+    found, _ = search("anime", "bebop", via="movie")
+    assert "/catalog/movie/" in fake_fetch.url
+    assert (found[0].kind, found[0].via) == ("anime", "movie")
+
+
+def test_without_an_override_an_anime_is_a_series(fake_fetch):
+    fake_fetch("{}")
+    search("anime", "bebop")
+    assert "/catalog/series/" in fake_fetch.url

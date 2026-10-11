@@ -29,7 +29,8 @@ from fastapi.templating import Jinja2Templates
 from starlette.datastructures import Headers
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from .. import env, places
+from .. import cards, env, places
+from ..catalog import cinemeta, openlibrary
 from ..ai import build_engine
 from ..ai.base import normalize_collections
 from ..ai.providers import PROVIDERS
@@ -106,6 +107,11 @@ NOTICES = {
     # whole answer until it appears.
     "reading": "Reading that link now. It shows up in the library when it is done.",
     "already-saved": "You already have that link.",
+    # A known prefix with nothing after it: the person meant to search and
+    # stopped typing. Telling them it is not a link would be answering a
+    # question they did not ask.
+    "no-title": "Write what to look for after the colon, like "
+                "película:Terminator.",
     "not-a-link": "That is not a link: it has to be an address, like "
                   "https://example.com/page.",
     "searched": "That is a page of search results, not a page. Open the result "
@@ -340,6 +346,20 @@ def preview_of(scan, known: set[str]) -> dict:
         "bare": [one for one in scan.links if one.bare],
         "suspicious": scan.suspicious,
     }
+
+
+def catalogs_for(kind: str) -> list[tuple[object, str]]:
+    """Which catalogs to ask, in the order the answers are shown.
+
+    Anime asks both of Cinemeta's, series first: Cowboy Bebop is a series
+    and a film, and the specialist catalog for anime answers only over
+    IPv6. Whichever one was meant, it is in one of the two answers.
+    """
+    if kind == "book":
+        return [(openlibrary, "book")]
+    if kind == "anime":
+        return [(cinemeta, "series"), (cinemeta, "movie")]
+    return [(cinemeta, cinemeta.catalog_type(kind))]
 
 
 def see_other(path: str, **params) -> RedirectResponse:
@@ -1215,6 +1235,28 @@ def create_app(cfg: Config) -> FastAPI:
     # and always answers with the library: that is where the note will show
     # up when it is written.
 
+    @app.get("/ocio/buscar", response_class=HTMLResponse)
+    def card_candidates(request: Request, tipo: str = "", q: str = ""):
+        """Which one you meant. Nothing is saved until somebody says.
+
+        Cinemeta answers "terminator" with Judgment Day first and the 1984
+        one second, so picking is the feature and not a step in the way.
+        """
+        query = " ".join(q.split())[:cards.LONGEST]
+        if tipo not in cards.KINDS or not query:
+            raise HTTPException(status_code=404, detail="no such search")
+        found: list = []
+        failed = ""
+        for client, via in catalogs_for(tipo):
+            rows, why = client.search(tipo, query, via=via)
+            found.extend(rows)
+            failed = failed or why
+        # The reason travels even when there are rows; the page shows it
+        # only when there are none, because one of the two catalogs being
+        # down while the other answers is not a failure anybody reads about.
+        return page(request, "candidates.html", kind=tipo, query_text=query,
+                    candidates=found[:cards.MOST], failed=failed)
+
     @app.post("/add")
     def add_pasted(background: BackgroundTasks, url: str = Form(""),
                    content: str = Form("")):
@@ -1224,6 +1266,14 @@ def create_app(cfg: Config) -> FastAPI:
         never overwrites a note it did not just make, so a library index that
         is a second out of date here costs a message and never a note.
         """
+        # Before pasted_link(), because "película:Terminator" is not a link
+        # and never will be: asked afterwards, every card request would come
+        # back as "that is not a link".
+        asked = cards.wanted(url)
+        if asked is not None:
+            return see_other("/ocio/buscar", tipo=asked.kind, q=asked.query)
+        if cards.prefixed(url):
+            return see_other("/", notice="no-title")
         clean = pasted_link(url)
         if not clean:
             return see_other("/", notice="not-a-link")

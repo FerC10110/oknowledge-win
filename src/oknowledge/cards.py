@@ -31,6 +31,13 @@ PREFIXES = {
     "book": "book",
 }
 
+KINDS = ("movie", "series", "anime", "book")
+"""The four a card can be. The URL carries one of these and nothing else."""
+
+MOST = 16
+"""How many candidates a page draws at once. Anime asks two catalogs and
+each answers eight."""
+
 LONGEST = 120
 """A title nobody typed on purpose. The box takes 2048 characters because a
 link can be that long; a film's name cannot."""
@@ -51,6 +58,17 @@ class Wanted:
     query: str          # what to search for, without the year
     year: str = ""      # "" unless the line ended in one
     ref: str = ""       # an id typed instead of a title, in catalog form
+
+
+def prefixed(raw: str) -> bool:
+    """True when the line starts with one of the nine words and a colon.
+
+    `wanted()` answers None both for a line that is not about a card and for
+    `película:` with nothing after it, and those deserve different answers on
+    screen: one is not a link, the other is a search missing its title.
+    """
+    head, colon, _ = (raw or "").partition(":")
+    return bool(colon) and fold(head).strip() in PREFIXES
 
 
 def wanted(raw: str) -> Wanted | None:

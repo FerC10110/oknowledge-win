@@ -80,7 +80,9 @@ def _candidate(doc: dict, kind: str) -> Candidate | None:
     )
 
 
-def search(kind: str, query: str) -> tuple[list[Candidate], str]:
+def search(kind: str, query: str, via: str = "") -> tuple[list[Candidate], str]:
+    # `via` is here so both clients answer the same call. A book has one
+    # catalog and one shelf in it; there is nothing to override.
     docs, error = _docs(query)
     found = [c for c in (_candidate(d, kind) for d in docs) if c is not None]
     return found[:MOST], error

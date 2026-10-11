@@ -59,14 +59,23 @@ def _asked(url: str) -> dict | None:
     return answer if isinstance(answer, dict) else None
 
 
-def search(kind: str, query: str) -> tuple[list[Candidate], str]:
+def catalog_type(kind: str) -> str:
+    """Which of Cinemeta's two catalogs a kind is asked of."""
+    return "series" if kind in ("series", "anime") else "movie"
+
+
+def search(kind: str, query: str, via: str = "") -> tuple[list[Candidate], str]:
     """What the catalog thinks you might have meant, and why it could not say.
 
     The error is a string and not an exception because the only thing to do
     with it is show it: the page asks two catalogs for an anime, and one of
     them being down is not the end of the search.
+
+    `via` overrides which catalog is asked without changing what the answer
+    is *about*: an anime is looked for among films as well as series, and a
+    row found among the films is still an anime when it is saved.
     """
-    via = "series" if kind in ("series", "anime") else "movie"
+    via = via or catalog_type(kind)
     url = f"{BASE}/catalog/{via}/top/search={quote(query, safe='')}.json"
     try:
         answer = json.loads(net.fetch(url, timeout=TIMEOUT, max_bytes=MAX_BYTES).text)
