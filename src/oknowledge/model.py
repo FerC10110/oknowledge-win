@@ -53,6 +53,23 @@ class Note:
     note nobody analysed has no engine to name."""
     model: str = ""
 
+    length: str = ""
+    """How long it is, in the words of whoever is counting: "108 min", "27
+    episodios", "608 páginas". A string and not a number because the unit is
+    part of the fact, and the three kinds of thing do not share one."""
+    rating: str = ""
+    """What the catalog scored it, out of ten for a film and out of five for
+    a book. The catalog's number, kept as the catalog's text."""
+    score: int = 0
+    """Yours, one to five stars. Zero means you have not said."""
+    state: str = ""
+    """Yours: pending | doing | done | dropped, in the words each kind uses.
+    Empty until you pick one."""
+    my_note: str = ""
+    """What you wrote under `## Mi nota`, verbatim. Like mentions_extra, a
+    re-analysis carries it across untouched: the model rewrites the summary
+    around it and never the note itself."""
+
     collections: list[str] = field(default_factory=list)
     """The user's own grouping: a project they are working on, a list they are
     putting together. The only field here nobody but them writes -- the model

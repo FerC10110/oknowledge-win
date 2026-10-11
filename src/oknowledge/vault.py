@@ -37,14 +37,14 @@ MARKER_VERSION = 1
 TRASH = "trash"
 
 HEADINGS = {
-    "es": ("Puntos clave", "Menciones", "Contenido original"),
-    "en": ("Key points", "Mentions", "Original content"),
+    "es": ("Puntos clave", "Menciones", "Contenido original", "Mi nota"),
+    "en": ("Key points", "Mentions", "Original content", "My note"),
 }
 
 FRONTMATTER_ORDER = (
     "url", "title", "category", "tags", "collections", "type", "source",
-    "author", "published", "saved", "cover", "content", "engine", "model",
-    "status", "id", MARKER,
+    "author", "published", "saved", "cover", "length", "rating", "score",
+    "state", "content", "engine", "model", "status", "id", MARKER,
 )
 
 
@@ -88,7 +88,7 @@ def slug(text: str, fallback: str) -> str:
 
 
 def render(note: Note, language: str) -> str:
-    points_heading, mentions_heading, content_heading = HEADINGS.get(
+    points_heading, mentions_heading, content_heading, mine_heading = HEADINGS.get(
         language, HEADINGS["en"])
 
     front = {
@@ -106,6 +106,12 @@ def render(note: Note, language: str) -> str:
         "published": note.published,
         "saved": note.saved,
         "cover": note.cover,
+        # `or None` for the same reason collections and engine have it: a
+        # link has none of these and must not carry four empty lines.
+        "length": note.length or None,
+        "rating": note.rating or None,
+        "score": note.score or None,
+        "state": note.state or None,
         "content": note.content,
         # `or None` for the same reason collections has it: a thousand notes
         # that nobody analysed should not each carry two empty lines.
@@ -130,6 +136,10 @@ def render(note: Note, language: str) -> str:
         lines = bullets.splitlines() + list(note.mentions_extra)
         parts.append(f"## {mentions_heading}\n\n" + "\n".join(lines) + "\n" if lines
                      else f"## {mentions_heading}\n")
+    if note.my_note:
+        # Before the original content, which runs to end of file: a section
+        # after that one is text the reader meant to keep, not a section.
+        parts.append(f"## {mine_heading}\n\n{note.my_note.strip()}\n")
     if note.content == "full" and note.body:
         parts.append(f"## {content_heading}\n\n{note.body.strip()}\n")
     return "\n".join(parts)
@@ -173,6 +183,7 @@ def read_front(path: Path) -> dict | None:
 _POINTS_HEADINGS = {f"## {h[0]}" for h in HEADINGS.values()}
 _MENTIONS_HEADINGS = {f"## {h[1]}" for h in HEADINGS.values()}
 _CONTENT_HEADINGS = {f"## {h[2]}" for h in HEADINGS.values()}
+_MINE_HEADINGS = {f"## {h[3]}" for h in HEADINGS.values()}
 # Any bullet a person types: -, * or +, indented or not.
 _LIST_ITEM = re.compile(r"^\s*[-*+]\s+(?P<text>\S.*)$")
 _BULLET = re.compile(r"^\[(?P<name>.*)\]\((?P<url>.*)\)$")
@@ -196,8 +207,8 @@ def _mention(text: str) -> Mention:
 
 def _split_body(
     body: str,
-) -> tuple[str, list[str], list[Mention] | None, list[str], str | None]:
-    """Return (summary, points, mentions, mentions_extra, original content).
+) -> tuple[str, list[str], list[Mention] | None, list[str], str, str | None]:
+    """Return (summary, points, mentions, mentions_extra, my note, content).
 
     From a body written by render(), or edited by hand. Lines in the mentions
     section that are not bullets come back verbatim as mentions_extra.
@@ -212,6 +223,7 @@ def _split_body(
     points: list[str] = []
     mentions: list[Mention] | None = None
     extra: list[str] = []
+    mine: list[str] = []
     original: list[str] = []
     mode = "summary"
     for line in lines[start:]:
@@ -224,6 +236,8 @@ def _split_body(
             mode = "mentions"
             if mentions is None:
                 mentions = []
+        elif mode != "content" and marker in _MINE_HEADINGS:
+            mode = "mine"
         elif mode == "summary" and marker in _POINTS_HEADINGS:
             mode = "points"
         elif mode == "summary":
@@ -231,6 +245,10 @@ def _split_body(
         elif mode == "points":
             if line.startswith("- "):
                 points.append(line[2:].strip())
+        elif mode == "mine":
+            # Verbatim, every line: what you typed there is prose as often as
+            # it is a list, and a bullet filter would eat the prose.
+            mine.append(line)
         elif mode == "mentions":
             item = _LIST_ITEM.match(line)
             if item:
@@ -240,10 +258,35 @@ def _split_body(
         else:
             original.append(line)
     content = "\n".join(original).strip()
-    return "\n".join(summary).strip(), points, mentions, extra, content or None
+    return ("\n".join(summary).strip(), points, mentions, extra,
+            "\n".join(mine).strip(), content or None)
 
 
 _REQUIRED_TEXT = ("id", "url", "title", "category", "type", "source")
+
+
+def _as_text(value) -> str:
+    """A frontmatter value that has to be text, as a hand-edit leaves it.
+
+    `rating: 8.1` typed in Obsidian parses as a number and means what it
+    looks like; a list or a date in one of these does not, and reads as
+    nothing rather than as its repr."""
+    if isinstance(value, str):
+        return value
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return str(value)
+    return ""
+
+
+def _as_score(value) -> int:
+    """Your stars, as a whole number. `score: muchísimo` is somebody typing
+    in Obsidian, not a note we refuse to read."""
+    if isinstance(value, bool):
+        return 0
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
 
 
 def read_note(path: Path) -> Note | None:
@@ -276,7 +319,7 @@ def read_note(path: Path) -> Note | None:
     # The note is not refused over it: it is the user's note either way.
     made = {key: front.get(key) for key in ("engine", "model")}
     made = {key: value if isinstance(value, str) else "" for key, value in made.items()}
-    summary, points, mentions, extra, body = _split_body(rest)
+    summary, points, mentions, extra, mine, body = _split_body(rest)
     return Note(
         id=required["id"],
         url=required["url"],
@@ -299,6 +342,11 @@ def read_note(path: Path) -> Note | None:
         body=body,
         mentions=mentions,
         mentions_extra=extra,
+        length=_as_text(front.get("length")),
+        rating=_as_text(front.get("rating")),
+        score=_as_score(front.get("score")),
+        state=_as_text(front.get("state")),
+        my_note=mine,
     )
 
 
