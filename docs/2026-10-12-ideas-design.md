@@ -32,6 +32,8 @@ Todo lo de abajo se leyó del código el 2026-10-12 y manda sobre el diseño.
 | `STATE_WORDS` ya mapea tipo de nota → palabras de la interfaz | `web/app.py:363` | una idea es otra fila de esa tabla, no un sistema nuevo |
 | `slug(text, fallback)` cae al id cuando el texto está vacío | `vault.py:87` | una nota todavía sin título igual tiene un nombre de archivo razonable |
 | `_rename_to_title()` reescribe la nota y recién después `os.replace`, y hoy está clavado en `cfg.links_dir` | `pipeline.py:650` | el renombre atómico ya existe; sólo hay que dejarlo trabajar en otro estante |
+| `my_note` es un campo del usuario que ningún proceso pisa, con su `update_note(my_note=...)` y su ruta `POST /item/{id}/mine/note` | `model.py:68`, `vault.py:688` | el texto de una idea no necesita un campo nuevo ni una ruta nueva: ya existen |
+| Un id es `sha256(url normalizada)[:12]` | `urls.py:99` | una idea usa la misma función sobre un uri propio |
 | `collections`: campo del usuario, hasta 16, que ningún reproceso pisa | `docs/2026-10-07-colecciones-design.md` | de ahí salen el tope de links y el molde del formulario |
 | `describe()` relee la nota bajo el lock y aplica sólo los campos del modelo | `pipeline.py` | el completado de una idea se cuelga de ese mismo esqueleto, ya probado |
 
@@ -75,7 +77,7 @@ id: 7f3a9c2e
 - Para alguien que entrena solo y sin entrenador.
 - Lee el registro de series y repeticiones y propone la carga siguiente.
 
-## Mi idea
+## Mi nota
 
 Una app que me arme la rutina del gimnasio según lo que levanté la semana
 pasada, y que me vaya subiendo el peso sola.
@@ -84,11 +86,22 @@ pasada, y que me vaya subiendo el peso sola.
 `type: idea` es lo que distingue una idea de una ficha; hoy ese campo ya
 lleva `movie`, `series`, `anime` y `book`.
 
+Tu texto se guarda en **`my_note`**, el campo que ya existe para lo que
+escribe el usuario y que ningún proceso pisa —es exactamente lo que es— y por
+eso editarlo reusa la ruta `POST /item/{id}/mine/note` en vez de una nueva.
+El precio es que en Obsidian la sección se titula *Mi nota*: cambiarle el
+nombre tocaría el parser de encabezados que comparten todas las notas, en
+todos los idiomas, y no lo vale. En la web la etiqueta dice *Tu idea*.
+
+El `points` del modelo se renderiza como `## Puntos clave`, igual que en
+cualquier otra nota. El campo `body` —el contenido que un link trae de su
+página— queda vacío en una idea.
+
 ### Quién escribe cada campo
 
 | campo | lo escribe | ¿lo pisa *pedir de nuevo*? |
 |---|---|---|
-| tu texto (el cuerpo) | **vos** | **nunca** |
+| tu texto (`my_note`) | **vos** | **nunca** |
 | `title` | vos, o el modelo **sólo si lo dejaste vacío** | nunca |
 | `tags` | el modelo | sí |
 | `summary` | el modelo | sí |
@@ -131,8 +144,9 @@ La sección tiene un botón **Nueva idea** que abre un formulario con un
 textarea (requerido) y un campo de título (opcional). `POST /ideas/guardar`:
 
 1. Si el texto viene vacío, aviso y no se escribe nada.
-2. Se calcula el id —del instante de creación y del texto, como un link lo
-   calcula de su URL— y se escribe la nota con lo que mandaste.
+2. Se calcula el id con la misma función que usa un link,
+   `link_id("idea:<instante ISO con microsegundos>")` —sha256 de un uri
+   propio, los primeros doce— y se escribe la nota con lo que mandaste.
 3. Se reconstruyen los índices del estante.
 4. Se encola el completado y se te manda a la página de la idea.
 
@@ -162,8 +176,9 @@ escribir siempre en `links/`.
 
 ### Editar
 
-La página muestra el título y el texto en un formulario con **Guardar**
-(`POST /item/{id}/mine/text`). Si cambiás el título, la nota se reescribe y
+La página muestra el título y el texto en un formulario con **Guardar**,
+que postea a la ruta que ya existe, `POST /item/{id}/mine/note`, con el
+título como campo opcional que una ficha nunca manda. Si cambiás el título, la nota se reescribe y
 el archivo se renombra con el mismo helper atómico. Renombrar una idea no
 rompe ninguna referencia: **nadie apunta a una idea**, la relación con los
 links vive solamente adentro de la nota de la idea.
@@ -249,7 +264,7 @@ TDD con mutación sobre todo lo nuevo, como el resto del repo.
    los links ni en Ocio, y un link no aparece entre las ideas.
 2. **Crear**: sin texto no se escribe nada; con texto queda la nota, se
    encola el completado y la página responde.
-3. **El completado**: pone título sólo si estaba vacío; no pisa el cuerpo,
+3. **El completado**: pone título sólo si estaba vacío; no pisa tu texto,
    el estado, las estrellas ni los links; una idea borrada mientras pensaba
    no vuelve; el archivo se renombra cuando llega el título; una respuesta
    que no es JSON deja la idea guardada igual.
