@@ -163,3 +163,46 @@ def test_none_of_this_reaches_the_links_shelf(client, a_link_in_the_library, cfg
 ])
 def test_a_card_that_is_not_there(client, what, data):
     assert client.post(f"/item/zzzzzzzzzzzz/mine/{what}", data=data).status_code == 404
+
+
+# --- what the card page offers, and what it does when clicked --------------
+
+def test_a_card_can_be_thrown_away(client, cfg, a_card_in_the_shelf):
+    """El botón está dibujado en la ficha: tiene que hacer lo que dice."""
+    answer = client.post(f"/item/{CARD}/delete", follow_redirects=False)
+    assert answer.status_code == 303
+    assert find_note(cfg, CARD, shelf=cfg.ocio) is None
+    assert (cfg.root / "trash" / "2026-10-11-the-terminator.md").exists()
+
+
+def test_a_cards_tags_can_be_edited_by_hand(client, cfg, a_card_in_the_shelf):
+    """Las etiquetas son los géneros del catálogo; corregirlas a mano es
+    parte del diseño y el modelo nunca las pisa."""
+    client.post(f"/item/{CARD}/tags", data={"tags": "ciencia-ficcion, culto"})
+    assert find_note(cfg, CARD, shelf=cfg.ocio)[1].tags == ["ciencia-ficcion", "culto"]
+
+
+def test_the_card_page_offers_nothing_that_answers_404(client, a_card_in_the_shelf):
+    """Una ficha no se mueve de categoría (la categoría es el tipo), no se
+    reanaliza (no hay página que volver a leer: eso es reescribir el
+    resumen) y no entra en una colección de links. Lo que no se puede
+    hacer no se dibuja."""
+    body = client.get(f"/item/{CARD}").text
+    assert f"/item/{CARD}/delete" in body and f"/item/{CARD}/tags" in body
+    for path in ("category", "reprocess", "collections"):
+        assert f"/item/{CARD}/{path}" not in body
+
+
+def test_a_link_still_offers_all_of_it(client, cfg, a_link_in_the_library):
+    body = client.get(f"/item/{LINK}").text
+    for path in ("category", "reprocess", "collections", "tags", "delete"):
+        assert f"/item/{LINK}/{path}" in body
+
+
+def test_the_popup_of_a_card_opens(client, a_card_in_the_shelf):
+    """La grilla de ocio apunta cada ficha a /embed, que es lo que el
+    popup carga. Un 404 ahí es una tarjeta que no se abre sin salir de la
+    grilla, que es para lo que el popup existe."""
+    answer = client.get(f"/embed/{CARD}")
+    assert answer.status_code == 200
+    assert "The Terminator" in answer.text

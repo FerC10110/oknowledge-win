@@ -107,6 +107,11 @@
       {# A label over each one, visible and not only in an aria attribute:
          three bare boxes in a column say nothing about which is which, and
          the one holding eight tags was the width of a word. #}
+      {# Three of these are a link's and not a card's: a card's category is
+         its kind, a re-analysis would go back to a page it never had (its
+         own button rewrites the summary instead), and a collection groups
+         links. A button that answers 404 is worse than no button. #}
+      {% if not card %}
       <form action="/item/{{ note.id|slug }}/category" method="post" class="field">
         <label for="field-category">{{ t('Move to category') }}</label>
         <span class="row">
@@ -115,6 +120,7 @@
                   aria-label="{{ t('Save') }}">{% include "icon-save.html" %}</button>
         </span>
       </form>
+      {% endif %}
       <form action="/item/{{ note.id|slug }}/tags" method="post" class="field">
         <label for="field-tags">{{ t('Edit tags') }}</label>
         <span class="row">
@@ -123,6 +129,7 @@
                   aria-label="{{ t('Save') }}">{% include "icon-save.html" %}</button>
         </span>
       </form>
+      {% if not card %}
       <form action="/item/{{ note.id|slug }}/collections" method="post" class="field">
         <label for="field-collection">{{ t('Add to a collection') }}</label>
         <span class="row">
@@ -150,6 +157,7 @@
         <button type="submit"
                 onclick="return confirm(this.form.dataset.ask)">{{ t('Reprocess') }}</button>
       </form>
+      {% endif %}
       <form action="/item/{{ note.id|slug }}/delete" method="post" class="row"
             data-ask="{{ t('Move this note to the trash folder?') }}">
         {# The question is read from the attribute, so no quoting of a

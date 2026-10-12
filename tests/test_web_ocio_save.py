@@ -312,3 +312,30 @@ def test_the_button_is_only_for_cards(client, cfg, asked):
     write_note(cfg, link, "es")
     assert client.post("/item/bbbbbbbbbbbb/describe").status_code == 404
     assert asked == []
+
+
+def test_an_index_that_could_not_be_written_is_still_a_card_that_was_saved(
+        client, fake_catalog, cfg, asked, monkeypatch):
+    """Dos respuestas distintas: "no pasó nada" y "la ficha está, el
+    índice quedó atrás". Decir la primera cuando pasó la segunda manda a
+    pegar el título otra vez por una ficha que ya está escrita -- y deja
+    la reescritura sin pedir."""
+    fake_catalog(card=terminator_card())
+
+    def no_indexes(*args, **rest):
+        raise OSError("read-only vault")
+
+    monkeypatch.setattr("oknowledge.web.app.rebuild_indexes", no_indexes)
+    answer = client.post("/ocio/guardar", data=SAVE, follow_redirects=False)
+    assert answer.status_code == 303
+    assert "/item/" in answer.headers["location"]
+    assert "indexes-stale" in answer.headers["location"]
+    assert [n.title for n in all_notes(cfg, shelf=cfg.ocio)] == ["The Terminator"]
+    assert asked == [link_id(IMDB_URL)]
+
+
+def test_a_card_that_was_saved_carries_no_warning(client, fake_catalog):
+    """Y al revés: lo que salió bien no avisa nada."""
+    fake_catalog(card=terminator_card())
+    answer = client.post("/ocio/guardar", data=SAVE, follow_redirects=False)
+    assert "notice" not in answer.headers["location"]

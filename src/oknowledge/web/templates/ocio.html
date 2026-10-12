@@ -61,7 +61,10 @@
           </a>
           <p class="tags">{% for tag in note.tags %}<span>#{{ tag }}</span>{% endfor %}</p>
           <p class="site">
-            {% if note.state %}<span class="state">{{ t(STATE_WORDS[note.state]) }}</span>{% endif %}
+            {# `.get`, with the word itself as the fallback: `state` is a
+               line of frontmatter anybody can type in Obsidian, and a
+               value we do not know is not a reason to lose the page. #}
+            {% if note.state %}<span class="state">{{ t(STATE_WORDS.get(note.state, note.state)) }}</span>{% endif %}
             {# What says a model has been over it: a card is saved complete,
                with the catalog's own English synopsis, and `engine` empty is
                what means nobody has rewritten it yet. #}

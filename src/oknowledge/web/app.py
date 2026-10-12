@@ -772,7 +772,9 @@ def create_app(cfg: Config) -> FastAPI:
         library.refresh()
         if library.error is not None:
             return page(request, "embed.html")
-        entry = library.entry(link_id)
+        # Either shelf: the ocio grid points every card at this route, the
+        # same way the library points every link at it.
+        entry, _ = anywhere(link_id)
         if entry is None:
             raise HTTPException(status_code=404, detail="no such link")
         return page(request, "embed.html", note=read_full(entry))
@@ -828,6 +830,20 @@ def create_app(cfg: Config) -> FastAPI:
     # All of them: POST, behind SameOriginOnly, 303 to a page that reads the
     # result back from the vault, and never a write of their own -- the three
     # vault functions are the only things that touch a file.
+
+    def held_by(link_id: str):
+        """Which Library holds this note and which Shelf to write on.
+
+        The two editing routes a card shares with a link -- the tags and
+        the delete -- are the same three steps over a different index, so
+        the only thing they need to know is where the note lives. Links
+        first, as everywhere else.
+        """
+        for shelves in (library, shelf):
+            shelves.refresh()
+            if shelves.by_id(link_id) is not None:
+                return shelves, shelves.shelf
+        return library, library.shelf
 
     def edit(link_id: str, change, done: str, stale: str, shelves=None) -> Edited:
         """Apply one change to one note, and say what to tell the user.
@@ -889,9 +905,13 @@ def create_app(cfg: Config) -> FastAPI:
 
     @app.post("/item/{link_id}/tags")
     def retag(link_id: str, tags: str = Form("")):
+        # A card's tags are the catalog's genres, and correcting them by
+        # hand is part of the design: the model never writes over them.
+        shelves, which = held_by(link_id)
         wanted = [word for word in tags.replace(",", " ").split() if word]
         result = edit(link_id, lambda cfg, language: update_note(
-            cfg, link_id, language, tags=wanted), "saved", "indexes-stale")
+            cfg, link_id, language, shelf=which, tags=wanted),
+            "saved", "indexes-stale", shelves=shelves)
         if result.notice == MISSING:
             raise HTTPException(status_code=404, detail="no such link")
         return see_other(item_url(link_id), notice=result.notice)
@@ -950,9 +970,13 @@ def create_app(cfg: Config) -> FastAPI:
     @app.post("/item/{link_id}/delete")
     def remove(link_id: str):
         # Moves the file to <vault>/<folder>/trash/. The notice says so,
-        # because "deleted" would be a lie and a worrying one.
+        # because "deleted" would be a lie and a worrying one. A card goes
+        # to the same trash/ by the same route: the page draws the button
+        # for both, so both have to work.
+        shelves, which = held_by(link_id)
         result = edit(link_id, lambda cfg, language: delete_note(
-            cfg, link_id, language), "trashed", "trashed-indexes-stale")
+            cfg, link_id, language, shelf=which),
+            "trashed", "trashed-indexes-stale", shelves=shelves)
         if result.notice == MISSING:
             raise HTTPException(status_code=404, detail="no such link")
         # A note that really went to trash/ sends the user back to the library,
@@ -1373,15 +1397,24 @@ def create_app(cfg: Config) -> FastAPI:
         try:
             write_note(live, note, live.language,
                        path=note_path(live, note, shelf=live.ocio))
-            rebuild_indexes(live, live.language, shelf=live.ocio)
         except (OSError, ProtectedNote):
             return "", "write-failed"
+        notice = ""
+        try:
+            rebuild_indexes(live, live.language, shelf=live.ocio)
+        except OSError as error:
+            # The card is on disk and only the shelf's index is behind,
+            # which is the distinction the editing routes already make:
+            # "nothing happened" would send somebody to paste the title
+            # again over a card that is already there.
+            log.warning("the indexes could not be rebuilt: %s", error)
+            notice = "indexes-stale"
         shelf.refresh()
         if background is not None:
             # After the response and only for a card that was just written:
             # the second save of the same card has nothing to improve.
             background.add_task(describe, live, note.id, trace=progress.note)
-        return note.id, ""
+        return note.id, notice
 
     @app.get("/ocio", response_class=HTMLResponse)
     def leisure(request: Request, tipo: str = "", estado: str = ""):

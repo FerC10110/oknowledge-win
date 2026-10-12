@@ -574,6 +574,12 @@ def _process(cfg: Config, q: Queue, link: str, url: str, mode: str,
         # typed in the section stays.
         mentions_extra=(existing[1].mentions_extra if existing else []),
         collections=(existing[1].collections if existing else []),
+        # A card never reaches here -- this walks a page it downloaded, and
+        # nothing in the ocio shelf has one -- so `score`, `state`,
+        # `my_note`, `length` and `rating` are not carried across. Whoever
+        # points a re-analysis at a card has to carry them, the way these
+        # two are carried, or it will eat them. describe() is the one that
+        # rewrites a card, and it carries everything by re-reading.
     )
     return _save(cfg, q, link, url, note, "ok", "", used, target, trace)
 

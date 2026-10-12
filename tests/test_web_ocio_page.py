@@ -147,6 +147,19 @@ def test_an_unknown_state_shows_everything_rather_than_nothing(client, cfg, esta
     assert "Dune" in body and "The Terminator" in body
 
 
+def test_a_state_nobody_knows_does_not_take_the_page_down(client, cfg):
+    """Un `state:` escrito a mano en Obsidian —o escrito por una versión
+    anterior del programa— es un valor como cualquier otro: la sección lo
+    muestra tal cual y sigue en pie. Un 500 acá se lleva todas las fichas
+    por una palabra en una."""
+    note = terminator()
+    note.state = "abandonada"
+    put(cfg, note)
+    answer = client.get("/ocio")
+    assert answer.status_code == 200
+    assert "The Terminator" in answer.text and "abandonada" in answer.text
+
+
 def test_a_card_nobody_rewrote_is_marked(client, a_card_in_the_shelf):
     body = client.get("/ocio").text.lower()
     assert "not rewritten" in body or "sin reescribir" in body
