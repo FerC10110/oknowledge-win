@@ -24,7 +24,10 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from .ai import AllEnginesFailed, analyze_with_chain, mentions_with_chain
+from .ai import (
+    AllEnginesFailed, analyze_with_chain, describe_with_chain,
+    mentions_with_chain,
+)
 from .ai.base import DEFAULT_LIMIT, UNCATEGORIZED
 from .config import CONTENT_MODES, Config
 from .extract import Unreadable, detect_type, extract
@@ -1226,3 +1229,42 @@ def backfill_mentions(cfg: Config, limit: int | None = None,
         results.append(Result(id=note.id, url=note.url, path=written, status="ok",
                               engine=engine))
     return results
+
+
+def describe(cfg: Config, link_id: str, trace: Tracer | None = None) -> bool:
+    """Rewrite one card's summary and points with the model. True if it did.
+
+    A card is saved complete, in the catalog's English, and is worth
+    reading from that second on; this is the improvement, not the writing.
+    So every failure is a False and nothing else: there is no half note to
+    finish, no queue entry owed, and the card stays exactly as it was.
+
+    Two fields and no more. The category is the kind, the tags are the
+    genres, and the score, the state and your note are yours -- the same
+    promise a re-analysis of a link already keeps for collections.
+    """
+    tell = guarded(trace or SILENT)
+    found = find_note(cfg, link_id, shelf=cfg.ocio)
+    if found is None:
+        return False
+    path, note = found
+    clock = time.monotonic()
+    tell(Step(link=link_id, name="describe", state="start", seconds=0.0))
+    try:
+        summary, points, engine, model = describe_with_chain(cfg, note)
+    except AllEnginesFailed as error:
+        tell(Step(link=link_id, name="describe", state="fail",
+                  seconds=time.monotonic() - clock, detail=str(error)))
+        return False
+    note.summary, note.points = summary, points
+    note.engine, note.model = engine, model
+    try:
+        with Queue().lock(link_id):
+            write_note(cfg, note, cfg.language, path=path)
+    except (Locked, OSError, ProtectedNote) as error:
+        tell(Step(link=link_id, name="describe", state="fail",
+                  seconds=time.monotonic() - clock, detail=str(error)))
+        return False
+    tell(Step(link=link_id, name="describe", state="ok",
+              seconds=time.monotonic() - clock, engine=engine, detail=model))
+    return True

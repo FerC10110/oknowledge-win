@@ -171,3 +171,19 @@ def test_the_shelf_does_not_count_its_own_indexes_as_broken(client, cfg):
     assert "could not be read" not in body
     assert "no se pudieron leer" not in body
     assert "the terminator" in body
+
+
+def test_a_card_nobody_rewrote_offers_the_button(client, a_card_in_the_shelf):
+    body = client.get(f"/item/{a_card_in_the_shelf.id}").text
+    assert f'/item/{a_card_in_the_shelf.id}/describe' in body
+
+
+def test_a_card_the_model_already_wrote_does_not_offer_it(client, cfg):
+    note = terminator()
+    note.engine, note.model = "opencode", "sonnet"
+    put(cfg, note)
+    assert "/describe" not in client.get(f"/item/{note.id}").text
+
+
+def test_a_link_never_offers_it(client, a_link_in_the_library):
+    assert "/describe" not in client.get(f"/item/{a_link_in_the_library.id}").text

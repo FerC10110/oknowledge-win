@@ -39,7 +39,8 @@ from ..config import CONFIG_PATH, CONTENT_MODES, ENGINE_NAMES, MENTION_MODES, Co
 from ..config import save as save_config
 from ..i18n import LANGUAGES, NATIVE_NAMES, translator
 from ..pipeline import add as add_link
-from ..pipeline import download_cover, icon_path, import_links, is_domain, owed
+from ..pipeline import describe, download_cover, icon_path, import_links
+from ..pipeline import is_domain, owed
 from ..pipeline import today
 from ..models_cache import read as read_models
 from ..models_cache import remember as remember_models
@@ -118,6 +119,8 @@ NOTICES = {
     # The catalog answered the search and then had nothing for the one that
     # was picked. Rare, and not the same as the catalog being down.
     "catalogue-silent": "The catalogue has no card for that one. Try another.",
+    # The rewrite runs behind the page, like every other model call here.
+    "rewriting": "Writing the summary now. Reload in a moment to read it.",
     "not-a-link": "That is not a link: it has to be an address, like "
                   "https://example.com/page.",
     "searched": "That is a page of search results, not a page. Open the result "
@@ -907,6 +910,21 @@ def create_app(cfg: Config) -> FastAPI:
             raise HTTPException(status_code=404, detail="no such card")
         return see_other(item_url(link_id), notice=result.notice)
 
+    @app.post("/item/{link_id}/describe")
+    def rewrite_card(background: BackgroundTasks, link_id: str):
+        """Ask the model for this card's summary again, in your language.
+
+        Only the cards: a link is re-read from its page by /reprocess, and
+        a card has no page to re-read -- the catalog already said all it
+        knows and what is left is how it is written.
+        """
+        shelf.refresh()
+        if shelf.by_id(link_id) is None:
+            raise HTTPException(status_code=404, detail="no such card")
+        background.add_task(describe, current["cfg"], link_id,
+                            trace=progress.note)
+        return see_other(item_url(link_id), notice="rewriting")
+
     @app.post("/item/{link_id}/mine/state")
     def set_state(link_id: str, state: str = Form("")):
         return mine(link_id, state=state)
@@ -1333,7 +1351,8 @@ def create_app(cfg: Config) -> FastAPI:
     # and always answers with the library: that is where the note will show
     # up when it is written.
 
-    def save_card(kind: str, candidate) -> tuple[str, str]:
+    def save_card(kind: str, candidate, background: BackgroundTasks | None = None
+                  ) -> tuple[str, str]:
         """Write the card for this candidate. Returns (link id, notice).
 
         An id of "" means nothing was written and the notice says why. The
@@ -1358,6 +1377,10 @@ def create_app(cfg: Config) -> FastAPI:
         except (OSError, ProtectedNote):
             return "", "write-failed"
         shelf.refresh()
+        if background is not None:
+            # After the response and only for a card that was just written:
+            # the second save of the same card has nothing to improve.
+            background.add_task(describe, live, note.id, trace=progress.note)
         return note.id, ""
 
     STATES = ("pending", "doing", "done", "dropped")
@@ -1385,8 +1408,8 @@ def create_app(cfg: Config) -> FastAPI:
                     STATE_WORDS=dict(STATE_ORDER))
 
     @app.get("/ocio/buscar", response_class=HTMLResponse)
-    def card_candidates(request: Request, tipo: str = "", q: str = "",
-                        year: str = ""):
+    def card_candidates(request: Request, background: BackgroundTasks,
+                        tipo: str = "", q: str = "", year: str = ""):
         """Which one you meant. Nothing is saved until somebody says --
         unless only one answer can be meant.
 
@@ -1402,7 +1425,7 @@ def create_app(cfg: Config) -> FastAPI:
         if ref:
             one = Candidate(ref=ref, kind=tipo, via=catalog_type_for(tipo),
                             title=query)
-            saved, notice = save_card(tipo, one)
+            saved, notice = save_card(tipo, one, background)
             if saved:
                 return see_other(item_url(saved), notice=notice)
             # The id was not one the catalog knows. The list says so rather
@@ -1420,7 +1443,7 @@ def create_app(cfg: Config) -> FastAPI:
             # Terminators than an empty page because a digit was mistyped.
             same = [c for c in found if c.year == year]
             if len(same) == 1:
-                saved, notice = save_card(tipo, same[0])
+                saved, notice = save_card(tipo, same[0], background)
                 if saved:
                     return see_other(item_url(saved), notice=notice)
             found = same or found
@@ -1431,8 +1454,8 @@ def create_app(cfg: Config) -> FastAPI:
                     candidates=found[:cards.MOST], failed=failed)
 
     @app.post("/ocio/guardar")
-    def save_the_card(tipo: str = Form(""), ref: str = Form(""),
-                      via: str = Form("")):
+    def save_the_card(background: BackgroundTasks, tipo: str = Form(""),
+                      ref: str = Form(""), via: str = Form("")):
         """The button on a candidate. Written at once, with no model.
 
         The catalog already answered and its synopsis is text; what takes
@@ -1444,7 +1467,7 @@ def create_app(cfg: Config) -> FastAPI:
         candidate = Candidate(ref=ref, kind=tipo,
                               via=via if via in ("movie", "series", "book")
                               else catalog_type_for(tipo), title="")
-        saved, notice = save_card(tipo, candidate)
+        saved, notice = save_card(tipo, candidate, background)
         if not saved:
             return see_other("/ocio", notice=notice)
         return see_other(item_url(saved), notice=notice)

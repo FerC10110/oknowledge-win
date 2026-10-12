@@ -9,7 +9,10 @@ from time import monotonic
 from ..config import Config
 from ..model import Mention
 from ..trace import SILENT, Step, Tracer, write_trace
-from .base import Analysis, AnalysisError, Engine, EngineError, analyze, mentions_only
+from .base import (
+    Analysis, AnalysisError, Engine, EngineError, analyze, describe_card,
+    mentions_only,
+)
 
 
 class AllEnginesFailed(Exception):
@@ -129,6 +132,34 @@ def analyze_with_chain(cfg: Config, text: str, meta: dict, known,
                    seconds=monotonic() - clock, engine=name, detail=model))
         return analysis, name, model
     raise AllEnginesFailed("every engine failed: " + "; ".join(failures))
+
+
+def describe_with_chain(cfg: Config, note) -> tuple[str, list[str], str, str]:
+    """Ask the chain to write a card's summary in the user's language.
+
+    Returns (summary, points, engine name, model). Mirrors the other two:
+    the order is the priority, and every failure is kept for the one error
+    raised when none of them answers.
+    """
+    if not cfg.chain:
+        raise AllEnginesFailed("no engine is enabled: [ai] chain is empty")
+    failures = []
+    answered = False
+    for name in cfg.chain:
+        try:
+            engine = build_engine(name, cfg)
+            summary, points = describe_card(engine, note, cfg.language)
+        except AnalysisError as error:
+            # The engine replied; what it said was no use.
+            answered = True
+            failures.append(f"{name}: {error}")
+            continue
+        except EngineError as error:
+            failures.append(f"{name}: {error}")
+            continue
+        return summary, points, name, str(getattr(engine, "model", ""))
+    raise AllEnginesFailed("every engine failed: " + "; ".join(failures),
+                           answered=answered)
 
 
 def mentions_with_chain(cfg: Config, text: str,

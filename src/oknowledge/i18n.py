@@ -161,6 +161,9 @@ STRINGS = {
         "Reading that link now. It shows up in the library when it is done.":
             "Leyendo ese link. Aparece en la biblioteca cuando termina.",
         "You already have that link.": "Ese link ya lo tenés.",
+        "Writing the summary now. Reload in a moment to read it.":
+            "Escribiendo el resumen. Recargá en un momento para leerlo.",
+        "Rewrite the summary": "Reescribir el resumen",
         "The catalogue has no card for that one. Try another.":
             "El catálogo no tiene ficha de esa. Probá con otra.",
         "Write what to look for after the colon, like película:Terminator.":

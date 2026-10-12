@@ -401,6 +401,52 @@ def render_mentions_prompt(text: str, meta: dict, language: str, mode: str,
     return re.sub(r"\{\{([A-Z]+)\}\}", lambda m: values.get(m.group(1), m.group(0)), template)
 
 
+CARD_KINDS = {"movie": "película", "series": "serie",
+              "anime": "anime", "book": "libro"}
+
+
+def render_card_prompt(note, language: str) -> str:
+    """The prompt that asks for a card's summary and nothing else.
+
+    No text to read and no categories to choose from: the catalog's own
+    facts are the whole input, the category is the kind, and the tags are
+    the genres. What is asked for is what a model is actually better at
+    than a catalog -- saying what the thing is, in your language.
+    """
+    template = files("oknowledge").joinpath("prompts/ficha.txt").read_text(encoding="utf-8")
+    values = {
+        "LANGUAGE": LANGUAGE_NAMES.get(language, language),
+        "KIND": CARD_KINDS.get(note.type, note.type),
+        "TITLE": note.title,
+        "YEAR": (note.published or "")[:4],
+        "PEOPLE": note.author or "",
+        "GENRES": ", ".join(note.tags),
+        "LENGTH": note.length,
+        "RATING": note.rating,
+        "SYNOPSIS": note.summary.strip(),
+    }
+    # One pass, like render_prompt: a title that looks like a placeholder is
+    # never substituted a second time.
+    return re.sub(r"\{\{([A-Z]+)\}\}",
+                  lambda m: values.get(m.group(1), m.group(0)), template)
+
+
+def describe_card(engine: Engine, note, language: str) -> tuple[str, list[str]]:
+    """(summary, points) for one card, or AnalysisError if the answer is no
+    use. No retry: there is no page to re-read and no second thing to ask."""
+    data = extract_json(engine.complete(render_card_prompt(note, language)))
+    if "summary" not in data:
+        raise AnalysisError("the answer is missing: summary")
+    summary = _text(data, "summary")
+    if not summary:
+        raise AnalysisError("the answer has an empty summary")
+    points = [
+        p.strip() for p in _items(data, "points") if isinstance(p, str)
+        and p.strip() and not _is_placeholder(p)
+    ] if "points" in data else []
+    return summary, points[:MAX_POINTS]
+
+
 def mentions_only(engine: Engine, text: str, meta: dict, language: str,
                   mode: str, limit: int = DEFAULT_LIMIT) -> list[Mention]:
     """Ask for the mentions and nothing else.

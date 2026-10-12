@@ -85,6 +85,14 @@
                     >{{ '★' if n <= note.score else '☆' }}</button>
           {% endfor %}
         </form>
+        {% if not note.engine %}
+          {# The catalog's own English is what the summary still is. The
+             button is here and not on every card: once a model has been
+             over it, asking again is a model call for nothing. #}
+          <form action="/item/{{ note.id|slug }}/describe" method="post" class="row">
+            <button type="submit">{{ t('Rewrite the summary') }}</button>
+          </form>
+        {% endif %}
         <form action="/item/{{ note.id|slug }}/mine/note" method="post" class="field">
           <label for="field-mine">{{ t('Your note') }}</label>
           <textarea id="field-mine" name="my_note" rows="3"

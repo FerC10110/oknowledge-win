@@ -100,6 +100,17 @@ def fake_catalog(monkeypatch):
     return faker
 
 
+@pytest.fixture(autouse=True)
+def asked(monkeypatch):
+    """Which cards were handed to the rewrite. Autouse: saving a card now
+    queues a model call, and a test that is about something else must not
+    make one. The real one is a chain call; what the route owes it is the id."""
+    calls = []
+    monkeypatch.setattr("oknowledge.web.app.describe",
+                        lambda cfg, link_id, **rest: calls.append(link_id))
+    return calls
+
+
 def test_the_card_lands_in_the_ocio_shelf(client, fake_catalog, cfg):
     fake_catalog(card=terminator_card())
     answer = client.post("/ocio/guardar", data=SAVE, follow_redirects=False)
@@ -238,3 +249,44 @@ def test_an_id_the_catalogue_does_not_know_is_a_page_and_not_a_crash(client, fak
     fake_catalog(card=None)
     answer = client.get("/ocio/buscar?tipo=movie&q=tt0000000")
     assert answer.status_code == 200
+
+
+def test_saving_a_card_asks_for_the_rewrite_afterwards(client, fake_catalog, asked):
+    fake_catalog(card=terminator_card())
+    client.post("/ocio/guardar", data=SAVE)
+    assert asked == [link_id(IMDB_URL)]      # en segundo plano, no en la request
+
+
+def test_a_card_that_was_not_written_is_not_rewritten(client, fake_catalog, asked):
+    fake_catalog(card=None)
+    client.post("/ocio/guardar", data=SAVE)
+    assert asked == []
+
+
+def test_saving_the_same_card_twice_does_not_rewrite_it_again(client, fake_catalog,
+                                                              asked):
+    """La segunda vez no se escribió nada: tampoco hay nada que mejorar."""
+    fake_catalog(card=terminator_card())
+    client.post("/ocio/guardar", data=SAVE)
+    client.post("/ocio/guardar", data=SAVE)
+    assert asked == [link_id(IMDB_URL)]
+
+
+def test_the_button_asks_again(client, fake_catalog, cfg, asked):
+    fake_catalog(card=terminator_card())
+    client.post("/ocio/guardar", data=SAVE)
+    asked.clear()
+    answer = client.post(f"/item/{link_id(IMDB_URL)}/describe",
+                         follow_redirects=False)
+    assert answer.status_code == 303
+    assert asked == [link_id(IMDB_URL)]
+
+
+def test_the_button_is_only_for_cards(client, cfg, asked):
+    from oknowledge.model import Note
+    link = Note(id="bbbbbbbbbbbb", url="https://example.com/x", title="Página",
+                category="Redes", tags=[], type="article", source="example.com",
+                saved="2026-10-10", summary="Algo.")
+    write_note(cfg, link, "es")
+    assert client.post("/item/bbbbbbbbbbbb/describe").status_code == 404
+    assert asked == []

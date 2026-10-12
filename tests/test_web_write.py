@@ -51,6 +51,9 @@ WRITE_ROUTES = [
     # Your own three fields on a card. A cross-site POST here would rewrite
     # what you thought of something, which is the one thing nothing else
     # writes.
+    # Asking the model for a card's summary again. A cross-site POST here
+    # would spend the user's quota, the same reason /retry is on this list.
+    ("/item/a1/describe", {}),
     ("/item/a1/mine/state", {"state": "done"}),
     ("/item/a1/mine/score", {"score": "4"}),
     ("/item/a1/mine/note", {"my_note": "x"}),
