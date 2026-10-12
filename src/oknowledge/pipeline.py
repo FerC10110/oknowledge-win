@@ -25,18 +25,20 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from .ai import (
-    AllEnginesFailed, analyze_with_chain, describe_with_chain,
-    mentions_with_chain,
+    AllEnginesFailed, analyze_with_chain, complete_idea_with_chain,
+    describe_with_chain, mentions_with_chain,
 )
 from .ai.base import DEFAULT_LIMIT, UNCATEGORIZED
-from .config import CONTENT_MODES, Config
+from .config import CONTENT_MODES, Config, Shelf
 from .extract import Unreadable, detect_type, extract
+from .ideas import clean_title
 from .model import Extracted, Note, QueueEntry
 from .net import fetch
 from .queue import Locked, Queue
 from .trace import SILENT, Step, Tracer, guarded
 from .urls import link_id, normalize
 from .vault import (
+    IndexesStale,
     ProtectedNote,
     all_notes,
     categories,
@@ -647,7 +649,8 @@ def _save(cfg: Config, q: Queue, link: str, url: str, note: Note, status: str,
                   error=error or None, warnings=warnings)
 
 
-def _rename_to_title(cfg: Config, note: Note, path: Path) -> tuple[Path, str | None]:
+def _rename_to_title(cfg: Config, note: Note, path: Path,
+                     shelf: Shelf | None = None) -> tuple[Path, str | None]:
     """Move a reprocessed note onto the name its title now earns.
 
     Returns where the note ended up, and a warning if it could not be moved.
@@ -662,11 +665,15 @@ def _rename_to_title(cfg: Config, note: Note, path: Path) -> tuple[Path, str | N
     under the new name and unlinked from the old: os.replace is atomic, so
     there is no instant at which two files carry the same id, which is the
     thing all of this exists to prevent.
+
+    `shelf` is where the note lives: the links unless it says otherwise,
+    which an idea getting its name does.
     """
     wanted = f"{note_stem(note)}.md"
     squatted = (f"the note kept the name {path.name}: another file already "
                 f"holds {wanted}")
-    ideal = _usable_name(cfg, cfg.links_dir / wanted)
+    shelf = shelf or cfg.links
+    ideal = _usable_name(cfg, shelf.dir / wanted, shelf)
     if ideal is None:
         return path, squatted
     if ideal == path:
@@ -695,7 +702,7 @@ def _rename_to_title(cfg: Config, note: Note, path: Path) -> tuple[Path, str | N
     return ideal, None
 
 
-def _usable_name(cfg: Config, ideal: Path) -> Path | None:
+def _usable_name(cfg: Config, ideal: Path, shelf: Shelf | None = None) -> Path | None:
     """The resolved ideal path, if it really is a free name in the links folder.
 
     The name is resolved before anything moves onto it, so a symlink sitting
@@ -718,7 +725,8 @@ def _usable_name(cfg: Config, ideal: Path) -> Path | None:
         resolved = ensure_inside_root(cfg, ideal)
     except (ProtectedNote, OSError):
         return None
-    return resolved if resolved.parent == cfg.links_dir.resolve() else None
+    shelf = shelf or cfg.links
+    return resolved if resolved.parent == shelf.dir.resolve() else None
 
 
 def _record(q: Queue, link: str, status: str, reason: str,
@@ -1293,3 +1301,83 @@ def describe(cfg: Config, link_id: str, trace: Tracer | None = None) -> bool:
     tell(Step(link=link_id, name="describe", state="ok",
               seconds=time.monotonic() - clock, engine=engine, detail=model))
     return True
+
+
+def complete_idea(cfg: Config, idea: str, trace: Tracer | None = None) -> bool:
+    """Fill in one idea with the model: a name if it has none, the tags, a
+    one-line summary and the points. True if it did.
+
+    The idea is on disk, with your text, from the second it was saved; this
+    is the improvement and not the saving, so every failure is a False and
+    the idea stays exactly as it was. It is describe() for an idea, and it
+    keeps the same promise: the model's fields and nothing else.
+    """
+    tell = guarded(trace or SILENT)
+    found = find_note(cfg, idea, shelf=cfg.ideas)
+    if found is None:
+        return False
+    clock = time.monotonic()
+    tell(Step(link=idea, name="complete", state="start", seconds=0.0))
+    try:
+        answer, engine, model = complete_idea_with_chain(cfg, found[1])
+    except AllEnginesFailed as error:
+        tell(Step(link=idea, name="complete", state="fail",
+                  seconds=time.monotonic() - clock, detail=str(error)))
+        return False
+    trouble = None
+    try:
+        with Queue().lock(idea):
+            # Read again, under the lock: the idea's page was open the whole
+            # time, and the state, the stars, the links or the text itself
+            # may have changed while the model wrote.
+            fresh = find_note(cfg, idea, shelf=cfg.ideas)
+            if fresh is None:
+                # Thrown away in the meantime. Writing it back would
+                # resurrect an idea somebody deleted.
+                tell(Step(link=idea, name="complete", state="fail",
+                          seconds=time.monotonic() - clock,
+                          detail="the idea is no longer there"))
+                return False
+            path, note = fresh
+            if not note.title.strip():
+                # Only an idea with no name gets one. A title somebody typed,
+                # or one a first answer gave and they kept, is theirs.
+                note.title = answer.title
+            note.tags, note.summary, note.points = answer.tags, answer.summary, answer.points
+            note.engine, note.model = engine, model
+            path = write_note(cfg, note, cfg.language, path=path)
+            # Named after its id until now: the name follows the title, and
+            # nothing points at an idea, so nothing else has to follow.
+            path, trouble = _rename_to_title(cfg, note, path, shelf=cfg.ideas)
+            rebuild_indexes(cfg, cfg.language, shelf=cfg.ideas)
+    except (Locked, OSError, ProtectedNote) as error:
+        tell(Step(link=idea, name="complete", state="fail",
+                  seconds=time.monotonic() - clock, detail=str(error)))
+        return False
+    tell(Step(link=idea, name="complete", state="ok",
+              seconds=time.monotonic() - clock, engine=engine,
+              detail=trouble or model))
+    return True
+
+
+def retitle_idea(cfg: Config, idea: str, title: str, text: str,
+                 language: str) -> tuple[Path, str | None] | None:
+    """Save an idea's title and text from its page, and move the file onto
+    the name the title earns. The caller holds the idea's lock.
+
+    Returns (where it is now, why it could not be renamed or None), or None
+    when there is no such idea. Raises IndexesStale when the note landed and
+    only the index is behind -- the editing routes tell those two apart.
+    """
+    found = find_note(cfg, idea, shelf=cfg.ideas)
+    if found is None:
+        return None
+    path, note = found
+    note.title, note.my_note = clean_title(title), text.strip()
+    path = write_note(cfg, note, language, path=path)
+    path, trouble = _rename_to_title(cfg, note, path, shelf=cfg.ideas)
+    try:
+        rebuild_indexes(cfg, language, shelf=cfg.ideas)
+    except OSError as error:
+        raise IndexesStale((path, trouble), error) from error
+    return path, trouble
