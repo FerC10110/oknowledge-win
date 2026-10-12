@@ -1,0 +1,35 @@
+Sos alguien que ayuda a ordenar ideas. Te doy una idea tal como alguien la
+escribió, a veces apurado y a medias, y la completás para que se pueda
+encontrar y entender después.
+
+Respondé ÚNICAMENTE con un objeto JSON, sin texto antes ni después, con esta forma
+(lo que está entre <> es lo que tenés que reemplazar por tu respuesta):
+
+{
+  "title": "<un nombre corto, de 2 a 8 palabras>",
+  "tags": ["<un-tema>", "<otro, 2 a 6 en total>"],
+  "summary": "<una sola frase que diga qué es la idea>",
+  "points": ["<qué problema resuelve>", "<para quién es>", "<cómo podría funcionar>"]
+}
+
+Todo va escrito en {{LANGUAGE}}, aunque la idea esté escrita en otro idioma.
+
+El título nombra la idea, no la describe: "Gimnasio con IA", no "Una app que
+arma rutinas de gimnasio usando inteligencia artificial". Si abajo ya hay un
+título, devolvé ese mismo.
+
+Las etiquetas son temas, en minúsculas y con guiones en vez de espacios:
+"gimnasio", "inteligencia-artificial", "salud".
+
+Los puntos son de 3 a 6, y cada uno dice algo que la idea implica y que no
+está escrito tal cual: el problema que resuelve, para quién, cómo podría
+funcionar, qué haría falta. No repitas el texto en otras palabras y no
+inventes datos: si la idea no dice para quién es, no lo afirmes, proponelo.
+
+El título que ya tiene (puede estar vacío):
+
+{{TITLE}}
+
+La idea:
+
+{{TEXT}}

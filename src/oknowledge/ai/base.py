@@ -449,6 +449,55 @@ def describe_card(engine: Engine, note, language: str) -> tuple[str, list[str]]:
     return summary, points[:MAX_POINTS]
 
 
+@dataclass(frozen=True)
+class IdeaAnswer:
+    """What a model adds to an idea. The text is the user's, and is not here."""
+
+    title: str
+    tags: list[str]
+    summary: str
+    points: list[str]
+
+
+def render_idea_prompt(note, language: str) -> str:
+    """The prompt that asks a model to fill in an idea from what was typed."""
+    template = files("oknowledge").joinpath("prompts/idea.txt").read_text(encoding="utf-8")
+    values = {
+        "LANGUAGE": LANGUAGE_NAMES.get(language, language),
+        "TITLE": note.title,
+        "TEXT": note.my_note.strip(),
+    }
+    # One pass, like render_card_prompt: a text that looks like a
+    # placeholder is never substituted a second time.
+    return re.sub(r"\{\{([A-Z]+)\}\}",
+                  lambda m: values.get(m.group(1), m.group(0)), template)
+
+
+def complete_idea(engine: Engine, note, language: str) -> IdeaAnswer:
+    """The title, tags, summary and points for one idea, or AnalysisError if
+    the answer is no use.
+
+    A title is asked for every time and used only when the idea has none.
+    The caller decides that, because only the caller reads the idea again,
+    under its lock, after the minutes this takes.
+    """
+    data = extract_json(engine.complete(render_idea_prompt(note, language)))
+    for key in ("title", "summary"):
+        if key not in data:
+            raise AnalysisError(f"the answer is missing: {key}")
+    title = " ".join(_text(data, "title").split())[:MAX_IDEA_TITLE].strip()
+    summary = " ".join(_text(data, "summary").split())
+    if not title or not summary:
+        raise AnalysisError("the answer has an empty title or summary")
+    tags = normalize_tags(_items(data, "tags")) if "tags" in data else []
+    points = [
+        p.strip() for p in _items(data, "points") if isinstance(p, str)
+        and p.strip() and not _is_placeholder(p)
+    ] if "points" in data else []
+    return IdeaAnswer(title=title, tags=tags, summary=summary,
+                      points=points[:MAX_POINTS])
+
+
 def mentions_only(engine: Engine, text: str, meta: dict, language: str,
                   mode: str, limit: int = DEFAULT_LIMIT) -> list[Mention]:
     """Ask for the mentions and nothing else.

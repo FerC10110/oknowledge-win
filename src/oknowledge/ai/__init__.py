@@ -10,8 +10,8 @@ from ..config import Config
 from ..model import Mention
 from ..trace import SILENT, Step, Tracer, write_trace
 from .base import (
-    Analysis, AnalysisError, Engine, EngineError, analyze, describe_card,
-    mentions_only,
+    Analysis, AnalysisError, Engine, EngineError, IdeaAnswer, analyze,
+    complete_idea, describe_card, mentions_only,
 )
 
 
@@ -158,6 +158,30 @@ def describe_with_chain(cfg: Config, note) -> tuple[str, list[str], str, str]:
             failures.append(f"{name}: {error}")
             continue
         return summary, points, name, str(getattr(engine, "model", ""))
+    raise AllEnginesFailed("every engine failed: " + "; ".join(failures),
+                           answered=answered)
+
+
+def complete_idea_with_chain(cfg: Config, note) -> tuple[IdeaAnswer, str, str]:
+    """Ask the chain to fill in an idea. Returns (answer, engine name,
+    model). Mirrors describe_with_chain: the order is the priority, and
+    every failure is kept for the one error raised when none answers."""
+    if not cfg.chain:
+        raise AllEnginesFailed("no engine is enabled: [ai] chain is empty")
+    failures = []
+    answered = False
+    for name in cfg.chain:
+        try:
+            engine = build_engine(name, cfg)
+            answer = complete_idea(engine, note, cfg.language)
+        except AnalysisError as error:
+            answered = True
+            failures.append(f"{name}: {error}")
+            continue
+        except EngineError as error:
+            failures.append(f"{name}: {error}")
+            continue
+        return answer, name, str(getattr(engine, "model", ""))
     raise AllEnginesFailed("every engine failed: " + "; ".join(failures),
                            answered=answered)
 
