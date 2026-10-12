@@ -144,6 +144,8 @@ STRINGS = {
         "Reading that link now. It shows up in the library when it is done.":
             "Leyendo ese link. Aparece en la biblioteca cuando termina.",
         "You already have that link.": "Ese link ya lo tenés.",
+        "The catalogue has no card for that one. Try another.":
+            "El catálogo no tiene ficha de esa. Probá con otra.",
         "Write what to look for after the colon, like película:Terminator.":
             "Escribí qué buscar después de los dos puntos, como "
             "película:Terminator.",

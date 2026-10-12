@@ -60,6 +60,16 @@ class Wanted:
     ref: str = ""       # an id typed instead of a title, in catalog form
 
 
+def reference(query: str) -> str:
+    """The catalog id this text is, or "" if it is a title like any other."""
+    if _IMDB.match(query):
+        return query
+    if _OPENLIBRARY.match(query):
+        # The catalog knows a book by its whole key, never by the id alone.
+        return f"/works/{query.upper()}"
+    return ""
+
+
 def prefixed(raw: str) -> bool:
     """True when the line starts with one of the nine words and a colon.
 
@@ -88,13 +98,7 @@ def wanted(raw: str) -> Wanted | None:
     if not query:
         return None
 
-    ref = ""
-    if _IMDB.match(query):
-        ref = query
-    elif _OPENLIBRARY.match(query):
-        # The catalog knows a book by its whole key, never by the id alone.
-        ref = f"/works/{query.upper()}"
-
+    ref = reference(query)
     # An id can never also carry a year: _YEAR needs a space in front of it
     # and neither id pattern has one.
     year = ""

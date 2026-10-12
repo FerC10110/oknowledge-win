@@ -45,6 +45,9 @@ WRITE_ROUTES = [
     # Pasting a link. A cross-site POST here would have somebody else's page
     # read, summarised and written into this vault.
     ("/add", {"url": "https://e.com/zz", "content": "full"}),
+    # Saving a card. A cross-site POST here would reach a catalog and write
+    # a note into this vault, with a picture downloaded into it.
+    ("/ocio/guardar", {"tipo": "movie", "ref": "tt0088247", "via": "movie"}),
     # Asking an engine for its models. A cross-site POST here would run
     # `opencode models` and reach the user's provider with their key.
     ("/settings/models/opencode", {}),

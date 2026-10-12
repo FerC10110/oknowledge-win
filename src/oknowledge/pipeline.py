@@ -105,8 +105,13 @@ class Result:
     warnings: list[str] = field(default_factory=list)
 
 
-def _today() -> str:
+def today() -> str:
+    """The date a note is saved on, in UTC. Public since the web writes
+    notes of its own now: a card is written by a route, not by a run."""
     return dt.datetime.now(dt.timezone.utc).date().isoformat()
+
+
+_today = today
 
 
 def _now_iso() -> str:

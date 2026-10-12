@@ -30,7 +30,7 @@ from starlette.datastructures import Headers
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from .. import cards, env, places
-from ..catalog import cinemeta, openlibrary
+from ..catalog import Candidate, cinemeta, openlibrary
 from ..ai import build_engine
 from ..ai.base import normalize_collections
 from ..ai.providers import PROVIDERS
@@ -39,7 +39,8 @@ from ..config import CONFIG_PATH, CONTENT_MODES, ENGINE_NAMES, MENTION_MODES, Co
 from ..config import save as save_config
 from ..i18n import LANGUAGES, NATIVE_NAMES, translator
 from ..pipeline import add as add_link
-from ..pipeline import icon_path, import_links, is_domain, owed
+from ..pipeline import download_cover, icon_path, import_links, is_domain, owed
+from ..pipeline import today
 from ..models_cache import read as read_models
 from ..models_cache import remember as remember_models
 from ..queue import Locked, Queue
@@ -47,7 +48,8 @@ from ..trace import trace_run
 from ..urls import is_search_url, link_id, normalize
 from ..vault import (
     BadCategory, IndexesStale, ProtectedNote, clean_category, delete_note,
-    rename_category, update_note,
+    find_note, note_path, rebuild_indexes, rename_category, update_note,
+    write_note,
 )
 from ..whatsapp import BadExport, parse as parse_export
 from .batch import Batch
@@ -112,6 +114,9 @@ NOTICES = {
     # question they did not ask.
     "no-title": "Write what to look for after the colon, like "
                 "película:Terminator.",
+    # The catalog answered the search and then had nothing for the one that
+    # was picked. Rare, and not the same as the catalog being down.
+    "catalogue-silent": "The catalogue has no card for that one. Try another.",
     "not-a-link": "That is not a link: it has to be an address, like "
                   "https://example.com/page.",
     "searched": "That is a page of search results, not a page. Open the result "
@@ -348,6 +353,16 @@ def preview_of(scan, known: set[str]) -> dict:
     }
 
 
+def catalog_type_for(kind: str) -> str:
+    """Which catalog shelf a kind is asked of by default."""
+    return "book" if kind == "book" else cinemeta.catalog_type(kind)
+
+
+def catalog_of(via: str):
+    """The client that answers for a catalog shelf."""
+    return openlibrary if via == "book" else cinemeta
+
+
 def catalogs_for(kind: str) -> list[tuple[object, str]]:
     """Which catalogs to ask, in the order the answers are shown.
 
@@ -575,6 +590,9 @@ def create_app(cfg: Config) -> FastAPI:
     app = FastAPI(title="oknowledge", docs_url=None, redoc_url=None)
     app.add_middleware(SameOriginOnly)
     library = Library(cfg)
+    # The cards. A second index over a second folder, so a page of films
+    # costs nothing to the 1184 links and the two can never mix.
+    shelf = Library(cfg, shelf=cfg.ocio)
     # The settings page can change the engine chain while the server runs. The
     # vault paths it cannot change, so the library stays valid either way.
     current = {"cfg": cfg}
@@ -680,12 +698,26 @@ def create_app(cfg: Config) -> FastAPI:
         return page(request, "library.html", notes=None, hits=found, category=None,
                     tag=None, query=q, **pager("/search", {"q": q}, number, pages))
 
+    def anywhere(link_id: str):
+        """(entry, the shelf it is on), looking in the links first.
+
+        One note page and one cover route serve both shelves: a card is a
+        note, and everything a note page does -- read it, edit it, throw it
+        away -- it does for a card too.
+        """
+        for shelves in (library, shelf):
+            shelves.refresh()
+            entry = shelves.entry(link_id)
+            if entry is not None:
+                return entry, shelves.shelf
+        return None, None
+
     @app.get("/item/{link_id}", response_class=HTMLResponse)
     def item(request: Request, link_id: str):
         library.refresh()
         if library.error is not None:
             return page(request, "item.html")
-        entry = library.entry(link_id)
+        entry, _ = anywhere(link_id)
         if entry is None:
             raise HTTPException(status_code=404, detail="no such link")
         # The index holds list views without bodies; this note is read fresh.
@@ -709,13 +741,15 @@ def create_app(cfg: Config) -> FastAPI:
 
     @app.get("/cover/{link_id}")
     def cover(link_id: str):
-        library.refresh()
-        note = library.by_id(link_id)
+        entry, where = anywhere(link_id)
+        note = entry.note if entry is not None else None
         if note is None or not note.cover:
             raise HTTPException(status_code=404, detail="no cover")
         # note.cover comes from frontmatter the user can edit: untrusted input.
         try:
-            path = (cfg.links_dir / note.cover).resolve()
+            # Relative to the folder the note is in, which is the shelf's:
+            # a card's "../attachments/x.png" starts from ocio/, not links/.
+            path = (where.dir / note.cover).resolve()
             inside = cfg.attachments_dir.resolve() in path.parents
             usable = inside and path.suffix.lower() in IMAGE_TYPES and path.is_file()
         except (OSError, ValueError):
@@ -1235,27 +1269,97 @@ def create_app(cfg: Config) -> FastAPI:
     # and always answers with the library: that is where the note will show
     # up when it is written.
 
+    def save_card(kind: str, candidate) -> tuple[str, str]:
+        """Write the card for this candidate. Returns (link id, notice).
+
+        An id of "" means nothing was written and the notice says why. The
+        catalog is asked first and the vault is touched afterwards: a
+        lookup that fails at the last step must leave no half note behind.
+        """
+        full = catalog_of(candidate.via).card(candidate)
+        if full is None:
+            return "", "catalogue-silent"
+        found = find_note(current["cfg"], link_id(full.url), shelf=current["cfg"].ocio)
+        if found is not None:
+            # Two tabs on the same button. The note that is already there is
+            # the one with your score in it, so it stays exactly as it is.
+            return found[1].id, "already-saved"
+        live = current["cfg"]
+        note = cards.note_from_card(full, kind, live.language, today())
+        note.cover = download_cover(live, full.poster, note.id)
+        try:
+            write_note(live, note, live.language,
+                       path=note_path(live, note, shelf=live.ocio))
+            rebuild_indexes(live, live.language, shelf=live.ocio)
+        except (OSError, ProtectedNote):
+            return "", "write-failed"
+        shelf.refresh()
+        return note.id, ""
+
     @app.get("/ocio/buscar", response_class=HTMLResponse)
-    def card_candidates(request: Request, tipo: str = "", q: str = ""):
-        """Which one you meant. Nothing is saved until somebody says.
+    def card_candidates(request: Request, tipo: str = "", q: str = "",
+                        year: str = ""):
+        """Which one you meant. Nothing is saved until somebody says --
+        unless only one answer can be meant.
 
         Cinemeta answers "terminator" with Judgment Day first and the 1984
-        one second, so picking is the feature and not a step in the way.
+        one second, so picking is usually the feature and not a step in the
+        way. An id names one thing, and so does a year that leaves one
+        candidate: both skip the list.
         """
         query = " ".join(q.split())[:cards.LONGEST]
         if tipo not in cards.KINDS or not query:
             raise HTTPException(status_code=404, detail="no such search")
+        ref = cards.reference(query)
+        if ref:
+            one = Candidate(ref=ref, kind=tipo, via=catalog_type_for(tipo),
+                            title=query)
+            saved, notice = save_card(tipo, one)
+            if saved:
+                return see_other(item_url(saved), notice=notice)
+            # The id was not one the catalog knows. The list says so rather
+            # than a notice on the library: this page is where it was asked.
+            return page(request, "candidates.html", kind=tipo, query_text=query,
+                        candidates=[], failed="")
         found: list = []
         failed = ""
         for client, via in catalogs_for(tipo):
             rows, why = client.search(tipo, query, via=via)
             found.extend(rows)
             failed = failed or why
+        if year:
+            # A year nobody matches leaves the whole list: better the six
+            # Terminators than an empty page because a digit was mistyped.
+            same = [c for c in found if c.year == year]
+            if len(same) == 1:
+                saved, notice = save_card(tipo, same[0])
+                if saved:
+                    return see_other(item_url(saved), notice=notice)
+            found = same or found
         # The reason travels even when there are rows; the page shows it
         # only when there are none, because one of the two catalogs being
         # down while the other answers is not a failure anybody reads about.
         return page(request, "candidates.html", kind=tipo, query_text=query,
                     candidates=found[:cards.MOST], failed=failed)
+
+    @app.post("/ocio/guardar")
+    def save_the_card(tipo: str = Form(""), ref: str = Form(""),
+                      via: str = Form("")):
+        """The button on a candidate. Written at once, with no model.
+
+        The catalog already answered and its synopsis is text; what takes
+        minutes is the rewrite in Spanish, and that happens later over a
+        note that already exists.
+        """
+        if tipo not in cards.KINDS or not ref:
+            raise HTTPException(status_code=404, detail="no such card")
+        candidate = Candidate(ref=ref, kind=tipo,
+                              via=via if via in ("movie", "series", "book")
+                              else catalog_type_for(tipo), title="")
+        saved, notice = save_card(tipo, candidate)
+        if not saved:
+            return see_other("/ocio", notice=notice)
+        return see_other(item_url(saved), notice=notice)
 
     @app.post("/add")
     def add_pasted(background: BackgroundTasks, url: str = Form(""),
@@ -1271,7 +1375,11 @@ def create_app(cfg: Config) -> FastAPI:
         # back as "that is not a link".
         asked = cards.wanted(url)
         if asked is not None:
-            return see_other("/ocio/buscar", tipo=asked.kind, q=asked.query)
+            # The year travels as its own parameter and not as part of the
+            # query: the catalog searches by title, and the year is what
+            # picks among the answers.
+            return see_other("/ocio/buscar", tipo=asked.kind, q=asked.query,
+                             year=asked.year)
         if cards.prefixed(url):
             return see_other("/", notice="no-title")
         clean = pasted_link(url)
