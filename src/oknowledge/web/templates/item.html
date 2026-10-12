@@ -1,11 +1,11 @@
 {% extends "base.html" %}
-{% block title %}{{ note.title }} - oknowledge{% endblock %}
+{% block title %}{{ note.title or t('Untitled idea') }} - oknowledge{% endblock %}
 {% block main %}
   <article class="item">
     <p class="meta"><span class="cat">{{ note.category }}</span> · {{ note.source }} · {{ note.saved }}
       {% if note.status != 'ok' %}<span class="warn">{{ t('Incomplete') }}</span>{% endif %}
       {% include "engine-badge.html" %}</p>
-    <h1 dir="auto">{{ note.title }}</h1>
+    <h1 dir="auto">{{ note.title or t('Untitled idea') }}</h1>
     <p class="tags">{% for tag in note.tags %}<a href="/?tag={{ tag|urlencode }}">#{{ tag }}</a>{% endfor %}</p>
     {% if note.collections %}
       {# One small form per chip, so leaving a collection is one click and
@@ -70,21 +70,7 @@
          Buttons and not a select, because this is one click and a select is
          three. Each form posts one field and rewrites nothing else. #}
       <section class="mine">
-        <form action="/item/{{ note.id|slug }}/mine/state" method="post" class="row">
-          {% for name in STATES %}
-            <button type="submit" name="state" value="{{ name }}"
-                    class="{% if note.state == name %}on{% endif %}">{{ t(words[name]) }}</button>
-          {% endfor %}
-        </form>
-        <form action="/item/{{ note.id|slug }}/mine/score" method="post" class="row stars">
-          {% for n in [1, 2, 3, 4, 5] %}
-            {# The filled star ignores `color`, so the one you picked is told
-               by shape: filled up to it, outlined after. #}
-            <button type="submit" name="score" value="{{ n }}"
-                    title="{{ n }}/5" aria-label="{{ n }}/5"
-                    >{{ '★' if n <= note.score else '☆' }}</button>
-          {% endfor %}
-        </form>
+        {% include "mine-buttons.html" %}
         {% if not note.engine %}
           {# The catalog's own English is what the summary still is. The
              button is here and not on every card: once a model has been
@@ -103,15 +89,36 @@
         </form>
       </section>
     {% endif %}
+    {% if idea %}
+      {# Your text first: it is the idea, and the model's summary and points
+         are only its reading of it. Title and text are one form, so a
+         renamed idea and its text land in one write. #}
+      <section class="mine">
+        <form action="/item/{{ note.id|slug }}/mine/note" method="post" class="field">
+          <label for="field-title">{{ t('Title') }}</label>
+          <input id="field-title" name="title" value="{{ note.title }}"
+                 placeholder="{{ t('Untitled idea') }}" autocomplete="off">
+          <label for="field-mine">{{ t('Your idea') }}</label>
+          <textarea id="field-mine" name="my_note" rows="8">{{ note.my_note }}</textarea>
+          <span class="row"><button type="submit">{{ t('Save') }}</button></span>
+        </form>
+        {% include "mine-buttons.html" %}
+        {# Always offered, unlike a card's: an idea grows, and fresh tags
+           and points for what you added is the reason to ask again. #}
+        <form action="/item/{{ note.id|slug }}/describe" method="post" class="row">
+          <button type="submit">{{ t('Ask the model again') }}</button>
+        </form>
+      </section>
+    {% endif %}
     <div class="actions">
       {# A label over each one, visible and not only in an aria attribute:
          three bare boxes in a column say nothing about which is which, and
          the one holding eight tags was the width of a word. #}
-      {# Three of these are a link's and not a card's: a card's category is
+      {# Three of these are a link's and not a card's or an idea's: a card's category is
          its kind, a re-analysis would go back to a page it never had (its
          own button rewrites the summary instead), and a collection groups
          links. A button that answers 404 is worse than no button. #}
-      {% if not card %}
+      {% if link %}
       <form action="/item/{{ note.id|slug }}/category" method="post" class="field">
         <label for="field-category">{{ t('Move to category') }}</label>
         <span class="row">
@@ -129,7 +136,7 @@
                   aria-label="{{ t('Save') }}">{% include "icon-save.html" %}</button>
         </span>
       </form>
-      {% if not card %}
+      {% if link %}
       <form action="/item/{{ note.id|slug }}/collections" method="post" class="field">
         <label for="field-collection">{{ t('Add to a collection') }}</label>
         <span class="row">

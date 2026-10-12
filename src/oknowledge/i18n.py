@@ -94,6 +94,9 @@ STRINGS = {
             "recargá en un momento para verlos.",
         "Write the idea first: there is nothing to save yet.":
             "Escribí la idea primero: todavía no hay nada que guardar.",
+        "Title": "Título",
+        "Your idea": "Tu idea",
+        "Ask the model again": "Pedírselo de nuevo al modelo",
         "%1 cards could not be read and are not shown":
             "%1 fichas no se pudieron leer y no se muestran",
         "Which one?": "¿Cuál?",

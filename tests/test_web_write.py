@@ -1508,7 +1508,7 @@ def test_a_provider_nobody_knows_does_not_replace_the_one_that_is_saved(setup,
 
 VAULT_WRITERS = ("write_note", "write_index", "rebuild_indexes", "update_note",
                  "delete_note", "download_cover", "save_card", "add_task",
-                 "save_idea", "complete_idea")
+                 "save_idea", "complete_idea", "retitle_idea")
 
 
 def reachable_source(fn, seen=None):

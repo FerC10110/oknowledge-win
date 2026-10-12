@@ -43,13 +43,13 @@ from ..i18n import LANGUAGES, NATIVE_NAMES, translator
 from ..pipeline import add as add_link
 from ..pipeline import describe, download_cover, icon_path, import_links
 from ..pipeline import is_domain, owed
-from ..pipeline import complete_idea, today
+from ..pipeline import complete_idea, retitle_idea, today
 from ..models_cache import read as read_models
 from ..models_cache import remember as remember_models
 from ..queue import Locked, Queue
 from ..trace import trace_run
 from ..urls import is_search_url, link_id, normalize
-from ..vault import IDEA_STATES
+from ..vault import IDEA_STATES, states_for
 from ..vault import STATES as vault_states
 from ..vault import (
     BadCategory, IndexesStale, ProtectedNote, clean_category, delete_note,
@@ -381,6 +381,7 @@ STATE_WORDS = {
     "series": {"pending": "to watch", "doing": "watching", "done": "watched"},
     "anime": {"pending": "to watch", "doing": "watching", "done": "watched"},
     "book": {"pending": "to read", "doing": "reading", "done": "read"},
+    "idea": IDEA_STATE_WORDS,
 }
 
 KIND_WORDS = (("movie", "Movies"), ("series", "Series"),
@@ -759,7 +760,7 @@ def create_app(cfg: Config) -> FastAPI:
         note, and everything a note page does -- read it, edit it, throw it
         away -- it does for a card too.
         """
-        for shelves in (library, shelf):
+        for shelves in (library, shelf, ideas):
             shelves.refresh()
             entry = shelves.entry(link_id)
             if entry is not None:
@@ -776,9 +777,10 @@ def create_app(cfg: Config) -> FastAPI:
             raise HTTPException(status_code=404, detail="no such link")
         # The index holds list views without bodies; this note is read fresh.
         return page(request, "item.html", note=read_full(entry),
-                    card=where.name == "ocio",
+                    card=where.name == "ocio", idea=where.name == "ideas",
+                    link=where.name == "links",
                     words=STATE_WORDS.get(entry.note.type, STATE_WORDS["movie"]),
-                    STATES=vault_states)
+                    STATES=states_for(entry.note.type))
 
     @app.get("/embed/{link_id}", response_class=HTMLResponse)
     def embed(request: Request, link_id: str):
@@ -858,7 +860,7 @@ def create_app(cfg: Config) -> FastAPI:
         the only thing they need to know is where the note lives. Links
         first, as everywhere else.
         """
-        for shelves in (library, shelf):
+        for shelves in (library, shelf, ideas):
             shelves.refresh()
             if shelves.by_id(link_id) is not None:
                 return shelves, shelves.shelf
@@ -936,27 +938,36 @@ def create_app(cfg: Config) -> FastAPI:
         return see_other(item_url(link_id), notice=result.notice)
 
     def mine(link_id: str, **change):
-        """One of your three fields on one card, and nothing else.
+        """One of your fields on one card or one idea, and nothing else.
 
-        Only the cards: these fields exist on every Note, but a state and a
+        Not on a link: these fields exist on every Note, but a state and a
         score mean nothing on a link, and a 404 says that better than a
         button nobody can see would.
         """
+        shelves, which = held_by(link_id)
+        if which.name == "links":
+            raise HTTPException(status_code=404, detail="no such card")
         result = edit(link_id, lambda cfg, language: update_note(
-            cfg, link_id, language, shelf=cfg.ocio, **change),
-            "saved", "indexes-stale", shelves=shelf)
+            cfg, link_id, language, shelf=cfg.shelf(which.name), **change),
+            "saved", "indexes-stale", shelves=shelves)
         if result.notice == MISSING:
             raise HTTPException(status_code=404, detail="no such card")
         return see_other(item_url(link_id), notice=result.notice)
 
     @app.post("/item/{link_id}/describe")
     def rewrite_card(background: BackgroundTasks, link_id: str):
-        """Ask the model for this card's summary again, in your language.
+        """Ask the model again: a card's summary in your language,
+        or an idea's name, tags, summary and points.
 
         Only the cards: a link is re-read from its page by /reprocess, and
         a card has no page to re-read -- the catalog already said all it
         knows and what is left is how it is written.
         """
+        ideas.refresh()
+        if ideas.by_id(link_id) is not None:
+            background.add_task(complete_idea, current["cfg"], link_id,
+                                trace=progress.note)
+            return see_other(item_url(link_id), notice="completing")
         shelf.refresh()
         if shelf.by_id(link_id) is None:
             raise HTTPException(status_code=404, detail="no such card")
@@ -973,8 +984,24 @@ def create_app(cfg: Config) -> FastAPI:
         return mine(link_id, score=score)
 
     @app.post("/item/{link_id}/mine/note")
-    def set_my_note(link_id: str, my_note: str = Form("")):
-        return mine(link_id, my_note=my_note)
+    def set_my_note(link_id: str, my_note: str = Form(""),
+                    title: str | None = Form(None)):
+        # An idea's page sends its title with its text: one form, so a
+        # renamed idea and its text land in one write. A card's never does.
+        shelves, which = held_by(link_id)
+        if which.name != "ideas" or title is None:
+            return mine(link_id, my_note=my_note)
+
+        def retitle(cfg, language):
+            done = retitle_idea(cfg, link_id, title, my_note, language)
+            if done is not None and done[1]:
+                log.warning("%s", done[1])
+            return done
+
+        result = edit(link_id, retitle, "saved", "indexes-stale", shelves=shelves)
+        if result.notice == MISSING:
+            raise HTTPException(status_code=404, detail="no such idea")
+        return see_other(item_url(link_id), notice=result.notice)
 
     @app.post("/item/{link_id}/mentions/delete")
     def drop_mention(link_id: str, name: str = Form("")):
@@ -1001,7 +1028,9 @@ def create_app(cfg: Config) -> FastAPI:
         # A note that really went to trash/ sends the user back to the library,
         # whatever the indexes did: the item page would 404 on them now. A
         # refused delete leaves them on the note they still have.
-        where = "/" if result.landed else item_url(link_id)
+        # An idea goes back to the ideas: the library would not show it.
+        home = "/ideas" if which.name == "ideas" else "/"
+        where = home if result.landed else item_url(link_id)
         return see_other(where, notice=result.notice)
 
     @app.post("/item/{link_id}/reprocess")

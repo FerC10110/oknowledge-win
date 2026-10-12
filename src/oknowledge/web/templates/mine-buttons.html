@@ -1,0 +1,15 @@
+<form action="/item/{{ note.id|slug }}/mine/state" method="post" class="row">
+  {% for name in STATES %}
+    <button type="submit" name="state" value="{{ name }}"
+            class="{% if note.state == name %}on{% endif %}">{{ t(words[name]) }}</button>
+  {% endfor %}
+</form>
+<form action="/item/{{ note.id|slug }}/mine/score" method="post" class="row stars">
+  {% for n in [1, 2, 3, 4, 5] %}
+    {# The filled star ignores `color`, so the one you picked is told
+       by shape: filled up to it, outlined after. #}
+    <button type="submit" name="score" value="{{ n }}"
+            title="{{ n }}/5" aria-label="{{ n }}/5"
+            >{{ '★' if n <= note.score else '☆' }}</button>
+  {% endfor %}
+</form>
