@@ -27,6 +27,10 @@ round. The differences are listed under
 - **Never loses a link.** If extraction or the AI fails, the note is still
   created, marked `status: partial`, and can be finished later.
 - Runs a local web page: paste a link, library, search, categories, settings.
+- **Leisure:** type `movie:Terminator` instead of a link and it writes a card
+  for the film — year, genres, cast, rating and poster — out of a free
+  catalogue, then your own state, score and note on top. Films, series, anime
+  and books.
 
 There is no database. The vault is the only source of truth, and every index is
 rebuilt by reading the Markdown.
@@ -128,6 +132,50 @@ address to type on the phone. Windows will ask once whether to allow Python
 through the firewall — answer for *private networks* only. Anyone on that
 wifi can then read and change your vault, which the server also says out loud
 when it starts. The default, `127.0.0.1`, is this machine and nothing else.
+
+### Leisure
+
+**Type a title, not a link.** `movie:Terminator` in the same paste box asks a
+catalogue instead of downloading a page, and writes the answer as a card in
+`<vault>\oknowledge\ocio\`. Nine prefixes, in four kinds:
+
+| What you type | Kind | Catalogue |
+|---|---|---|
+| `película:` `pelicula:` `peli:` `movie:` | movie | Cinemeta |
+| `serie:` `series:` | series | Cinemeta |
+| `anime:` | anime | Cinemeta, series first and then films |
+| `libro:` `book:` | book | Open Library |
+
+Case and accents do not matter (`PELÍCULA:`, `peli:`), a space around the colon
+is allowed (`peli : Terminator`), and a title longer than 120 characters is
+cut there. A prefix with nothing after it comes back saying the title is
+missing, and anything that is not one of those nine words is still treated as
+a link — `https://…` and `note:something` go the way they always did.
+
+**Neither catalogue needs an API key**, and neither is asked anything about
+you: [Cinemeta](https://v3-cinemeta.strem.io/) answers for anything that was
+filmed and [Open Library](https://openlibrary.org/) for anything that was
+printed.
+
+- **You pick which one you meant.** A search shows up to 16 candidates with
+  poster, year and rating. Cinemeta answers "terminator" with Judgment Day
+  first and the 1984 film second, so picking is the feature rather than a step
+  in the way.
+- **Two shortcuts skip the list:** an id (`movie:tt0088247`, `book:OL27448W`)
+  names one thing, and so does a year that leaves exactly one candidate
+  (`movie:Terminator 1984`). A year nobody matches leaves the whole list
+  standing, so a mistyped digit never empties the page.
+- **The card is written at once, with no model involved** — the catalogue
+  already answered. What takes minutes is the rewrite in the language of
+  `[ai] language`, and that happens in the background over a card that already
+  exists: the summary and the key points show up on the next page view. Until
+  then the card says *not rewritten*, and its own page offers the rewrite
+  again. The genres always come from the catalogue; the model never touches
+  the tags.
+- **Your part is yours:** a state (*to watch / watching / watched*, and *to
+  read / reading / read* for a book), a score out of five and a note under
+  *Your note*. They are written straight into the note's frontmatter and no
+  model ever overwrites them. The Leisure page filters by kind and by state.
 
 ### The terminal
 
@@ -264,6 +312,9 @@ only affects notes saved afterwards.
   Networking.md              category index, generated
   links\
     2026-10-03-wireguard-vs-openvpn.md
+  ocio\                      leisure cards, with their own indexes
+    Películas.md             kind index, generated; the name follows [ai] language
+    2026-10-11-the-terminator.md
   attachments\               cover images
   trash\                     notes deleted from the web page
 ```
