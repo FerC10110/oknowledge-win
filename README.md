@@ -177,6 +177,30 @@ printed.
   *Your note*. They are written straight into the note's frontmatter and no
   model ever overwrites them. The Leisure page filters by kind and by state.
 
+### Ideas
+
+**Write what occurred to you; the model files it.** The Ideas page has a *New
+idea* form: the text is required, the title is optional. The idea is written
+at once into `<vault>\oknowledge\ideas\`, your text under the note heading
+(*My note*, or *Mi nota* with `[ai] language = "es"`), and the rest comes in
+behind the page:
+
+- **The model fills in what it is good at:** a title if you left it empty,
+  the tags, a one-line summary and three to six points — what it solves, for
+  whom, how it could work. Until it has, the idea says *not completed*, and
+  its page offers to ask again for when you have added to it.
+- **What is yours stays yours:** your text, a title you typed, the state
+  (*seed / under way / done / dropped*), the stars and the links. No model
+  writes any of them. The tags are the model's, as everywhere else in the
+  app: asking again rewrites them.
+- **A link joins an idea from the link's own page**, with *Add to an idea*.
+  The idea keeps it as a wikilink in its own note, so it reads on its own in
+  Obsidian; when the pipeline renames a link's file, the ideas that named it
+  follow. A link that is not in the library any more shows dimmed, with an ×
+  to take it off.
+- **Dropped ideas are kept, not shown:** the section hides them until you
+  pick *dropped*.
+
 ### The terminal
 
 The global option `--config PATH` goes before the subcommand.
@@ -315,6 +339,9 @@ only affects notes saved afterwards.
   ocio\                      leisure cards, with their own indexes
     Películas.md             kind index, generated; the name follows [ai] language
     2026-10-11-the-terminator.md
+  ideas\                     your ideas, with their own index
+    Ideas.md                 index, generated
+    2026-10-12-gimnasio-con-ia.md
   attachments\               cover images
   trash\                     notes deleted from the web page
 ```
