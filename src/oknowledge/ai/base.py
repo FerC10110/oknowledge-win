@@ -26,6 +26,8 @@ MAX_CATEGORY_LENGTH = 80
 MAX_TAG_LENGTH = 40
 MAX_TAGS = 8
 MAX_POINTS = 6
+MAX_IDEA_TITLE = 120
+"""An idea's title, whoever wrote it: a name, not a paragraph."""
 MAX_MENTIONS = 30
 MAX_MENTION_NAME = 80
 LANGUAGE_NAMES = {"es": "español", "en": "inglés"}
