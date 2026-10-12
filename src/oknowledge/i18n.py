@@ -97,6 +97,14 @@ STRINGS = {
         "Title": "Título",
         "Your idea": "Tu idea",
         "Ask the model again": "Pedírselo de nuevo al modelo",
+        "Links for this idea": "Links de esta idea",
+        "Add to an idea": "Sumar a una idea",
+        "Remove from the idea": "Sacar de la idea",
+        "This note is not in your library any more":
+            "Esta nota ya no está en tu biblioteca",
+        "That idea already has 16 links. Take one off before adding another.":
+            "Esa idea ya tiene 16 links. Sacale uno antes de sumar otro.",
+        "That idea is not there any more.": "Esa idea ya no está.",
         "%1 cards could not be read and are not shown":
             "%1 fichas no se pudieron leer y no se muestran",
         "Which one?": "¿Cuál?",

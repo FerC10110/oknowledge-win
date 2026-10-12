@@ -102,6 +102,26 @@
           <textarea id="field-mine" name="my_note" rows="8">{{ note.my_note }}</textarea>
           <span class="row"><button type="submit">{{ t('Save') }}</button></span>
         </form>
+        {% if related %}
+          <h2>{{ t('Links for this idea') }}</h2>
+          <ul class="related">
+            {% for stem, found in related %}
+              <li{% if not found %} class="gone"{% endif %}>
+                {% if found %}
+                  <a href="/item/{{ found.id|slug }}">{{ found.title }}</a>
+                  <span class="cat">{{ found.category }}</span>
+                {% else %}
+                  <span title="{{ t('This note is not in your library any more') }}">{{ stem }}</span>
+                {% endif %}
+                <form action="/item/{{ note.id|slug }}/related/drop" method="post">
+                  <button type="submit" name="stem" value="{{ stem }}"
+                          title="{{ t('Remove from the idea') }}"
+                          aria-label="{{ t('Remove from the idea') }}">×</button>
+                </form>
+              </li>
+            {% endfor %}
+          </ul>
+        {% endif %}
         {% include "mine-buttons.html" %}
         {# Always offered, unlike a card's: an idea grows, and fresh tags
            and points for what you added is the reason to ask again. #}
@@ -150,6 +170,19 @@
           <button type="submit">{{ t('Add') }}</button>
         </span>
       </form>
+      {% if idea_choices %}
+      {# Your ideas, the dropped ones left out: the relation is noticed while
+         reading the link, so this is where it is made. #}
+      <form action="/item/{{ note.id|slug }}/ideas" method="post" class="field">
+        <label for="field-idea">{{ t('Add to an idea') }}</label>
+        <span class="row">
+          <select id="field-idea" name="idea">
+            {% for id, title in idea_choices %}<option value="{{ id }}">{{ title or t('Untitled idea') }}</option>{% endfor %}
+          </select>
+          <button type="submit">{{ t('Add') }}</button>
+        </span>
+      </form>
+      {% endif %}
       <form action="/item/{{ note.id|slug }}/reprocess" method="post" class="row"
             data-ask="{{ t('Re-run the analysis? The title, summary, points, category, tags and mentions are replaced by the new answer.') }}">
         {# It asks because it is the one action here with no undo: a finished

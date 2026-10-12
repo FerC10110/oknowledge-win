@@ -30,6 +30,10 @@ WRITE_ROUTES = [
     # Saving an idea. A cross-site POST here would write a note into this
     # vault and spend a model call completing it.
     ("/ideas/guardar", {"text": "x"}),
+    # A link joining an idea, and leaving one. A cross-site POST here would
+    # rewrite one of your ideas.
+    ("/item/a1/ideas", {"idea": "x"}),
+    ("/item/a1/related/drop", {"stem": "x"}),
     ("/item/a1/category", {"category": "Redes"}),
     ("/item/a1/tags", {"tags": "vpn"}),
     ("/item/a1/delete", {}),
@@ -1508,7 +1512,8 @@ def test_a_provider_nobody_knows_does_not_replace_the_one_that_is_saved(setup,
 
 VAULT_WRITERS = ("write_note", "write_index", "rebuild_indexes", "update_note",
                  "delete_note", "download_cover", "save_card", "add_task",
-                 "save_idea", "complete_idea", "retitle_idea")
+                 "save_idea", "complete_idea", "retitle_idea",
+                 "add_related", "drop_related")
 
 
 def reachable_source(fn, seen=None):

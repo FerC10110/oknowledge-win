@@ -38,7 +38,7 @@ from ..ai.providers import PROVIDERS
 from ..ai.providers import find as find_provider
 from ..config import CONFIG_PATH, CONTENT_MODES, ENGINE_NAMES, MENTION_MODES, Config
 from ..config import save as save_config
-from ..ideas import new_idea
+from ..ideas import IdeaFull, add_related, drop_related, new_idea
 from ..i18n import LANGUAGES, NATIVE_NAMES, translator
 from ..pipeline import add as add_link
 from ..pipeline import describe, download_cover, icon_path, import_links
@@ -129,6 +129,8 @@ NOTICES = {
     "completing": "Saved. The model is filling in the title and the tags: "
                   "reload in a moment to see them.",
     "idea-empty": "Write the idea first: there is nothing to save yet.",
+    "idea-full": "That idea already has 16 links. Take one off before adding another.",
+    "no-such-idea": "That idea is not there any more.",
     "not-a-link": "That is not a link: it has to be an address, like "
                   "https://example.com/page.",
     "searched": "That is a page of search results, not a page. Open the result "
@@ -776,11 +778,24 @@ def create_app(cfg: Config) -> FastAPI:
         if entry is None:
             raise HTTPException(status_code=404, detail="no such link")
         # The index holds list views without bodies; this note is read fresh.
-        return page(request, "item.html", note=read_full(entry),
+        note = read_full(entry)
+        extra = {}
+        if where.name == "ideas":
+            # Each link by its file name, resolved against the library now,
+            # so a link that changed its title shows the new one -- and one
+            # that is gone shows up dimmed, with an x, instead of vanishing.
+            library.refresh()
+            by_stem = {e.path.stem: e.note for e in library.entries}
+            extra["related"] = [(stem, by_stem.get(stem)) for stem in note.related]
+        elif where.name == "links":
+            ideas.refresh()
+            extra["idea_choices"] = [(n.id, n.title) for n in ideas.notes
+                                     if n.state != "dropped"]
+        return page(request, "item.html", note=note,
                     card=where.name == "ocio", idea=where.name == "ideas",
                     link=where.name == "links",
                     words=STATE_WORDS.get(entry.note.type, STATE_WORDS["movie"]),
-                    STATES=states_for(entry.note.type))
+                    STATES=states_for(entry.note.type), **extra)
 
     @app.get("/embed/{link_id}", response_class=HTMLResponse)
     def embed(request: Request, link_id: str):
@@ -1144,6 +1159,39 @@ def create_app(cfg: Config) -> FastAPI:
                 "saved", "indexes-stale")
         if result.notice == MISSING:
             raise HTTPException(status_code=404, detail="no such link")
+        return see_other(item_url(link_id), notice=result.notice)
+
+    @app.post("/item/{link_id}/ideas")
+    def join_idea(link_id: str, idea: str = Form("")):
+        """Add this link to one of your ideas.
+
+        The idea's note is the one written -- the relation lives there, so
+        the idea reads on its own in Obsidian -- under the idea's lock, and
+        read again inside it. Only a link joins: a card or another idea is
+        not something an idea is built from.
+        """
+        library.refresh()
+        entry = library.entry(link_id)
+        if entry is None:
+            raise HTTPException(status_code=404, detail="no such link")
+        stem = entry.path.stem
+        try:
+            result = edit(idea, lambda cfg, language: add_related(
+                cfg, idea, stem, language), "saved", "indexes-stale", shelves=ideas)
+        except IdeaFull:
+            return see_other(item_url(link_id), notice="idea-full")
+        if result.notice == MISSING:
+            return see_other(item_url(link_id), notice="no-such-idea")
+        return see_other(item_url(link_id), notice=result.notice)
+
+    @app.post("/item/{link_id}/related/drop")
+    def leave_idea(link_id: str, stem: str = Form("")):
+        """Take one link off this idea, by the file name the idea holds --
+        which is how a link that is gone can still be taken off."""
+        result = edit(link_id, lambda cfg, language: drop_related(
+            cfg, link_id, stem, language), "saved", "indexes-stale", shelves=ideas)
+        if result.notice == MISSING:
+            raise HTTPException(status_code=404, detail="no such idea")
         return see_other(item_url(link_id), notice=result.notice)
 
     @app.get("/categories", response_class=HTMLResponse)

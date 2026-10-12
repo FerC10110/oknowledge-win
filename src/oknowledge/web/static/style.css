@@ -499,3 +499,10 @@ header nav b { font-weight: 600; font-variant-numeric: tabular-nums; }
   .paste input { flex: 1 1 100%; }
   .paste button { flex: 1; }
 }
+
+/* An idea's links: one per line, an x to take one off, and a link that is
+   not in the library any more dimmed rather than hidden. */
+.related { list-style: none; padding: 0; }
+.related li { display: flex; gap: .5em; align-items: center; }
+.related li form { display: inline; }
+.related li.gone { opacity: .55; }
