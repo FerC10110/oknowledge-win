@@ -1383,8 +1383,6 @@ def create_app(cfg: Config) -> FastAPI:
             background.add_task(describe, live, note.id, trace=progress.note)
         return note.id, ""
 
-    STATES = ("pending", "doing", "done", "dropped")
-
     @app.get("/ocio", response_class=HTMLResponse)
     def leisure(request: Request, tipo: str = "", estado: str = ""):
         """The cards. A film is not a link about Docker, and the shelf that
@@ -1398,7 +1396,7 @@ def create_app(cfg: Config) -> FastAPI:
         notes = shelf.notes
         if tipo in cards.KINDS:
             notes = [n for n in notes if n.type == tipo]
-        if estado in STATES:
+        if estado in vault_states:
             notes = [n for n in notes if n.state == estado]
         return page(request, "ocio.html", notes=notes, kind=tipo, state=estado,
                     counted=_count_by(shelf.notes, "type"),

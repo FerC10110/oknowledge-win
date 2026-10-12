@@ -134,6 +134,19 @@ def test_the_state_filters(client, cfg):
     assert "Dune" in body and "The Terminator" not in body
 
 
+@pytest.mark.parametrize("estado", ["ovni", "dropped"])
+def test_an_unknown_state_shows_everything_rather_than_nothing(client, cfg, estado):
+    """Un estado que ninguna ficha puede tener filtra a cero y la página
+    queda igual que un estante vacío. Son tres estados y nada más: lo que
+    no es uno de ellos no filtra."""
+    put(cfg, dune())                       # pending
+    seen = terminator()
+    seen.state = "done"
+    put(cfg, seen)
+    body = client.get(f"/ocio?estado={estado}").text
+    assert "Dune" in body and "The Terminator" in body
+
+
 def test_a_card_nobody_rewrote_is_marked(client, a_card_in_the_shelf):
     body = client.get("/ocio").text.lower()
     assert "not rewritten" in body or "sin reescribir" in body

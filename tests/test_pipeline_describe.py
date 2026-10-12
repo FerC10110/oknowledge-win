@@ -141,3 +141,17 @@ def test_the_prompt_carries_what_the_model_needs(cfg, fake_engine):
 def test_the_prompt_says_what_kind_of_thing_it_is(cfg, fake_engine):
     describe(cfg, CARD)
     assert "película" in fake_engine.last_prompt
+
+
+def test_the_index_follows_the_rewrite(cfg, fake_engine):
+    """El índice del estante se escribió al guardar, con la sinopsis en
+    inglés del catálogo. Es la nota que se abre en Obsidian, así que
+    después de la reescritura tiene que decir lo que dice la ficha.
+    """
+    rebuild_indexes(cfg, "es", shelf=cfg.ocio)
+    index = cfg.ocio.index_dir / "Películas.md"
+    assert "cyborg assassin" in index.read_text()
+    fake_engine.answers('{"summary": "Un cyborg viaja al pasado.", "points": []}')
+    assert describe(cfg, CARD) is True
+    assert "Un cyborg viaja al pasado." in index.read_text()
+    assert "cyborg assassin" not in index.read_text()

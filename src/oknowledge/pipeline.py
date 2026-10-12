@@ -1261,6 +1261,11 @@ def describe(cfg: Config, link_id: str, trace: Tracer | None = None) -> bool:
     try:
         with Queue().lock(link_id):
             write_note(cfg, note, cfg.language, path=path)
+            # The index was written when the card was saved, with the
+            # catalog's English in it. It is the note somebody opens in
+            # Obsidian, so it follows the rewrite or it lies until the
+            # next reindex.
+            rebuild_indexes(cfg, cfg.language, shelf=cfg.ocio)
     except (Locked, OSError, ProtectedNote) as error:
         tell(Step(link=link_id, name="describe", state="fail",
                   seconds=time.monotonic() - clock, detail=str(error)))
