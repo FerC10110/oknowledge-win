@@ -439,6 +439,22 @@ header nav b { font-weight: 600; font-variant-numeric: tabular-nums; }
        font-size: 0.7rem; color: var(--dim); white-space: nowrap; }
 .row select { max-width: 100%; }
 
+/* Your part of a card, above everything the model wrote. The state is
+   three buttons rather than a select: this is one click and a select is
+   three. The one in force is filled in, so the row says the state without
+   being read. */
+.mine { display: flex; flex-direction: column; gap: 0.8rem; margin: 2rem 0 0; }
+.mine .row { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+.mine button.on { border-color: var(--accent); color: var(--accent); }
+.mine .stars button { padding: 0.2rem 0.4rem; font-size: 1.1rem; line-height: 1;
+                      border-color: transparent; background: none; color: var(--dim); }
+.mine .stars button:hover { border-color: var(--line); }
+.mine textarea { width: 100%; padding: 0.6rem 0.9rem; font: inherit;
+                 border: 1px solid var(--line); border-radius: 8px;
+                 background: var(--card); color: inherit; resize: vertical; }
+.mine label { display: block; margin-bottom: 0.3rem; color: var(--dim);
+              font-size: 0.85rem; }
+
 /* A card's own line of facts: the stars you gave it, the state it is in,
    and the mark that says the catalog's English is still what it says. The
    stars are one glyph each so they need no picture and no width. */

@@ -63,8 +63,8 @@ class Note:
     score: int = 0
     """Yours, one to five stars. Zero means you have not said."""
     state: str = ""
-    """Yours: pending | doing | done | dropped, in the words each kind uses.
-    Empty until you pick one."""
+    """Yours: pending | doing | done, in the words each kind uses -- a film
+    is watched and a book is read. Empty until you pick one."""
     my_note: str = ""
     """What you wrote under `## Mi nota`, verbatim. Like mentions_extra, a
     re-analysis carries it across untouched: the model rewrites the summary

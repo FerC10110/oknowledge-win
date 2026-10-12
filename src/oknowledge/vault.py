@@ -639,6 +639,8 @@ def update_note(cfg: Config, link_id: str, language: str,
                 add_collection: str | None = None,
                 drop_collection: str | None = None,
                 found: tuple[Path, Note] | None = None,
+                state: str | None = None, score: str | int | None = None,
+                my_note: str | None = None,
                 shelf: Shelf | None = None) -> Path | None:
     """Change one of our notes' classification and rebuild the indexes.
 
@@ -675,6 +677,16 @@ def update_note(cfg: Config, link_id: str, language: str,
         # By the exact name: every button that sends one carries the spelling
         # the note itself holds.
         note.collections = [c for c in note.collections if c != drop_collection]
+    # Yours, and checked before anything is touched: a score out of range or
+    # a state nobody defined leaves the note exactly as it was. Both arrive
+    # from a form, which means they can arrive as anything.
+    if state is not None:
+        note.state = state if state in STATES else note.state
+    if score is not None:
+        picked = _stars(score)
+        note.score = picked if picked else note.score
+    if my_note is not None:
+        note.my_note = my_note.strip()
     if drop_mention is not None and note.mentions is not None:
         # `is not None`, not a truthiness test: a note nobody asked has None
         # here, and turning that into [] would tell the backfill this video
@@ -689,6 +701,21 @@ def update_note(cfg: Config, link_id: str, language: str,
     if category is None and tags is None:
         return written
     return _finish(cfg, language, written, shelf)
+
+
+STATES = ("pending", "doing", "done")
+"""What a card can be: not started, started, finished. Three and not four --
+a list of things you gave up on is a list nobody opens."""
+
+
+def _stars(value) -> int:
+    """One to five, or 0 for anything else. The box is five buttons, so
+    anything else is somebody typing into the URL."""
+    try:
+        picked = int(str(value).strip())
+    except (TypeError, ValueError):
+        return 0
+    return picked if 1 <= picked <= 5 else 0
 
 
 def trash_dir(cfg: Config) -> Path:

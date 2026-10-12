@@ -46,6 +46,7 @@ from ..models_cache import remember as remember_models
 from ..queue import Locked, Queue
 from ..trace import trace_run
 from ..urls import is_search_url, link_id, normalize
+from ..vault import STATES as vault_states
 from ..vault import (
     BadCategory, IndexesStale, ProtectedNote, clean_category, delete_note,
     find_note, note_path, rebuild_indexes, rename_category, update_note,
@@ -353,16 +354,25 @@ def preview_of(scan, known: set[str]) -> dict:
     }
 
 
+STATE_WORDS = {
+    # The design's table. A book is read, not watched, and four words per
+    # kind is cheaper than pretending one word fits both.
+    "movie": {"pending": "to watch", "doing": "watching", "done": "watched"},
+    "series": {"pending": "to watch", "doing": "watching", "done": "watched"},
+    "anime": {"pending": "to watch", "doing": "watching", "done": "watched"},
+    "book": {"pending": "to read", "doing": "reading", "done": "read"},
+}
+
 KIND_WORDS = (("movie", "Movies"), ("series", "Series"),
               ("anime", "Anime"), ("book", "Books"))
 """The four kinds and the word each one wears on a chip, in the order the
 chips are drawn. A tuple of pairs and not a dict: the order is the point."""
 
-STATE_ORDER = (("pending", "Pending"), ("doing", "Watching"),
-               ("done", "Seen"), ("dropped", "Dropped"))
-"""The four states. "Watching" and "Seen" read oddly for a book, and the
-alternative is four words per kind, which is sixteen strings to translate
-for a chip -- these four say the thing in every case."""
+STATE_ORDER = (("pending", "Pending"), ("doing", "In progress"),
+               ("done", "Finished"))
+"""The three states, in the words the chips wear. Neutral on purpose: the
+section mixes books with films, and one chip cannot be "watching" and
+"reading" at once. The card's own buttons use the words of its kind."""
 
 
 def _count_by(notes, field: str) -> dict[str, int]:
@@ -739,11 +749,14 @@ def create_app(cfg: Config) -> FastAPI:
         library.refresh()
         if library.error is not None:
             return page(request, "item.html")
-        entry, _ = anywhere(link_id)
+        entry, where = anywhere(link_id)
         if entry is None:
             raise HTTPException(status_code=404, detail="no such link")
         # The index holds list views without bodies; this note is read fresh.
-        return page(request, "item.html", note=read_full(entry))
+        return page(request, "item.html", note=read_full(entry),
+                    card=where.name == "ocio",
+                    words=STATE_WORDS.get(entry.note.type, STATE_WORDS["movie"]),
+                    STATES=vault_states)
 
     @app.get("/embed/{link_id}", response_class=HTMLResponse)
     def embed(request: Request, link_id: str):
@@ -813,7 +826,7 @@ def create_app(cfg: Config) -> FastAPI:
     # result back from the vault, and never a write of their own -- the three
     # vault functions are the only things that touch a file.
 
-    def edit(link_id: str, change, done: str, stale: str) -> Edited:
+    def edit(link_id: str, change, done: str, stale: str, shelves=None) -> Edited:
         """Apply one change to one note, and say what to tell the user.
 
         `change(cfg, language)` is one of the vault's three editing functions,
@@ -832,8 +845,11 @@ def create_app(cfg: Config) -> FastAPI:
           disk and only the indexes are behind.
         """
         live = current["cfg"]
-        library.refresh()
-        if library.by_id(link_id) is None:
+        # Which shelf the note is on: a card is edited exactly the same way,
+        # by the same three steps, over a different index.
+        shelves = shelves or library
+        shelves.refresh()
+        if shelves.by_id(link_id) is None:
             return Edited(MISSING, False)
         try:
             with link_lock(link_id):
@@ -845,7 +861,7 @@ def create_app(cfg: Config) -> FastAPI:
             return Edited("bad-category", False)
         except IndexesStale as error:
             log.warning("the indexes could not be rebuilt: %s", error)
-            library.refresh()
+            shelves.refresh()
             return Edited(stale, True)
         except (OSError, ProtectedNote) as error:
             # A read-only vault, a trash/ that is a file, a full disk. Every
@@ -853,7 +869,7 @@ def create_app(cfg: Config) -> FastAPI:
             # so reaching here really does mean nothing was written.
             log.warning("the vault could not be written: %s", error)
             return Edited("write-failed", False)
-        library.refresh()
+        shelves.refresh()
         return Edited(done, True)
 
     @app.post("/item/{link_id}/category")
@@ -876,6 +892,32 @@ def create_app(cfg: Config) -> FastAPI:
         if result.notice == MISSING:
             raise HTTPException(status_code=404, detail="no such link")
         return see_other(item_url(link_id), notice=result.notice)
+
+    def mine(link_id: str, **change):
+        """One of your three fields on one card, and nothing else.
+
+        Only the cards: these fields exist on every Note, but a state and a
+        score mean nothing on a link, and a 404 says that better than a
+        button nobody can see would.
+        """
+        result = edit(link_id, lambda cfg, language: update_note(
+            cfg, link_id, language, shelf=cfg.ocio, **change),
+            "saved", "indexes-stale", shelves=shelf)
+        if result.notice == MISSING:
+            raise HTTPException(status_code=404, detail="no such card")
+        return see_other(item_url(link_id), notice=result.notice)
+
+    @app.post("/item/{link_id}/mine/state")
+    def set_state(link_id: str, state: str = Form("")):
+        return mine(link_id, state=state)
+
+    @app.post("/item/{link_id}/mine/score")
+    def set_score(link_id: str, score: str = Form("")):
+        return mine(link_id, score=score)
+
+    @app.post("/item/{link_id}/mine/note")
+    def set_my_note(link_id: str, my_note: str = Form("")):
+        return mine(link_id, my_note=my_note)
 
     @app.post("/item/{link_id}/mentions/delete")
     def drop_mention(link_id: str, name: str = Form("")):

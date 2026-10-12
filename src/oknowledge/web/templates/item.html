@@ -65,6 +65,36 @@
         <pre>{{ note.body }}</pre>
       </details>
     {% endif %}
+    {% if card %}
+      {# Your part, above the model's: a state, five stars and a comment.
+         Buttons and not a select, because this is one click and a select is
+         three. Each form posts one field and rewrites nothing else. #}
+      <section class="mine">
+        <form action="/item/{{ note.id|slug }}/mine/state" method="post" class="row">
+          {% for name in STATES %}
+            <button type="submit" name="state" value="{{ name }}"
+                    class="{% if note.state == name %}on{% endif %}">{{ t(words[name]) }}</button>
+          {% endfor %}
+        </form>
+        <form action="/item/{{ note.id|slug }}/mine/score" method="post" class="row stars">
+          {% for n in [1, 2, 3, 4, 5] %}
+            {# The filled star ignores `color`, so the one you picked is told
+               by shape: filled up to it, outlined after. #}
+            <button type="submit" name="score" value="{{ n }}"
+                    title="{{ n }}/5" aria-label="{{ n }}/5"
+                    >{{ '★' if n <= note.score else '☆' }}</button>
+          {% endfor %}
+        </form>
+        <form action="/item/{{ note.id|slug }}/mine/note" method="post" class="field">
+          <label for="field-mine">{{ t('Your note') }}</label>
+          <textarea id="field-mine" name="my_note" rows="3"
+                    placeholder="{{ t('What you thought of it') }}">{{ note.my_note }}</textarea>
+          <span class="row">
+            <button type="submit">{{ t('Save') }}</button>
+          </span>
+        </form>
+      </section>
+    {% endif %}
     <div class="actions">
       {# A label over each one, visible and not only in an aria attribute:
          three bare boxes in a column say nothing about which is which, and
