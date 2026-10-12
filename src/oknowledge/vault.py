@@ -209,7 +209,7 @@ def _mention(text: str) -> Mention:
 
 
 def _split_body(
-    body: str,
+    body: str, mine_to_end: bool = False,
 ) -> tuple[str, list[str], list[Mention] | None, list[str], str, str | None]:
     """Return (summary, points, mentions, mentions_extra, my note, content).
 
@@ -219,6 +219,10 @@ def _split_body(
     Sections are recognized by their heading text, not by position, so a missing
     section never shifts the others. The content section runs to end of file, so
     headings inside the extracted text survive.
+
+    `mine_to_end` does the same for your own section, for an idea: there it
+    is the idea itself, written by you, and a line of it that happens to
+    read like one of the app's headings is still a line of yours.
     """
     lines = body.splitlines()
     start = next((i + 1 for i, line in enumerate(lines) if line.startswith("# ")), 0)
@@ -231,7 +235,9 @@ def _split_body(
     mode = "summary"
     for line in lines[start:]:
         marker = line.rstrip()
-        if mode != "content" and marker in _CONTENT_HEADINGS:
+        if mode == "mine" and mine_to_end:
+            mine.append(line)
+        elif mode != "content" and marker in _CONTENT_HEADINGS:
             mode = "content"
         elif mode != "content" and marker in _MENTIONS_HEADINGS:
             # Accumulates, like the points section: a second heading adds to
@@ -306,9 +312,23 @@ def normalize_related(values) -> list[str]:
     `stem` all name the same note. Anything that is not text is dropped
     rather than refusing the note: the idea is the user's either way. In
     order, once each, at most MAX_RELATED.
+
+    YAML has its own opinion of a wikilink: unquoted, `- [[stem]]` is a
+    list inside a list, and `related: [[stem]]` on one line is the same
+    shape again; a bare `related: stem` is one string. All of them are a
+    link somebody wrote, so all of them are read.
     """
+    if isinstance(values, str):
+        values = [values]
+    elif not isinstance(values, list):
+        values = []
+    flat = []
+    for value in values:
+        while isinstance(value, list) and len(value) == 1:
+            value = value[0]
+        flat.append(value)
     out: list[str] = []
-    for value in values or []:
+    for value in flat:
         if not isinstance(value, str):
             continue
         text = value.strip()
@@ -353,7 +373,8 @@ def read_note(path: Path) -> Note | None:
     made = {key: front.get(key) for key in ("engine", "model")}
     made = {key: value if isinstance(value, str) else "" for key, value in made.items()}
     related = front.get("related")
-    summary, points, mentions, extra, mine, body = _split_body(rest)
+    summary, points, mentions, extra, mine, body = _split_body(
+        rest, mine_to_end=required["type"] == "idea")
     return Note(
         id=required["id"],
         url=required["url"],
@@ -361,7 +382,7 @@ def read_note(path: Path) -> Note | None:
         category=required["category"],
         tags=[str(t) for t in tags],
         collections=[str(c) for c in collections],
-        related=normalize_related(related if isinstance(related, list) else []),
+        related=normalize_related(related),
         type=required["type"],
         source=required["source"],
         saved=str(required["saved"]),

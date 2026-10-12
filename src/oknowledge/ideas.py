@@ -45,7 +45,7 @@ def new_idea(text: str, title: str, saved: str, instant: str) -> Note:
     the way it writes a card."""
     return Note(id=idea_id(instant), url="", title=clean_title(title),
                 category=CATEGORY, tags=[], type=KIND, source="", saved=saved,
-                summary="", my_note=text.strip())
+                summary="", my_note=text.strip(), state="pending")
 
 
 def add_related(cfg: Config, idea: str, stem: str, language: str) -> Path | None:

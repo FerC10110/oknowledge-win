@@ -75,7 +75,7 @@ def test_related_typed_as_text_does_not_lose_the_idea(cfg):
     text = path.read_text(encoding="utf-8").replace(
         "type: idea", "type: idea\nrelated: oops", 1)
     path.write_text(text, encoding="utf-8")
-    assert read_note(path).related == []
+    assert read_note(path).related == ["oops"]
     assert read_note(path).my_note == "Una app que me arme la rutina."
 
 
@@ -106,3 +106,16 @@ def test_an_untitled_idea_is_still_a_named_line_in_its_index(cfg):
     rebuild_indexes(cfg, "es", shelf=cfg.ideas)
     index = (cfg.ideas.index_dir / "Ideas.md").read_text(encoding="utf-8")
     assert f"[[{path.stem}|{path.stem}]]" in index
+
+
+@pytest.mark.parametrize("typed, expected", [
+    # Unquoted in YAML, [[foo]] is a list inside a list.
+    ("related:\n- [[foo]]\n- [[bar]]", ["foo", "bar"]),
+    ('related: "[[foo]]"', ["foo"]),
+    ("related: foo", ["foo"]),
+])
+def test_related_typed_by_hand_in_obsidian_is_kept(cfg, typed, expected):
+    path = put(cfg, an_idea())
+    text = path.read_text(encoding="utf-8").replace("type: idea", f"type: idea\n{typed}", 1)
+    path.write_text(text, encoding="utf-8")
+    assert read_note(path).related == expected

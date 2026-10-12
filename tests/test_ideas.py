@@ -104,3 +104,22 @@ def test_a_link_leaves_an_idea(cfg, idea):
     drop_related(cfg, idea.id, "a", "es")
     drop_related(cfg, idea.id, "never-there", "es")
     assert now(cfg, idea).related == ["b"]
+
+
+def test_a_new_idea_is_a_seed():
+    # The seed chip is how you find what you have not started; an idea with
+    # no state at all would be in no chip but "All".
+    assert new_idea("x", "", "2026-10-12", INSTANT).state == "pending"
+
+
+@pytest.mark.parametrize("heading", [
+    "## Menciones", "## Mentions", "## Mi nota", "## My note",
+    "## Contenido original", "## Original content",
+])
+def test_your_text_survives_the_app_s_own_headings_inside_it(cfg, heading):
+    # Your text is the idea's whole body after its heading: a line that
+    # happens to look like one of the app's sections is still yours.
+    text = f"Una app.\n\n{heading}\n\n- algo\n\nY sigue."
+    note = new_idea(text, "T", "2026-10-12", INSTANT)
+    path = write_note(cfg, note, "es", path=note_path(cfg, note, shelf=cfg.ideas))
+    assert read_note(path).my_note == text

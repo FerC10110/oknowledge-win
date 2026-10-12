@@ -1000,15 +1000,19 @@ def create_app(cfg: Config) -> FastAPI:
 
     @app.post("/item/{link_id}/mine/note")
     def set_my_note(link_id: str, my_note: str = Form(""),
-                    title: str | None = Form(None)):
+                    title: str | None = Form(None),
+                    title_was: str | None = Form(None)):
         # An idea's page sends its title with its text: one form, so a
         # renamed idea and its text land in one write. A card's never does.
         shelves, which = held_by(link_id)
         if which.name != "ideas" or title is None:
             return mine(link_id, my_note=my_note)
+        # The box as it was drawn, and you did not touch it: the title on
+        # disk stands, whatever the model named the idea since.
+        wanted = None if title_was is not None and title == title_was else title
 
         def retitle(cfg, language):
-            done = retitle_idea(cfg, link_id, title, my_note, language)
+            done = retitle_idea(cfg, link_id, wanted, my_note, language)
             if done is not None and done[1]:
                 log.warning("%s", done[1])
             return done

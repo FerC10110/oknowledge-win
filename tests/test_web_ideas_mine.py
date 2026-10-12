@@ -151,3 +151,44 @@ def test_a_deleted_idea_goes_back_to_the_ideas(cfg, client):
     answer = client.post(f"/item/{note.id}/delete", follow_redirects=False)
     assert answer.headers["location"] == "/ideas?notice=trashed"
     assert find_note(cfg, note.id, shelf=cfg.ideas) is None
+
+
+def test_a_page_opened_before_the_model_named_it_keeps_the_name(cfg, client):
+    # The page was drawn while the idea had no name; the model gave it one;
+    # you add a line and save without reloading. The empty box you never
+    # touched must not erase the name.
+    note = put(cfg, title="")
+    page = page_of(client, note)
+    assert 'name="title_was" value=""' in page
+    path, there = find_note(cfg, note.id, shelf=cfg.ideas)
+    there.title = "Gimnasio con IA"
+    write_note(cfg, there, "es", path=path)
+    client.post(f"/item/{note.id}/mine/note",
+                data={"title": "", "title_was": "", "my_note": "Más texto."})
+    after = idea_now(cfg, note)
+    assert (after.title, after.my_note) == ("Gimnasio con IA", "Más texto.")
+
+
+def test_a_title_you_changed_is_saved_even_over_the_model_s(cfg, client):
+    note = put(cfg, title="Del modelo")
+    client.post(f"/item/{note.id}/mine/note",
+                data={"title": "Mío", "title_was": "Del modelo", "my_note": "x"})
+    assert idea_now(cfg, note).title == "Mío"
+
+
+def test_an_idea_s_tags_lead_to_the_ideas(cfg, client):
+    note = put(cfg, tags=["gimnasio"])
+    assert 'href="/ideas?tag=gimnasio"' in page_of(client, note)
+
+
+def test_a_stale_page_does_not_put_back_an_old_title(cfg, client):
+    # Two tabs: you rename the idea in one, then save a text change from the
+    # other, drawn before the rename. The box you did not touch there still
+    # says the old name, and saving must not put it back.
+    note = put(cfg, title="Mi gym")
+    client.post(f"/item/{note.id}/mine/note",
+                data={"title": "Gimnasio con IA", "title_was": "Mi gym", "my_note": "x"})
+    client.post(f"/item/{note.id}/mine/note",
+                data={"title": "Mi gym", "title_was": "Mi gym", "my_note": "Más texto."})
+    after = idea_now(cfg, note)
+    assert (after.title, after.my_note) == ("Gimnasio con IA", "Más texto.")

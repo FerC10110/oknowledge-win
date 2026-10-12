@@ -6,7 +6,7 @@
       {% if note.status != 'ok' %}<span class="warn">{{ t('Incomplete') }}</span>{% endif %}
       {% include "engine-badge.html" %}</p>
     <h1 dir="auto">{{ note.title or t('Untitled idea') }}</h1>
-    <p class="tags">{% for tag in note.tags %}<a href="/?tag={{ tag|urlencode }}">#{{ tag }}</a>{% endfor %}</p>
+    <p class="tags">{% for tag in note.tags %}<a href="{{ '/ideas' if idea else '/' }}?tag={{ tag|urlencode }}">#{{ tag }}</a>{% endfor %}</p>
     {% if note.collections %}
       {# One small form per chip, so leaving a collection is one click and
          there is no list to re-type -- these names have spaces in them and
@@ -98,6 +98,7 @@
           <label for="field-title">{{ t('Title') }}</label>
           <input id="field-title" name="title" value="{{ note.title }}"
                  placeholder="{{ t('Untitled idea') }}" autocomplete="off">
+          <input type="hidden" name="title_was" value="{{ note.title }}">
           <label for="field-mine">{{ t('Your idea') }}</label>
           <textarea id="field-mine" name="my_note" rows="8">{{ note.my_note }}</textarea>
           <span class="row"><button type="submit">{{ t('Save') }}</button></span>
