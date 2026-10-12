@@ -125,10 +125,16 @@ class Config:
         left without notes only ever looks in its own shelf's index_dir."""
         return Shelf("ocio", self.root / "ocio", self.root / "ocio")
 
+    @property
+    def ideas(self) -> Shelf:
+        """The ideas. Indexes inside the folder, like the cards, for the
+        same reason: a rebuild of one shelf only ever sweeps its own."""
+        return Shelf("ideas", self.root / "ideas", self.root / "ideas")
+
     def shelf(self, name: str) -> Shelf:
-        """The shelf a name from a URL asks for. Anything but "ocio" is the
+        """The shelf a name from a URL asks for. Anything unknown is the
         links shelf: an unknown name must not invent a folder."""
-        return self.ocio if name == "ocio" else self.links
+        return {"ocio": self.ocio, "ideas": self.ideas}.get(name, self.links)
 
     @property
     def links_dir(self) -> Path:

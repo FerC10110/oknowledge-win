@@ -24,7 +24,7 @@ from pathlib import Path
 import yaml
 
 from .ai.base import (
-    MAX_CATEGORY_LENGTH, UNSAFE_IN_A_NAME, normalize_collections, normalize_tags,
+    MAX_CATEGORY_LENGTH, MAX_COLLECTIONS, UNSAFE_IN_A_NAME, normalize_collections, normalize_tags,
 )
 from .atomic import atomic_write
 from .config import Config, Shelf
@@ -42,7 +42,7 @@ HEADINGS = {
 }
 
 FRONTMATTER_ORDER = (
-    "url", "title", "category", "tags", "collections", "type", "source",
+    "url", "title", "category", "tags", "collections", "related", "type", "source",
     "author", "published", "saved", "cover", "length", "rating", "score",
     "state", "content", "engine", "model", "status", "id", MARKER,
 )
@@ -100,6 +100,9 @@ def render(note: Note, language: str) -> str:
         # thousand notes that are in no collection should not each carry a
         # line saying so.
         "collections": list(note.collections) or None,
+        # As wikilinks, so Obsidian draws them as links; stems everywhere
+        # else. None and not [] for the reason collections has it.
+        "related": [f"[[{stem}]]" for stem in note.related] or None,
         "type": note.type,
         "source": note.source,
         "author": note.author,
@@ -289,6 +292,36 @@ def _as_score(value) -> int:
         return 0
 
 
+MAX_RELATED = MAX_COLLECTIONS
+"""The same cap as the collections, for the same reason: a frontmatter that
+grows without end is a note that one day cannot be read."""
+
+_WIKILINK = re.compile(r"^\[\[(?P<target>[^\]|]*)(?:\|[^\]]*)?\]\]$")
+
+
+def normalize_related(values) -> list[str]:
+    """The stems an idea points at, however Obsidian or a hand left them.
+
+    `[[stem]]`, `[[stem|alias]]`, `[[folder/stem]]`, `stem.md` and a bare
+    `stem` all name the same note. Anything that is not text is dropped
+    rather than refusing the note: the idea is the user's either way. In
+    order, once each, at most MAX_RELATED.
+    """
+    out: list[str] = []
+    for value in values or []:
+        if not isinstance(value, str):
+            continue
+        text = value.strip()
+        match = _WIKILINK.match(text)
+        stem = (match.group("target") if match else text).strip()
+        stem = stem.rsplit("/", 1)[-1]
+        if stem.endswith(".md"):
+            stem = stem[:-3]
+        if stem and stem not in out:
+            out.append(stem)
+    return out[:MAX_RELATED]
+
+
 def read_note(path: Path) -> Note | None:
     """The note, if the file is ours and parseable. Never modifies the file.
 
@@ -319,6 +352,7 @@ def read_note(path: Path) -> Note | None:
     # The note is not refused over it: it is the user's note either way.
     made = {key: front.get(key) for key in ("engine", "model")}
     made = {key: value if isinstance(value, str) else "" for key, value in made.items()}
+    related = front.get("related")
     summary, points, mentions, extra, mine, body = _split_body(rest)
     return Note(
         id=required["id"],
@@ -327,6 +361,7 @@ def read_note(path: Path) -> Note | None:
         category=required["category"],
         tags=[str(t) for t in tags],
         collections=[str(c) for c in collections],
+        related=normalize_related(related if isinstance(related, list) else []),
         type=required["type"],
         source=required["source"],
         saved=str(required["saved"]),
@@ -522,7 +557,7 @@ def write_index(cfg: Config, category: str, entries: list[tuple[Path, Note]], la
     count = f"{len(ordered)} link" + ("" if len(ordered) == 1 else "s")
     lines = [f"---\n{front}\n---\n", f"# {_plain(category)} · {count}\n", f"{notice}\n"]
     for path, note in ordered:
-        label = _plain(re.sub(r"[|\[\]]", " ", note.title))
+        label = _plain(re.sub(r"[|\[\]]", " ", note.title)) or path.stem
         line = f"- [[{path.stem}|{label}]]"
         head = note.summary.strip().splitlines()[0] if note.summary.strip() else ""
         tags = " ".join(f"#{t}" for t in note.tags)
@@ -681,7 +716,7 @@ def update_note(cfg: Config, link_id: str, language: str,
     # a state nobody defined leaves the note exactly as it was. Both arrive
     # from a form, which means they can arrive as anything.
     if state is not None:
-        note.state = state if state in STATES else note.state
+        note.state = state if state in states_for(note.type) else note.state
     if score is not None:
         picked = _stars(score)
         note.score = picked if picked else note.score
@@ -706,6 +741,16 @@ def update_note(cfg: Config, link_id: str, language: str,
 STATES = ("pending", "doing", "done")
 """What a card can be: not started, started, finished. Three and not four --
 a list of things you gave up on is a list nobody opens."""
+
+IDEA_STATES = (*STATES, "dropped")
+"""An idea can be given up on, and remembering that you did -- and why -- is
+the reason to write it down. A film you dropped is a list nobody opens; an
+idea you dropped is one you will not have to have twice."""
+
+
+def states_for(kind: str) -> tuple[str, ...]:
+    """The states a note of this type can be in."""
+    return IDEA_STATES if kind == "idea" else STATES
 
 
 def _stars(value) -> int:

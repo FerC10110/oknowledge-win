@@ -75,6 +75,11 @@ class Note:
     putting together. The only field here nobody but them writes -- the model
     never proposes one and a re-analysis carries them across untouched, the
     same promise mentions_extra has."""
+    related: list[str] = field(default_factory=list)
+    """An idea's links: the file names (stems) of the notes it points at,
+    written as wikilinks so the idea reads on its own in Obsidian. Only an
+    idea has them, only the user adds them, and nothing a model does ever
+    changes them."""
     mentions_extra: list[str] = field(default_factory=list)
     """Lines of the mentions section that are not a bullet: a sentence the user
     typed there, a numbered item. Kept verbatim and written back after the

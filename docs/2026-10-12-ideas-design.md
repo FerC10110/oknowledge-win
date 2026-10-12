@@ -64,7 +64,7 @@ tags: [gimnasio, ia, rutinas]
 summary: Una app que arma la rutina leyendo lo que levantaste la semana pasada.
 state: pending
 score: 4
-links:
+related:
   - "[[2026-10-02-rutina-de-fuerza-en-casa]]"
   - "[[2026-10-05-como-medir-el-rpe]]"
 saved: 2026-10-12
@@ -206,6 +206,9 @@ La nota de la idea guarda wikilinks: `"[[2026-10-02-rutina-de-fuerza]]"`. Es
 lo que hace que la idea se lea sola en Obsidian —la abrís y sus links están
 ahí, navegables— que es la razón por la que la relación vive de este lado y
 no en el link.
+
+El campo se llama `related` y no `links`: `links` ya es el nombre del estante
+de links en todo el código.
 
 - **Tope:** dieciséis, el mismo número que las colecciones. Reusar un número
   ya pensado antes que inventar uno nuevo.
