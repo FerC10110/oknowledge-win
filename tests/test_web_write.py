@@ -1499,3 +1499,62 @@ def test_a_provider_nobody_knows_does_not_replace_the_one_that_is_saved(setup,
     client.post("/settings", data={"chain": ["api"], "api_provider": "my-own-thing"})
     saved = tomllib.loads(config_path.read_text(encoding="utf-8"))
     assert saved["ai"]["api"]["provider"] == "groq"
+
+
+# --- a safe method must not write (the GET that saved a card) ---------------
+
+VAULT_WRITERS = ("write_note", "write_index", "rebuild_indexes", "update_note",
+                 "delete_note", "download_cover", "save_card", "add_task")
+
+
+def reachable_source(fn, seen=None):
+    """A handler's source plus the source of the helpers it closes over.
+
+    Every route of this app is a closure inside create_app(), so the
+    helpers it can reach are its free variables -- which is how a GET
+    reaches a writer without naming one itself.
+    """
+    import inspect
+
+    seen = seen if seen is not None else set()
+    if fn in seen or not callable(fn):
+        return ""
+    seen.add(fn)
+    try:
+        source = inspect.getsource(fn)
+    except (OSError, TypeError):
+        return ""
+    for name, cell in zip(getattr(fn.__code__, "co_freevars", ()),
+                          fn.__closure__ or ()):
+        try:
+            value = cell.cell_contents
+        except ValueError:                       # a cell still being filled
+            continue
+        if inspect.isfunction(value):
+            source += reachable_source(value, seen)
+    return source
+
+
+def test_no_safe_method_reaches_a_vault_writer(setup):
+    """A GET that writes a note is a note anybody can make the browser
+    write with an `<img src=...>`: the origin check looks only at the
+    unsafe methods, by design, so a safe method must not write.
+
+    This is the property, not a list of the routes we happen to have: the
+    shortcut that saved a card from GET /ocio/buscar passed every other
+    test in this file.
+    """
+    from oknowledge.web.app import SAFE_METHODS
+
+    _, client = setup
+    checked = 0
+    for route in client.app.routes:
+        methods = getattr(route, "methods", set())
+        if not methods or methods - SAFE_METHODS:
+            continue
+        checked += 1
+        source = reachable_source(route.endpoint)
+        for writer in VAULT_WRITERS:
+            assert f"{writer}(" not in source, \
+                f"{route.path} can reach {writer}()"
+    assert checked > 5, "no safe routes found: this test is not looking at the app"

@@ -155,3 +155,38 @@ def test_the_index_follows_the_rewrite(cfg, fake_engine):
     assert describe(cfg, CARD) is True
     assert "Un cyborg viaja al pasado." in index.read_text()
     assert "cyborg assassin" not in index.read_text()
+
+
+def test_what_you_did_while_the_model_wrote_is_not_lost(cfg, fake_engine):
+    """La reescritura tarda minutos y la página de la ficha está abierta
+    todo ese rato: las estrellas, el estado y tu nota se escriben mientras
+    el modelo piensa. Lo que vuelve del modelo son dos campos, no la ficha
+    entera, así que la nota se vuelve a leer antes de escribirla.
+    """
+    def while_it_thinks(prompt):
+        meanwhile = note_now(cfg)
+        meanwhile.score, meanwhile.state = 5, "doing"
+        meanwhile.my_note = "La estoy viendo de nuevo."
+        write_note(cfg, meanwhile, "es",
+                   path=note_path(cfg, meanwhile, shelf=cfg.ocio))
+        return '{"summary": "Un cyborg viaja al pasado.", "points": ["uno"]}'
+
+    fake_engine.complete = while_it_thinks
+    assert describe(cfg, CARD) is True
+    after = note_now(cfg)
+    assert after.summary == "Un cyborg viaja al pasado."
+    assert (after.score, after.state) == (5, "doing")
+    assert after.my_note == "La estoy viendo de nuevo."
+
+
+def test_a_card_thrown_away_while_the_model_wrote_stays_thrown_away(cfg, fake_engine):
+    """Nada de resucitar una ficha que ya no está."""
+    gone = note_path(cfg, note_now(cfg), shelf=cfg.ocio)
+
+    def while_it_thinks(prompt):
+        gone.unlink()
+        return '{"summary": "Un cyborg viaja al pasado.", "points": []}'
+
+    fake_engine.complete = while_it_thinks
+    assert describe(cfg, CARD) is False
+    assert not gone.exists()

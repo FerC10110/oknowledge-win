@@ -1256,10 +1256,24 @@ def describe(cfg: Config, link_id: str, trace: Tracer | None = None) -> bool:
         tell(Step(link=link_id, name="describe", state="fail",
                   seconds=time.monotonic() - clock, detail=str(error)))
         return False
-    note.summary, note.points = summary, points
-    note.engine, note.model = engine, model
     try:
         with Queue().lock(link_id):
+            # The note is read again, under the lock, because minutes went
+            # by: the card's page was open the whole time and the stars,
+            # the state and your note may have been written while the model
+            # wrote. Four fields come back from a model; everything else is
+            # whatever is on disk now.
+            fresh = find_note(cfg, link_id, shelf=cfg.ocio)
+            if fresh is None:
+                # Thrown away in the meantime. Writing the note back would
+                # resurrect a card somebody deleted.
+                tell(Step(link=link_id, name="describe", state="fail",
+                          seconds=time.monotonic() - clock,
+                          detail="the card is no longer there"))
+                return False
+            path, note = fresh
+            note.summary, note.points = summary, points
+            note.engine, note.model = engine, model
             write_note(cfg, note, cfg.language, path=path)
             # The index was written when the card was saved, with the
             # catalog's English in it. It is the note somebody opens in

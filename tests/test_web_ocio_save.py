@@ -216,10 +216,9 @@ def test_a_year_that_names_one_candidate_skips_the_list(client, fake_catalog):
                  card=terminator_card())
     answer = client.post("/add", data={"url": "película:Terminator 1984"},
                          follow_redirects=False)
-    # Va a la búsqueda, que al encontrar una sola para ese año guarda y sigue.
-    assert answer.headers["location"].startswith("/ocio/buscar")
-    body = client.post("/add", data={"url": "película:Terminator 1984"}).text
-    assert "The Terminator" in body and "Terminator 2" not in body
+    # Un año que deja una sola no es una pregunta: se guarda y se abre.
+    assert answer.status_code == 303 and "/item/" in answer.headers["location"]
+    assert fake_catalog.asked_for == ["tt0088247"]
 
 
 def test_a_year_that_names_two_still_asks(client, fake_catalog):
@@ -240,9 +239,32 @@ def test_a_year_that_names_nobody_shows_the_whole_list(client, fake_catalog):
 
 def test_an_id_goes_straight_to_the_card(client, fake_catalog):
     fake_catalog(card=terminator_card())
-    answer = client.get("/ocio/buscar?tipo=movie&q=tt0088247", follow_redirects=False)
+    answer = client.post("/add", data={"url": "película:tt0088247"},
+                         follow_redirects=False)
     assert answer.status_code == 303 and "/item/" in answer.headers["location"]
     assert fake_catalog.asked_for == ["tt0088247"]
+
+
+def test_a_cross_site_get_cannot_write_a_card(client, fake_catalog, cfg):
+    """Cualquier página con <img src="…/ocio/buscar?tipo=movie&q=tt0088247">
+    escribiría una ficha en el vault y gastaría una llamada al modelo. La
+    lista es un GET y un GET no escribe: el atajo guarda desde el POST de la
+    caja de pegar, que es donde se mira el origen.
+    """
+    fake_catalog(card=terminator_card())
+    answer = client.get("/ocio/buscar?tipo=movie&q=tt0088247",
+                        headers={"sec-fetch-site": "cross-site"},
+                        follow_redirects=False)
+    assert answer.status_code == 200                 # una página, no una nota
+    assert all_notes(cfg, shelf=cfg.ocio) == []
+
+
+def test_an_id_in_the_url_offers_the_card_it_names(client, fake_catalog, cfg):
+    """Y lo que sí hace ese GET es ofrecerla: la fila con su botón."""
+    fake_catalog(card=terminator_card())
+    body = client.get("/ocio/buscar?tipo=movie&q=tt0088247").text
+    assert "The Terminator" in body and "tt0088247" in body
+    assert all_notes(cfg, shelf=cfg.ocio) == []
 
 
 def test_an_id_the_catalogue_does_not_know_is_a_page_and_not_a_crash(client, fake_catalog):

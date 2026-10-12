@@ -1405,31 +1405,13 @@ def create_app(cfg: Config) -> FastAPI:
                     KINDS=KIND_WORDS, STATES=STATE_ORDER,
                     STATE_WORDS=dict(STATE_ORDER))
 
-    @app.get("/ocio/buscar", response_class=HTMLResponse)
-    def card_candidates(request: Request, background: BackgroundTasks,
-                        tipo: str = "", q: str = "", year: str = ""):
-        """Which one you meant. Nothing is saved until somebody says --
-        unless only one answer can be meant.
+    def ask_catalogs(tipo: str, query: str, year: str = "") -> tuple[list, str]:
+        """Every answer the catalogs give, and the reason a silent one gives.
 
-        Cinemeta answers "terminator" with Judgment Day first and the 1984
-        one second, so picking is usually the feature and not a step in the
-        way. An id names one thing, and so does a year that leaves one
-        candidate: both skip the list.
+        Read-only, and that is the point: this is asked by the list, which
+        is a GET, and by the paste box, which is a POST. Whoever writes a
+        card writes it from the POST.
         """
-        query = " ".join(q.split())[:cards.LONGEST]
-        if tipo not in cards.KINDS or not query:
-            raise HTTPException(status_code=404, detail="no such search")
-        ref = cards.reference(query)
-        if ref:
-            one = Candidate(ref=ref, kind=tipo, via=catalog_type_for(tipo),
-                            title=query)
-            saved, notice = save_card(tipo, one, background)
-            if saved:
-                return see_other(item_url(saved), notice=notice)
-            # The id was not one the catalog knows. The list says so rather
-            # than a notice on the library: this page is where it was asked.
-            return page(request, "candidates.html", kind=tipo, query_text=query,
-                        candidates=[], failed="")
         found: list = []
         failed = ""
         for client, via in catalogs_for(tipo):
@@ -1439,12 +1421,52 @@ def create_app(cfg: Config) -> FastAPI:
         if year:
             # A year nobody matches leaves the whole list: better the six
             # Terminators than an empty page because a digit was mistyped.
-            same = [c for c in found if c.year == year]
-            if len(same) == 1:
-                saved, notice = save_card(tipo, same[0], background)
-                if saved:
-                    return see_other(item_url(saved), notice=notice)
-            found = same or found
+            found = [c for c in found if c.year == year] or found
+        return found, failed
+
+    def only_one_meant(tipo: str, query: str, year: str):
+        """The candidate a request can only mean, or None.
+
+        An id names one thing, and so does a year that leaves exactly one
+        answer. Both skip the list -- from the paste box, which is where
+        the save happens.
+        """
+        ref = cards.reference(query)
+        if ref:
+            return Candidate(ref=ref, kind=tipo, via=catalog_type_for(tipo),
+                             title=query)
+        if not year:
+            return None
+        found, _ = ask_catalogs(tipo, query, year)
+        return found[0] if len(found) == 1 and found[0].year == year else None
+
+    @app.get("/ocio/buscar", response_class=HTMLResponse)
+    def card_candidates(request: Request, tipo: str = "", q: str = "",
+                        year: str = ""):
+        """Which one you meant. A page and nothing else: it writes nothing.
+
+        Cinemeta answers "terminator" with Judgment Day first and the 1984
+        one second, so picking is usually the feature and not a step in the
+        way. A GET that wrote a note would be a note anybody could make the
+        browser write with an <img>, so the shortcuts live on the POST and
+        what an id names is offered here as one row with its button.
+        """
+        query = " ".join(q.split())[:cards.LONGEST]
+        if tipo not in cards.KINDS or not query:
+            raise HTTPException(status_code=404, detail="no such search")
+        ref = cards.reference(query)
+        if ref:
+            one = Candidate(ref=ref, kind=tipo, via=catalog_type_for(tipo),
+                            title=query)
+            full = catalog_of(one.via).card(one)
+            # An id the catalog does not know says so here rather than as a
+            # notice on the library: this page is where it was asked.
+            named = [] if full is None else [
+                dataclasses.replace(one, title=full.title, year=full.year,
+                                    rating=full.rating, poster=full.poster)]
+            return page(request, "candidates.html", kind=tipo, query_text=query,
+                        candidates=named, failed="")
+        found, failed = ask_catalogs(tipo, query, year)
         # The reason travels even when there are rows; the page shows it
         # only when there are none, because one of the two catalogs being
         # down while the other answers is not a failure anybody reads about.
@@ -1484,6 +1506,14 @@ def create_app(cfg: Config) -> FastAPI:
         # back as "that is not a link".
         asked = cards.wanted(url)
         if asked is not None:
+            # An id, or a year that leaves one answer, is not a question:
+            # it is saved here, where the origin of the request was
+            # checked, and the list is left to the ones that are.
+            only = only_one_meant(asked.kind, asked.query, asked.year)
+            if only is not None:
+                saved, notice = save_card(asked.kind, only, background)
+                if saved:
+                    return see_other(item_url(saved), notice=notice)
             # The year travels as its own parameter and not as part of the
             # query: the catalog searches by title, and the year is what
             # picks among the answers.
