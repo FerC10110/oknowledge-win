@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}{{ t('Ideas') }} - oknowledge{% endblock %}
+{% block body_class %}wide{% endblock %}
+{% block main %}
+  {# The form first, and open while there is nothing yet: an empty
+     section's only job is to be the place you write the first one. #}
+  <details class="new-idea"{% if not notes and not state and not tag %} open{% endif %}>
+    <summary>{{ t('New idea') }}</summary>
+    <form action="/ideas/guardar" method="post" class="field">
+      <label for="idea-text">{{ t('What is the idea?') }}</label>
+      <textarea id="idea-text" name="text" rows="6" required></textarea>
+      <label for="idea-title">{{ t('Title (optional: the model names it if you leave it empty)') }}</label>
+      <input id="idea-title" name="title" autocomplete="off">
+      <span class="row"><button type="submit">{{ t('Save') }}</button></span>
+    </form>
+  </details>
+  <div class="chips">
+    <a href="/ideas" class="chip {% if not state and not tag %}on{% endif %}">{{ t('All') }}</a>
+    {% for name, label in STATES %}
+      {% if states.get(name) %}
+        <a href="/ideas?estado={{ name }}" class="chip {% if state == name %}on{% endif %}"
+           >{{ t(label) }} <b>{{ states[name] }}</b></a>
+      {% endif %}
+    {% endfor %}
+  </div>
+  {% if idea_tags %}
+    <div class="chips tags">
+      {% for name, n in idea_tags.items() %}
+        <a href="/ideas?tag={{ name|urlencode }}{% if state %}&amp;estado={{ state }}{% endif %}"
+           class="chip small {% if tag == name %}on{% endif %}">#{{ name }} <b>{{ n }}</b></a>
+      {% endfor %}
+    </div>
+  {% endif %}
+  {% if unreadable_ideas %}
+    <p class="quiet">{{ t('%1 ideas could not be read and are not shown', unreadable_ideas) }}</p>
+  {% endif %}
+  {% if not notes and (state or tag) %}
+    <p class="empty">{{ t('Nothing matches that filter') }}</p>
+  {% endif %}
+  <ul class="grid cards">
+    {% for note in notes %}
+      <li class="card">
+        <div class="pad">
+          {# Never an empty link: an idea is saved before the model names it. #}
+          <h2 dir="auto"><a href="/item/{{ note.id|slug }}">{{ note.title or t('Untitled idea') }}</a></h2>
+          <a class="body" href="/item/{{ note.id|slug }}">
+            {% if note.score %}
+              {# Capped: `score` is a line anybody can type in Obsidian. #}
+              {% set stars = [note.score, 5]|min %}
+              <p class="stars" title="{{ stars }}/5">{{ '★' * stars }}{{ '☆' * (5 - stars) }}</p>
+            {% endif %}
+            {# The model's one line once there is one; your own words until then. #}
+            <p class="sum" dir="auto">{{ (note.summary or note.my_note)|plain }}</p>
+          </a>
+          <p class="tags">{% for name in note.tags %}<span>#{{ name }}</span>{% endfor %}</p>
+          <p class="site">
+            {% if note.state %}<span class="state">{{ t(STATE_WORDS.get(note.state, note.state)) }}</span>{% endif %}
+            {% if not note.engine %}<span class="unwritten">{{ t('not completed') }}</span>{% endif %}
+          </p>
+        </div>
+      </li>
+    {% endfor %}
+  </ul>
+{% endblock %}

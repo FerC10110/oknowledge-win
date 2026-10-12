@@ -27,6 +27,9 @@ from oknowledge.vault import (
 from oknowledge.web.app import create_app
 
 WRITE_ROUTES = [
+    # Saving an idea. A cross-site POST here would write a note into this
+    # vault and spend a model call completing it.
+    ("/ideas/guardar", {"text": "x"}),
     ("/item/a1/category", {"category": "Redes"}),
     ("/item/a1/tags", {"tags": "vpn"}),
     ("/item/a1/delete", {}),
@@ -1504,7 +1507,8 @@ def test_a_provider_nobody_knows_does_not_replace_the_one_that_is_saved(setup,
 # --- a safe method must not write (the GET that saved a card) ---------------
 
 VAULT_WRITERS = ("write_note", "write_index", "rebuild_indexes", "update_note",
-                 "delete_note", "download_cover", "save_card", "add_task")
+                 "delete_note", "download_cover", "save_card", "add_task",
+                 "save_idea", "complete_idea")
 
 
 def reachable_source(fn, seen=None):

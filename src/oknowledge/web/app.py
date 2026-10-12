@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import contextlib
 import dataclasses
+import datetime as dt
 import logging
 import re
 from importlib.resources import files
@@ -37,16 +38,18 @@ from ..ai.providers import PROVIDERS
 from ..ai.providers import find as find_provider
 from ..config import CONFIG_PATH, CONTENT_MODES, ENGINE_NAMES, MENTION_MODES, Config
 from ..config import save as save_config
+from ..ideas import new_idea
 from ..i18n import LANGUAGES, NATIVE_NAMES, translator
 from ..pipeline import add as add_link
 from ..pipeline import describe, download_cover, icon_path, import_links
 from ..pipeline import is_domain, owed
-from ..pipeline import today
+from ..pipeline import complete_idea, today
 from ..models_cache import read as read_models
 from ..models_cache import remember as remember_models
 from ..queue import Locked, Queue
 from ..trace import trace_run
 from ..urls import is_search_url, link_id, normalize
+from ..vault import IDEA_STATES
 from ..vault import STATES as vault_states
 from ..vault import (
     BadCategory, IndexesStale, ProtectedNote, clean_category, delete_note,
@@ -121,6 +124,11 @@ NOTICES = {
     "catalogue-silent": "The catalogue has no card for that one. Try another.",
     # The rewrite runs behind the page, like every other model call here.
     "rewriting": "Writing the summary now. Reload in a moment to read it.",
+    # Saving an idea: it is on disk already, and its name and tags come in
+    # behind the page, like a card's summary.
+    "completing": "Saved. The model is filling in the title and the tags: "
+                  "reload in a moment to see them.",
+    "idea-empty": "Write the idea first: there is nothing to save yet.",
     "not-a-link": "That is not a link: it has to be an address, like "
                   "https://example.com/page.",
     "searched": "That is a page of search results, not a page. Open the result "
@@ -355,6 +363,15 @@ def preview_of(scan, known: set[str]) -> dict:
         "bare": [one for one in scan.links if one.bare],
         "suspicious": scan.suspicious,
     }
+
+
+IDEA_STATE_WORDS = {"pending": "seed", "doing": "under way",
+                    "done": "done", "dropped": "dropped"}
+"""An idea's four states, in its own words: an idea is not watched or read,
+it is had, worked on, made, or let go."""
+
+IDEA_STATE_ORDER = tuple(IDEA_STATE_WORDS.items())
+"""The chips of the ideas section, in this order."""
 
 
 STATE_WORDS = {
@@ -628,6 +645,8 @@ def create_app(cfg: Config) -> FastAPI:
     # The cards. A second index over a second folder, so a page of films
     # costs nothing to the 1184 links and the two can never mix.
     shelf = Library(cfg, shelf=cfg.ocio)
+    # The ideas: a third index over a third folder, for the same reason.
+    ideas = Library(cfg, shelf=cfg.ideas)
     # The settings page can change the engine chain while the server runs. The
     # vault paths it cannot change, so the library stays valid either way.
     current = {"cfg": cfg}
@@ -1524,6 +1543,67 @@ def create_app(cfg: Config) -> FastAPI:
         if not saved:
             return see_other("/ocio", notice=notice)
         return see_other(item_url(saved), notice=notice)
+
+    @app.get("/ideas", response_class=HTMLResponse)
+    def idea_shelf(request: Request, estado: str = "", tag: str = ""):
+        """The ideas, newest first, the dropped ones only when asked for:
+        the fourth state exists to keep them, not to look at them.
+
+        An unknown filter shows the usual view rather than nothing: these
+        arrive from a URL somebody can type, and an empty page would look
+        like an empty shelf.
+        """
+        ideas.refresh()
+        notes = sorted(ideas.notes, key=lambda n: (n.saved, n.title), reverse=True)
+        if estado in IDEA_STATES:
+            notes = [n for n in notes if n.state == estado]
+        else:
+            estado = ""
+            notes = [n for n in notes if n.state != "dropped"]
+        if tag:
+            notes = [n for n in notes if tag in n.tags]
+        return page(request, "ideas.html", notes=notes, state=estado, tag=tag,
+                    states=_count_by(ideas.notes, "state"),
+                    idea_tags=ideas.tags(), unreadable_ideas=ideas.unreadable,
+                    STATES=IDEA_STATE_ORDER, STATE_WORDS=IDEA_STATE_WORDS)
+
+    def save_idea(note) -> str:
+        """Write a new idea and its shelf's index. Returns the notice, and
+        raises when the note itself could not be written -- the two are
+        told apart for the reason save_card tells them apart."""
+        live = current["cfg"]
+        write_note(live, note, live.language,
+                   path=note_path(live, note, shelf=live.ideas))
+        notice = "completing"
+        try:
+            rebuild_indexes(live, live.language, shelf=live.ideas)
+        except OSError as error:
+            log.warning("the indexes could not be rebuilt: %s", error)
+            notice = "indexes-stale"
+        ideas.refresh()
+        return notice
+
+    @app.post("/ideas/guardar")
+    def save_the_idea(background: BackgroundTasks, text: str = Form(""),
+                      title: str = Form("")):
+        """The form in the section. Written at once, with your text; the
+        name, the tags, the summary and the points come in behind the page.
+
+        No text, no idea: the model has nothing to read, and a title alone
+        is a note you would not know what to do with in a month.
+        """
+        if not text.strip():
+            return see_other("/ideas", notice="idea-empty")
+        live = current["cfg"]
+        instant = dt.datetime.now(dt.timezone.utc).isoformat(timespec="microseconds")
+        note = new_idea(text, title, today(), instant)
+        try:
+            notice = save_idea(note)
+        except (OSError, ProtectedNote) as error:
+            log.warning("the idea could not be written: %s", error)
+            return see_other("/ideas", notice="write-failed")
+        background.add_task(complete_idea, live, note.id, trace=progress.note)
+        return see_other(item_url(note.id), notice=notice)
 
     @app.post("/add")
     def add_pasted(background: BackgroundTasks, url: str = Form(""),

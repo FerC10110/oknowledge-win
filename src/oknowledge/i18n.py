@@ -76,6 +76,24 @@ STRINGS = {
         "Books": "Libros",
         "Pending": "Pendiente",
         "not rewritten": "sin reescribir",
+        "Ideas": "Ideas",
+        "New idea": "Nueva idea",
+        "What is the idea?": "¿Cuál es la idea?",
+        "Title (optional: the model names it if you leave it empty)":
+            "Título (opcional: si lo dejás vacío, lo pone el modelo)",
+        "Untitled idea": "Idea sin título",
+        "not completed": "sin completar",
+        "seed": "semilla",
+        "under way": "en marcha",
+        "done": "hecha",
+        "dropped": "descartada",
+        "%1 ideas could not be read and are not shown":
+            "%1 ideas no se pudieron leer y no se muestran",
+        "Saved. The model is filling in the title and the tags: reload in a moment to see them.":
+            "Guardada. El modelo está completando el título y las etiquetas: "
+            "recargá en un momento para verlos.",
+        "Write the idea first: there is nothing to save yet.":
+            "Escribí la idea primero: todavía no hay nada que guardar.",
         "%1 cards could not be read and are not shown":
             "%1 fichas no se pudieron leer y no se muestran",
         "Which one?": "¿Cuál?",
