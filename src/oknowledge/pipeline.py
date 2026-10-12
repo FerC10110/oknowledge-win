@@ -47,6 +47,7 @@ from .vault import (
     note_stem,
     read_note,
     rebuild_indexes,
+    repoint_related,
     update_note,
     write_note,
 )
@@ -642,6 +643,8 @@ def _save(cfg: Config, q: Queue, link: str, url: str, note: Note, status: str,
             path, trouble = _rename_to_title(cfg, note, path)
             if trouble:
                 warnings.append(trouble)
+            if path.stem != target.stem:
+                warnings += _repoint(cfg, q, target.stem, path.stem)
         warnings += _reindex(cfg)
         download_icon(cfg, note.source)
         told.detail = str(path.name)
@@ -700,6 +703,21 @@ def _rename_to_title(cfg: Config, note: Note, path: Path,
         return path, (f"the note stayed as {path.name}: it could not be renamed "
                       f"to {ideal.name} ({_typed(error)})")
     return ideal, None
+
+
+def _repoint(cfg: Config, q: Queue, old: str, new: str) -> list[str]:
+    """Tell the ideas that named a note by its old file name.
+
+    Warnings and never an error: the note that was just saved is fine, and
+    an idea that still names the old file shows that row dimmed, with an x
+    to take it off. Each idea is rewritten under its own queue lock.
+    """
+    try:
+        result = repoint_related(cfg, old, new, cfg.language, lock=q.lock)
+    except OSError as error:
+        return [f"the ideas could not be checked for {old}: {error}"]
+    return [f"the idea {path.name} still names {old}: {why}"
+            for path, why in result.failed]
 
 
 def _usable_name(cfg: Config, ideal: Path, shelf: Shelf | None = None) -> Path | None:

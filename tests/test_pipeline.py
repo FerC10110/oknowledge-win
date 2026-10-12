@@ -12,13 +12,14 @@ from oknowledge import pipeline
 from oknowledge.ai.base import Analysis
 from oknowledge.config import Config
 from oknowledge.extract import Unreadable
+from oknowledge.ideas import new_idea
 from oknowledge.model import Extracted, Mention, Note
 from oknowledge.pipeline import (IMPORTED, _last_worked, add, backfill_mentions,
                                  import_links, retry)
 from oknowledge.queue import Locked, Queue, state_dir
 from oknowledge.urls import link_id, normalize, search_url
-from oknowledge.vault import (all_notes, find_note, index_path, read_note, update_note,
-                              write_note)
+from oknowledge.vault import (all_notes, find_note, index_path, note_path, read_note,
+                              update_note, write_note)
 from oknowledge.whatsapp import Imported
 
 ANSWER = json.dumps({
@@ -440,6 +441,25 @@ def test_a_retried_note_is_renamed_after_its_new_title(cfg, q, monkeypatch):
     assert [note.id for note in notes] == [first.id]
     # Renamed before the reindex, so the wikilink names the file that exists.
     assert f"[[{renamed.stem}|" in index_path(cfg, "Redes").read_text(encoding="utf-8")
+
+
+def test_a_renamed_link_takes_its_ideas_with_it(cfg, q, monkeypatch):
+    # An idea names its links by file name, so the rename that gives a
+    # finished note its real name has to tell the ideas that named the old one.
+    extraction(monkeypatch, Unreadable("503"))
+    no_pictures(monkeypatch)
+    first = add(cfg, "https://arstechnica.com/vpn", queue=q)
+    idea = new_idea("Una vpn propia.", "VPN", TODAY, "2026-10-12T00:00:00+00:00")
+    idea.related = [first.path.stem, "otro"]
+    write_note(cfg, idea, "es", path=note_path(cfg, idea, shelf=cfg.ideas))
+
+    extraction(monkeypatch, PAGE)
+    no_pictures(monkeypatch)
+    cfg.engines["fake"]["replies"] = [ANSWER]
+    renamed = retry(cfg, queue=q)[0].path
+
+    assert renamed.stem != first.path.stem
+    assert find_note(cfg, idea.id, shelf=cfg.ideas)[1].related == [renamed.stem, "otro"]
 
 
 def test_a_retried_note_keeps_its_name_when_the_new_one_is_taken(cfg, q, monkeypatch):

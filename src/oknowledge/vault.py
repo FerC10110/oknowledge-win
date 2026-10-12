@@ -877,3 +877,38 @@ def rename_category(cfg: Config, old: str, new: str, language: str,
             continue
         moved += 1
     return _finish(cfg, language, RenameResult(moved=moved, failed=failed))
+
+
+def repoint_related(cfg: Config, old: str, new: str, language: str,
+                    lock=None) -> RenameResult:
+    """Point every idea that names the file `old` at `new` instead.
+
+    The pipeline renames a link's file when the model finally gives it a
+    real title, and the ideas name their links by file name -- that is
+    what a wikilink is. Shaped like rename_category, for the same reasons:
+    each idea is read again under its own lock, and one that cannot be
+    written is reported and never stops the others. No index names an
+    idea's links, so there is nothing to rebuild.
+    """
+    hold = lock or _unlocked
+    moved = 0
+    failed: list[tuple[Path, str]] = []
+    for path, scanned in _scan(cfg, cfg.ideas)[0]:
+        if old not in scanned.related:
+            continue
+        try:
+            with hold(scanned.id):
+                note = read_note(path)
+                if note is None or old not in note.related:
+                    continue
+                note.related = normalize_related(
+                    [new if stem == old else stem for stem in note.related])
+                write_note(cfg, note, language, path=path)
+        except Locked:
+            failed.append((path, BUSY))
+            continue
+        except (ProtectedNote, OSError) as error:
+            failed.append((path, str(error)))
+            continue
+        moved += 1
+    return RenameResult(moved=moved, failed=failed)
