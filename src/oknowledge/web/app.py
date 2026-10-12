@@ -353,6 +353,28 @@ def preview_of(scan, known: set[str]) -> dict:
     }
 
 
+KIND_WORDS = (("movie", "Movies"), ("series", "Series"),
+              ("anime", "Anime"), ("book", "Books"))
+"""The four kinds and the word each one wears on a chip, in the order the
+chips are drawn. A tuple of pairs and not a dict: the order is the point."""
+
+STATE_ORDER = (("pending", "Pending"), ("doing", "Watching"),
+               ("done", "Seen"), ("dropped", "Dropped"))
+"""The four states. "Watching" and "Seen" read oddly for a book, and the
+alternative is four words per kind, which is sixteen strings to translate
+for a chip -- these four say the thing in every case."""
+
+
+def _count_by(notes, field: str) -> dict[str, int]:
+    """How many cards each value of one field has, for the filter chips."""
+    counts: dict[str, int] = {}
+    for note in notes:
+        value = getattr(note, field, "")
+        if value:
+            counts[value] = counts.get(value, 0) + 1
+    return dict(sorted(counts.items()))
+
+
 def catalog_type_for(kind: str) -> str:
     """Which catalog shelf a kind is asked of by default."""
     return "book" if kind == "book" else cinemeta.catalog_type(kind)
@@ -1295,6 +1317,30 @@ def create_app(cfg: Config) -> FastAPI:
             return "", "write-failed"
         shelf.refresh()
         return note.id, ""
+
+    STATES = ("pending", "doing", "done", "dropped")
+
+    @app.get("/ocio", response_class=HTMLResponse)
+    def leisure(request: Request, tipo: str = "", estado: str = ""):
+        """The cards. A film is not a link about Docker, and the shelf that
+        holds one does not hold the other.
+
+        An unknown filter shows everything rather than nothing: these
+        arrive from a URL somebody can type, and an empty page would look
+        like an empty shelf.
+        """
+        shelf.refresh()
+        notes = shelf.notes
+        if tipo in cards.KINDS:
+            notes = [n for n in notes if n.type == tipo]
+        if estado in STATES:
+            notes = [n for n in notes if n.state == estado]
+        return page(request, "ocio.html", notes=notes, kind=tipo, state=estado,
+                    counted=_count_by(shelf.notes, "type"),
+                    states=_count_by(shelf.notes, "state"),
+                    unreadable_cards=shelf.unreadable,
+                    KINDS=KIND_WORDS, STATES=STATE_ORDER,
+                    STATE_WORDS=dict(STATE_ORDER))
 
     @app.get("/ocio/buscar", response_class=HTMLResponse)
     def card_candidates(request: Request, tipo: str = "", q: str = "",

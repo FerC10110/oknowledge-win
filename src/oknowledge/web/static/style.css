@@ -439,6 +439,17 @@ header nav b { font-weight: 600; font-variant-numeric: tabular-nums; }
        font-size: 0.7rem; color: var(--dim); white-space: nowrap; }
 .row select { max-width: 100%; }
 
+/* A card's own line of facts: the stars you gave it, the state it is in,
+   and the mark that says the catalog's English is still what it says. The
+   stars are one glyph each so they need no picture and no width. */
+/* Five stars, filled and outlined. Not two colours: the filled star comes
+   from a monochrome emoji font that ignores `color` entirely, so a coloured
+   span buys nothing and the shape is what counts. */
+.cards .stars { margin: 0.1rem 0 0; color: var(--dim); letter-spacing: 0.1em; }
+.cards .state { color: var(--fg); }
+.cards .unwritten { color: var(--dim); font-style: italic; }
+.cards .site { display: flex; gap: 0.6rem; align-items: center; }
+
 /* The candidates of a search. A row is a poster, a name and a button, and
    the poster is the fastest way to recognise the one you meant -- these are
    six films with the same name. The box keeps its size whether the catalog

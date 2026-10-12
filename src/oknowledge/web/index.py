@@ -268,8 +268,12 @@ class Library:
                     cache[name] = old
                     continue
                 path = self.shelf.dir / name
-                note, _ = scan_file(path)
-                cache[name] = (sig, _entry(path, note, sig[0]) if note else None)
+                # The flag matters now: the ocio shelf keeps its category
+                # indexes beside its notes, and an index is not a note that
+                # could not be read -- it is not a note at all.
+                note, broken = scan_file(path)
+                cache[name] = (sig, _entry(path, note, sig[0]) if note else None,
+                               broken)
         except OSError as exc:
             self.entries, self.unreadable = [], 0
             self._fingerprint, self._cache, self._ids = None, {}, {}
@@ -278,7 +282,7 @@ class Library:
             self._years, self._months = {}, {}
             self.error = str(exc)
             return
-        entries = [e for _, e in cache.values() if e is not None]
+        entries = [row[1] for row in cache.values() if row[1] is not None]
         # `saved` is date-only; the file time orders notes saved the same day.
         entries.sort(key=lambda e: (e.note.saved, e.mtime_ns, e.note.title), reverse=True)
         categories: dict[str, int] = {}
@@ -307,7 +311,7 @@ class Library:
         # Publish everything together, after the work that can fail.
         self.error = None
         self._cache, self._fingerprint = cache, current
-        self.unreadable = sum(1 for _, e in cache.values() if e is None)
+        self.unreadable = sum(1 for row in cache.values() if row[2])
         self.entries, self._ids = entries, ids
         self._categories = dict(sorted(categories.items()))
         # By name, like the categories: these are the user's own buckets, and

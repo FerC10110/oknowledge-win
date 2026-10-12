@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}{{ t('Leisure') }} - oknowledge{% endblock %}
+{% block body_class %}wide{% endblock %}
+{% block scripts %}<script src="/static/popup.js" defer></script>{% endblock %}
+{% block main %}
+  <div class="chips">
+    <a href="/ocio" class="chip {% if not kind and not state %}on{% endif %}">{{ t('All') }}</a>
+    {% for name, label in KINDS %}
+      {% if counted.get(name) %}
+        <a href="/ocio?tipo={{ name }}" class="chip {% if kind == name %}on{% endif %}"
+           >{{ t(label) }} <b>{{ counted[name] }}</b></a>
+      {% endif %}
+    {% endfor %}
+  </div>
+  {% if states %}
+    <div class="chips tags">
+      {% for name, label in STATES %}
+        {% if states.get(name) %}
+          <a href="/ocio?estado={{ name }}{% if kind %}&amp;tipo={{ kind }}{% endif %}"
+             class="chip small {% if state == name %}on{% endif %}">{{ t(label) }} <b>{{ states[name] }}</b></a>
+        {% endif %}
+      {% endfor %}
+    </div>
+  {% endif %}
+  {% if unreadable_cards %}
+    <p class="quiet">{{ t('%1 cards could not be read and are not shown', unreadable_cards) }}</p>
+  {% endif %}
+  {% if not notes %}
+    <p class="empty">{% if kind or state %}{{ t('Nothing matches that filter') }}{% else %}{{ t('Nothing saved yet') }}{% endif %}</p>
+  {% endif %}
+  <ul class="grid cards">
+    {% for note in notes %}
+      <li class="card">
+        {% if note.cover %}
+          <a class="shot" href="/item/{{ note.id|slug }}" data-popup="/embed/{{ note.id|slug }}"
+             tabindex="-1" aria-hidden="true">
+            <img src="/cover/{{ note.id|slug }}" alt="" loading="lazy">
+          </a>
+        {% endif %}
+        <div class="pad">
+          <h2 dir="auto">
+            {% if note.url is web_url %}
+              <a href="{{ note.url }}" target="_blank" rel="noreferrer">{{ note.title }}</a>
+            {% else %}
+              {{ note.title }}
+            {% endif %}
+          </h2>
+          <a class="body" href="/item/{{ note.id|slug }}" data-popup="/embed/{{ note.id|slug }}">
+            <p class="meta">
+              {% if note.published %}{{ note.published[:4] }}{% endif %}
+              {%- if note.length %} · {{ note.length }}{% endif %}
+              {%- if note.rating %} · ★ {{ note.rating }}{% endif %}
+            </p>
+            {% if note.score %}
+              {# Filled and outlined, not two colours: U+2605 comes from a
+                 monochrome emoji font that ignores `color`, so the count has
+                 to be legible by shape alone. Checked in a browser. #}
+              <p class="stars" title="{{ note.score }}/5">{{ '★' * note.score }}{{ '☆' * (5 - note.score) }}</p>
+            {% endif %}
+            <p class="sum" dir="auto">{{ note.summary|plain }}</p>
+          </a>
+          <p class="tags">{% for tag in note.tags %}<span>#{{ tag }}</span>{% endfor %}</p>
+          <p class="site">
+            {% if note.state %}<span class="state">{{ t(STATE_WORDS[note.state]) }}</span>{% endif %}
+            {# What says a model has been over it: a card is saved complete,
+               with the catalog's own English synopsis, and `engine` empty is
+               what means nobody has rewritten it yet. #}
+            {% if not note.engine %}<span class="unwritten">{{ t('not rewritten') }}</span>{% endif %}
+          </p>
+        </div>
+      </li>
+    {% endfor %}
+  </ul>
+{% endblock %}

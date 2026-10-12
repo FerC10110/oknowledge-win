@@ -27,6 +27,7 @@
     </form>
     <nav>
       <a href="/categories">{{ t('Categories') }}</a>
+      <a href="/ocio">{{ t('Leisure') }}</a>
       {# The count is here and not only on the page itself: a batch runs for an
          hour behind whatever you are reading, and this is how you see it. #}
       <a href="/retry">{{ t('Reprocessing') }}{% if batch.running %}

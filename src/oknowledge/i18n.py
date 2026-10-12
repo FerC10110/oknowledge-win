@@ -61,6 +61,16 @@ STRINGS = {
         "Check that the folder exists, is mounted and is readable.":
             "Revisá que la carpeta exista, esté montada y se pueda leer.",
         "Paste a link": "Pegá un link",
+        "Leisure": "Ocio",
+        "Movies": "Películas",
+        "Books": "Libros",
+        "Pending": "Pendiente",
+        "Watching": "Viendo",
+        "Seen": "Vista",
+        "Dropped": "Abandonada",
+        "not rewritten": "sin reescribir",
+        "%1 cards could not be read and are not shown":
+            "%1 fichas no se pudieron leer y no se muestran",
         "Which one?": "¿Cuál?",
         "Looking for “%1”": "Buscando “%1”",
         "Nothing found for “%1”.": "No se encontró nada para “%1”.",
