@@ -201,6 +201,33 @@ behind the page:
 - **Dropped ideas are kept, not shown:** the section hides them until you
   pick *dropped*.
 
+#### Asking about an idea
+
+Four buttons on an idea's page, each writing its own section into the
+idea's note, between the points and your text:
+
+- **Already out there?** searches the web for the same thing or something
+  close, with links. It needs an engine that searches: opencode, or the API
+  engine with the Anthropic provider. The answer is checked: a model that
+  answers without having searched is an error, not a verdict.
+- **Improve** points out weak spots and how to fix them.
+- **Expand** proposes what the idea does not say yet.
+- **Links that may help** picks, among your saved links of a category,
+  the ones that serve the idea, each with an **Add to the idea** button.
+
+Asking again replaces that section only. Your text is never touched.
+
+#### opencode runs without a sandbox
+
+On Linux every opencode run is locked in with bubblewrap and pasta: no home,
+no environment, no way back to this machine. Neither exists on Windows, so
+here opencode runs as it is, with `--pure` and from an empty temporary
+folder, and nothing more. It is an agent with a shell and the network, and
+an **Already out there?** prompt carries text from web pages: a page written
+to steer it could have it read your files or call the oknowledge server. If
+that matters more than a free engine, take `opencode` out of `[ai] chain`
+and use the API engine or ollama.
+
 ### The terminal
 
 The global option `--config PATH` goes before the subcommand.
@@ -329,37 +356,6 @@ An English interface with Spanish summaries is a normal setup. Changing the
 interface language never touches saved notes, and changing the content language
 only affects notes saved afterwards.
 
-#### Asking about an idea
-
-Four buttons on an idea's page, each writing its own section into the
-idea's note, between the points and your text:
-
-- **Already out there?** searches the web for the same thing or something
-  close, with links. It needs an engine that searches: opencode, or the API
-  engine with the Anthropic provider. The answer is checked: a model that
-  answers without having searched is an error, not a verdict.
-- **Improve** points out weak spots and how to fix them.
-- **Expand** proposes what the idea does not say yet.
-- **Links that may help** picks, among your saved links of a category,
-  the ones that serve the idea, each with an **Add to the idea** button.
-
-Asking again replaces that section only. Your text is never touched.
-
-#### opencode runs sandboxed
-
-Every opencode run goes through [bubblewrap](https://github.com/containers/bubblewrap)
-(`pacman -S bubblewrap`). opencode is an agent with a shell and the network,
-and its prompt carries text from web pages. Inside the sandbox it sees the
-system read-only, a private set of opencode folders kept in
-`~/.local/share/oknowledge/opencode/` (never your own opencode config,
-plugins or session history) and no environment variables of yours; nothing
-else of your home: not your vault, not `~/.config/oknowledge` and its keys,
-not `~/.ssh`. Its network is its own, made by
-[pasta](https://passt.top) (`pacman -S passt`): it reaches the internet, but
-not `localhost` or anything else on this machine, so not the oknowledge
-server either. Without bubblewrap or pasta opencode does not run, and the
-chain moves on to the next engine.
-
 ## The vault
 
 ```
@@ -446,6 +442,7 @@ delete those two folders. Your notes in `<vault>\oknowledge\` are left alone.
 | File permissions | `chmod 600` on the config and the `.env` | nothing: the mode decides nothing on Windows, and the folder's permissions are what guard the file |
 | The interface language | a JSON file shared with the other Omarchy plugins | `[web] language` in the config |
 | A note's durability | the directory is `fsync`ed after each write | it is not: a directory has no handle on Windows. The write itself is still atomic |
+| opencode | runs inside bubblewrap and pasta | runs without a sandbox: see *opencode runs without a sandbox* |
 
 The lock keeps the one promise the queue is built on: it belongs to the open
 file, so when a process dies the system drops it. There is no timeout to guess
