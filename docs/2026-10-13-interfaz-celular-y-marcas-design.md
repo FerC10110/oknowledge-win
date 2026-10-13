@@ -83,7 +83,8 @@ se pase se pierde en silencio. Todo camino que reescribe una nota conserva
 - se acepta si tiene entre 1 y 8 code points y ninguno es letra, dígito,
   espacio ni control (categorías Unicode `L*`, `N*`, `Z*`, `C*` salvo ZWJ
   U+200D y el selector de variación U+FE0F, que forman 👍🏽, ❤️ y familias);
-- cualquier otra cosa devuelve `None` y no se escribe nada.
+- cualquier otra cosa devuelve `None` y no se escribe nada. Los keycaps
+  (1️⃣) llevan un dígito y quedan afuera: es el precio de una regla simple.
 
 ### Lista fija
 
@@ -117,9 +118,9 @@ lista de quien la cambió.
   lleva `id="card-{id}"`. `popup.js` no abre el popup por un clic dentro de
   `.mark`.
 - `item.html` lo incluye al lado del título.
-- La grilla de `/marked` reusa las tarjetas: un partial `card.html` por
-  estantería no hace falta; la página distingue con `note.type` y muestra lo
-  común (título, categoría, fecha, resumen, marca) con el enlace a la nota.
+- `/marked` dibuja su propia tarjeta, con lo que las tres tienen en común
+  (título, categoría, fecha, resumen, marca, portada si hay) y el enlace a la
+  página de la nota; no copia las acciones propias de cada estantería.
 
 ### Nav
 
