@@ -119,6 +119,7 @@ STRINGS = {
         "thinking…": "pensando…",
         "Last time it failed: %1": "La última vez falló: %1",
         "Among": "Entre",
+        "Links that could serve my idea": "Links que pueden servir a mi idea",
         "All categories": "Todas",
         "Add to the idea": "Sumar a la idea",
         "already linked": "ya relacionado",

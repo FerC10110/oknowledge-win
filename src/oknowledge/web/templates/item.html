@@ -96,7 +96,7 @@
       {# Your text first: it is the idea, and the model's summary and points
          are only its reading of it. Title and text are one form, so a
          renamed idea and its text land in one write. #}
-      <section class="mine">
+      <section class="mine idea">
         <form action="/item/{{ note.id|slug }}/mine/note" method="post" class="field">
           <label for="field-title">{{ t('Title') }}</label>
           <input id="field-title" name="title" value="{{ note.title }}"
@@ -104,8 +104,46 @@
           <input type="hidden" name="title_was" value="{{ note.title }}">
           <label for="field-mine">{{ t('Your idea') }}</label>
           <textarea id="field-mine" name="my_note" rows="8">{{ note.my_note }}</textarea>
+          {# The four actions, in a row under the text they read. Each button
+             posts its own empty form, declared after this one: forms cannot
+             nest. They read the saved text, so save first. #}
+          <div class="idea-run">
+            {% for action in actions %}
+              {% set has = note.actions.get(action) %}
+              {% set busy = action in running %}
+              {% set blocked = action == 'exists' and not searchable %}
+              {# Links searches your own library, so it reads as a search on a
+                 line of its own: what it looks for, where, and Search. #}
+              <span class="idea-go{% if action == 'links' %} idea-search{% endif %}">
+                {% if action == 'links' %}
+                  <label for="field-among">{{ t('Links that could serve my idea') }}</label>
+                  <select id="field-among" name="category" form="act-links">
+                    <option value="">{{ t('All categories') }}</option>
+                    {% for name in link_categories %}<option value="{{ name }}">{{ name }}</option>{% endfor %}
+                  </select>
+                {% endif %}
+                <button type="submit" form="act-{{ action }}"
+                        {%- if has and not busy %} title="{{ t('Ask again') }}"{% endif %}
+                        {%- if busy or blocked %} disabled{% endif %}>
+                  {%- if busy %}{{ t('thinking…') }}
+                  {%- else %}{% if has %}↻ {% endif %}{{ t('Search') if action == 'links' else t(action_buttons[action]) }}{% endif -%}
+                </button>
+              </span>
+            {% endfor %}
+          </div>
+          {% for action in actions %}
+            {% if action == 'exists' and not searchable %}
+              <p class="meta">{{ t('No engine in your chain searches the web: opencode or the Anthropic API do.') }}</p>
+            {% endif %}
+            {% if failed.get(action) %}
+              <p class="failed">{{ t(action_buttons[action]) }} — {{ t('Last time it failed: %1', failed[action]) }}</p>
+            {% endif %}
+          {% endfor %}
           <span class="row"><button type="submit">{{ t('Save') }}</button></span>
         </form>
+        {% for action in actions %}
+          <form id="act-{{ action }}" action="/item/{{ note.id|slug }}/actions/{{ action }}" method="post"></form>
+        {% endfor %}
         {% if related %}
           <h2>{{ t('Links for this idea') }}</h2>
           <ul class="related">
@@ -126,15 +164,13 @@
             {% endfor %}
           </ul>
         {% endif %}
-        {# The four actions. Each writes its own section into the idea's
+        {# What the actions wrote. Each has its own section in the idea's
            note, beside your text and never over it. #}
         <section class="idea-actions">
           {% for action in actions %}
             {% set has = note.actions.get(action) %}
-            {% set busy = action in running %}
-            {% set blocked = action == 'exists' and not searchable %}
+            {% if has %}
             <div class="idea-action">
-              {% if has %}
                 <h2>{{ t(action_titles[action]) }}</h2>
                 {% for kind, body in sections[action] %}
                   {% if kind == 'ul' %}<ul>{% for item in body %}<li>{{ item }}</li>{% endfor %}</ul>
@@ -164,36 +200,19 @@
                     {% endfor %}
                   </ul>
                 {% endif %}
-              {% endif %}
-              <form action="/item/{{ note.id|slug }}/actions/{{ action }}" method="post" class="row">
-                {% if action == 'links' %}
-                  <label for="field-among">{{ t('Among') }}</label>
-                  <select id="field-among" name="category">
-                    <option value="">{{ t('All categories') }}</option>
-                    {% for name in link_categories %}<option value="{{ name }}">{{ name }}</option>{% endfor %}
-                  </select>
-                {% endif %}
-                <button type="submit"{% if busy or blocked %} disabled{% endif %}>
-                  {%- if busy %}{{ t('thinking…') }}
-                  {%- elif has %}{{ t('Ask again') }}
-                  {%- else %}{{ t(action_buttons[action]) }}{% endif -%}
-                </button>
-              </form>
-              {% if blocked %}
-                <p class="meta">{{ t('No engine in your chain searches the web: opencode or the Anthropic API do.') }}</p>
-              {% endif %}
-              {% if failed.get(action) %}
-                <p class="failed">{{ t('Last time it failed: %1', failed[action]) }}</p>
-              {% endif %}
             </div>
+            {% endif %}
           {% endfor %}
         </section>
-        {% include "mine-buttons.html" %}
-        {# Always offered, unlike a card's: an idea grows, and fresh tags
-           and points for what you added is the reason to ask again. #}
-        <form action="/item/{{ note.id|slug }}/describe" method="post" class="row">
-          <button type="submit">{{ t('Ask the model again') }}</button>
-        </form>
+        {# State, stars and asking again, on one line that wraps. #}
+        <div class="idea-meta">
+          {% include "mine-buttons.html" %}
+          {# Always offered, unlike a card's: an idea grows, and fresh tags
+             and points for what you added is the reason to ask again. #}
+          <form action="/item/{{ note.id|slug }}/describe" method="post" class="row">
+            <button type="submit">{{ t('Ask the model again') }}</button>
+          </form>
+        </div>
       </section>
     {% endif %}
     <div class="actions">

@@ -270,3 +270,81 @@ def test_a_category_that_is_not_in_the_library_is_ignored(cfg, ran):
     TestClient(create_app(cfg)).post(f"/item/{note.id}/actions/links",
                                      data={"category": "Redes\n\n## Mi nota\n\nx"})
     assert ran[0] == [(note.id, "links", "")]
+
+
+# --- the actions sit in a row under your text -------------------------------------
+
+def note_form(text, note):
+    start = text.index(f'<form action="/item/{note.id}/mine/note"')
+    return text[start:text.index("</form>", start)]
+
+
+def test_the_actions_sit_between_your_text_and_save(cfg):
+    note = put(cfg)
+    form = note_form(page(cfg, note), note)
+    text_ends = form.index("</textarea>")
+    save = form.index('<button type="submit">')
+    for action in ("exists", "improve", "expand", "links"):
+        at = form.index(f'form="act-{action}"')
+        assert text_ends < at < save
+
+
+def test_each_action_button_posts_its_own_form_not_the_note(cfg):
+    """Forms cannot nest: the buttons point at forms declared after the note."""
+    note = put(cfg)
+    text = page(cfg, note)
+    after = text[text.index("</form>", text.index(f'/item/{note.id}/mine/note')):]
+    for action in ("exists", "improve", "expand", "links"):
+        assert (f'<form id="act-{action}" action="/item/{note.id}/actions/{action}" '
+                f'method="post"></form>') in after
+
+
+def test_the_category_choice_goes_with_the_links_button(cfg):
+    note = put(cfg)
+    form = note_form(page(cfg, note), note)
+    assert 'name="category" form="act-links"' in form
+
+
+def test_a_done_action_keeps_its_own_name_on_the_button(cfg):
+    note = put(cfg, actions={"improve": "- algo"})
+    form = note_form(page(cfg, note), note)
+    button = form[form.index('form="act-improve"'):]
+    button = button[:button.index("</button>")]
+    assert "Improve" in button
+    assert 'title="Ask again"' in button
+
+
+def test_the_action_row_lines_up_side_by_side():
+    from oknowledge.web.app import WEB
+    import re
+    css = WEB.joinpath("static", "style.css").read_text(encoding="utf-8")
+    assert re.search(r"\.idea-run\s*\{[^}]*display:\s*flex[^}]*flex-wrap:\s*wrap", css)
+
+
+def test_state_stars_and_ask_again_share_one_line(cfg):
+    note = put(cfg)
+    text = page(cfg, note)
+    block = text[text.index('<div class="idea-meta">'):]
+    block = block[:block.index("</div>")]
+    for form in ("/mine/state", "/mine/score", "/describe"):
+        assert f'action="/item/{note.id}{form}"' in block
+
+
+def test_the_idea_rows_drop_the_page_wide_padding():
+    from oknowledge.web.app import WEB
+    import re
+    css = WEB.joinpath("static", "style.css").read_text(encoding="utf-8")
+    assert re.search(r"\.mine\.idea \.row\s*\{[^}]*padding:\s*0", css)
+    assert re.search(r"\.idea-meta\s*\{[^}]*display:\s*flex[^}]*flex-wrap:\s*wrap", css)
+
+
+def test_the_links_search_is_labelled_and_its_button_says_search(cfg):
+    """A bare picker and a button named like a heading did not read as a search."""
+    note = put(cfg)
+    form = note_form(page(cfg, note), note)
+    label = form.index('<label for="field-among">Links that could serve my idea</label>')
+    picker = form.index('id="field-among"')
+    button = form[form.index('form="act-links"', picker + 1):]
+    button = button[:button.index("</button>")]
+    assert label < picker
+    assert button.rstrip().endswith(">Search")
