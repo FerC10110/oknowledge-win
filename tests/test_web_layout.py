@@ -87,3 +87,28 @@ def test_the_summary_says_all_when_nothing_is_on(client):
 
 def test_select_moved_into_the_summary(client):
     assert "pick-mode" in filters_summary(client.get("/").text).group(1)
+
+
+# --- the strip of time and the cards ----------------------------------------
+
+def timeline(body):
+    return re.search(r'<nav class="timeline".*?</nav>', body, re.S).group(0)
+
+
+def test_a_break_comes_before_the_first_month_only(client):
+    nav = timeline(client.get("/?when=2026").text)
+    assert nav.count('<i class="break"') == 1
+    assert nav.index('<i class="break"') < nav.index('class="month')
+
+
+def test_no_year_open_no_break(client):
+    assert '<i class="break"' not in timeline(client.get("/").text)
+
+
+def test_the_phone_css_puts_the_months_on_their_own_row():
+    assert ".timeline .break" in css() and "order: 1" in css()
+    assert "-webkit-line-clamp: 4" in css()
+
+
+def test_while_picking_the_mark_gives_its_corner_to_the_checkbox():
+    assert re.search(r"body\.picking \.card > \.mark\s*\{\s*display: none", css())

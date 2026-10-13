@@ -153,6 +153,9 @@
             <span class="off">{{ label }}</span>
           {% endif %}
           {% if when and year == when[:4] %}
+            {# Where the months start a row of their own on a phone. Nothing
+               on a wide screen, where they sit under their year already. #}
+            <i class="break" aria-hidden="true"></i>
             {% for month in months %}
               {% set found = counted.get(month, 0) %}
               {% if found %}
