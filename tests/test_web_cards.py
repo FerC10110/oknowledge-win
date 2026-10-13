@@ -336,7 +336,10 @@ def test_saving_is_a_drawn_disk_with_a_name_for_what_cannot_see_it(client):
     # nothing here depends on telling two fixed colours apart.
     assert body.count("currentColor") >= 2 and "#" not in re.search(
         r"<svg class=\"icon\".*?</svg>", body, re.S).group(0)
-    assert not [ch for ch in body if ord(ch) > 0xFFFF]
+    # The mark picker is the one place emoji are the point: the user picks
+    # one, and what it looks like is theirs to judge.
+    actions = re.sub(r'<details class="mark">.*?</details>', "", body, flags=re.S)
+    assert not [ch for ch in actions if ord(ch) > 0xFFFF]
 
 
 def test_joining_a_collection_is_not_drawn_as_saving(client):

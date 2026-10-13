@@ -635,7 +635,7 @@ def test_pulling_a_rare_tag_forward_does_not_push_a_common_one_out(many_tags):
 
 def test_a_short_tag_row_gets_no_more_at_all(client):
     """Two tags behind a disclosure is a disclosure that hides nothing."""
-    assert "<details" not in client.get("/").text
+    assert '<details class="more-tags"' not in client.get("/").text
 
 
 def test_a_tag_belongs_to_the_category_it_is_used_in_most(tmp_path):
@@ -706,7 +706,7 @@ def test_the_hidden_half_is_grouped_under_the_category_names(tmp_path):
     body = client.get("/").text
 
     assert '<p class="group">Redes</p>' not in body      # nothing hidden yet
-    assert "<details" not in body
+    assert '<details class="more-tags"' not in body
 
 
 def test_a_long_tag_list_is_grouped_by_name_inside_the_disclosure(many_tags):

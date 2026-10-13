@@ -39,7 +39,8 @@
   {% endif %}
   <ul class="grid cards">
     {% for note in notes %}
-      <li class="card">
+      <li class="card" id="card-{{ note.id }}">
+        {% include "mark-picker.html" %}
         <div class="pad">
           {# Never an empty link: an idea is saved before the model names it. #}
           <h2 dir="auto"><a href="/item/{{ note.id|slug }}">{{ note.title or t('Untitled idea') }}</a></h2>

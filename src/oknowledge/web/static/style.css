@@ -515,3 +515,27 @@ header nav b { font-weight: 600; font-variant-numeric: tabular-nums; }
 .idea-action .why { color: var(--dim); margin-left: .5rem; }
 .idea-action .failed { color: var(--danger, #b3261e); }
 .idea-action button[disabled] { opacity: .6; cursor: default; }
+
+/* The mark: a corner of the card, above the cover, out of the popup's link. */
+.card { position: relative; }
+.card > .mark { position: absolute; top: 0.4rem; right: 0.4rem; z-index: 2; }
+.mark > summary { list-style: none; cursor: pointer; display: grid; place-items: center;
+                  min-width: 2.2rem; min-height: 2.2rem; border-radius: 999px;
+                  background: var(--card); border: 1px solid var(--line); font-size: 1.1rem; }
+.mark > summary::-webkit-details-marker { display: none; }
+.mark .none { color: var(--dim); opacity: 0.6; font-size: 0.95rem; }
+.card > .mark:not([open]) .none { opacity: 0; }
+.card:hover > .mark .none, .card > .mark:focus-within .none { opacity: 0.6; }
+.mark-menu { position: absolute; right: 0; top: calc(100% + 0.3rem); width: 15rem;
+             background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+             padding: 0.5rem; box-shadow: 0 8px 24px rgb(0 0 0 / 0.18); }
+.mark-list { display: grid; grid-template-columns: repeat(6, 1fr); gap: 0.2rem; }
+.mark-list button { font-size: 1.25rem; min-height: 2.75rem; padding: 0; border-color: transparent; }
+.mark-list button.on { border-color: var(--accent); }
+.mark-other, .mark-clear { display: flex; gap: 0.3rem; margin-top: 0.4rem; }
+.mark-other input { flex: 1; min-width: 0; }
+.title-row { display: flex; align-items: flex-start; gap: 0.6rem; }
+.title-row h1 { flex: 1; }
+.title-row .mark { position: relative; margin-top: 0.5rem; }
+@media (hover: none) { .card > .mark .none { opacity: 0.6; } }
+@media (max-width: 42rem) { .mark > summary { min-width: 2.75rem; min-height: 2.75rem; } }

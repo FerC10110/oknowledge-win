@@ -158,3 +158,33 @@ def test_marked_pages_like_the_library(client, cfg, monkeypatch):
     body = client.get("/marked", params={"mark": "⭐", "page": "2"}).text
     assert "The Terminator" in body and "WireGuard" not in body
     assert "page=3" in body
+
+
+@pytest.mark.parametrize("path, link_id", [("/", LINK), ("/ocio", CARD), ("/ideas", IDEA),
+                                           (f"/item/{LINK}", LINK)])
+def test_every_card_and_note_page_has_the_picker(client, path, link_id):
+    body = client.get(path).text
+    assert f'action="/item/{link_id}/mark"' in body
+    assert body.count('value="⭐"') >= 1
+
+
+@pytest.mark.parametrize("path", ["/", "/ocio", "/ideas"])
+def test_each_card_has_an_anchor_to_come_back_to(client, path):
+    assert re.search(r'<li class="card[^"]*" id="card-[0-9a-f]{12}"', client.get(path).text)
+
+
+def test_the_picker_sends_you_back_where_you_were(client):
+    body = client.get("/?category=Redes").text
+    assert 'name="back" value="/?category=Redes"' in body
+
+
+def test_tapping_the_mark_you_have_takes_it_off(client):
+    client.post(f"/item/{LINK}/mark", data={"mark": "⭐", "back": "/"})
+    body = client.get("/").text
+    assert re.search(r'name="mark" value=""[^>]*aria-pressed="true"[^>]*>⭐', body)
+
+
+def test_the_picker_is_not_inside_the_popup_link(client):
+    body = client.get("/").text
+    for block in re.findall(r'<a class="body".*?</a>', body, re.S):
+        assert "/mark" not in block

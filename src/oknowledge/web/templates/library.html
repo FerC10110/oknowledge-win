@@ -60,7 +60,7 @@
            the cover open the note here, the title and the site strip leave
            for the original. [data-popup] is picked up by popup.js; the href
            beside it is what happens without JavaScript. #}
-        <li class="card{% if note.status != 'ok' %} partial{% endif %}">
+        <li class="card{% if note.status != 'ok' %} partial{% endif %}" id="card-{{ note.id }}">
           {% if picking %}
             {# Tied to the form below by id, not by nesting: the card already
                holds the reprocess form, and a form inside a form is invalid
@@ -69,6 +69,7 @@
               <input type="checkbox" form="pick" name="id" value="{{ note.id }}">
             </label>
           {% endif %}
+          {% include "mark-picker.html" %}
           {% if note.cover %}
             <a class="shot" href="/item/{{ note.id|slug }}" data-popup="/embed/{{ note.id|slug }}"
                tabindex="-1" aria-hidden="true">

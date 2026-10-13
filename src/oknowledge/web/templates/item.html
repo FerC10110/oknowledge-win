@@ -5,7 +5,10 @@
     <p class="meta"><span class="cat">{{ note.category }}</span> · {{ note.source }} · {{ note.saved }}
       {% if note.status != 'ok' %}<span class="warn">{{ t('Incomplete') }}</span>{% endif %}
       {% include "engine-badge.html" %}</p>
-    <h1 dir="auto">{{ note.title or t('Untitled idea') }}</h1>
+    <div class="title-row">
+      <h1 dir="auto">{{ note.title or t('Untitled idea') }}</h1>
+      {% include "mark-picker.html" %}
+    </div>
     <p class="tags">{% for tag in note.tags %}<a href="{{ '/ideas' if idea else '/' }}?tag={{ tag|urlencode }}">#{{ tag }}</a>{% endfor %}</p>
     {% if note.collections %}
       {# One small form per chip, so leaving a collection is one click and

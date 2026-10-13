@@ -6,6 +6,8 @@ the page draws how far it got. Nothing here makes a real model call: the
 worker that would is replaced, and what is tested is the route around it.
 """
 
+import re
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -578,6 +580,8 @@ def test_the_button_s_glyph_is_not_a_character_a_font_has_to_have(cards):
     cfg, client = cards
 
     body = client.get("/").text
+    # Except in the mark picker, where an emoji is what the user chose.
+    body = re.sub(r'<details class="mark">.*?</details>', "", body, flags=re.S)
 
     assert not [ch for ch in body if ord(ch) > 0xFFFF]
 
