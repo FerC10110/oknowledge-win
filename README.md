@@ -93,7 +93,7 @@ model = "llama-3.3-70b-versatile"
 host = "127.0.0.1"                         # this machine only
 port = 8787
 language = "en"                            # the interface: "en" or "es"
-idle_timeout = 900                         # seconds; 0 = never shut down
+idle_timeout = 0                           # seconds without a request before it stops; 0 = never
 ```
 
 > **Write Windows paths with forward slashes.** `"C:/Users/you/vault"` is
@@ -117,9 +117,9 @@ Categories (rename and merge, rewriting the affected notes and indexes),
 Import (a WhatsApp export, previewed before it is written), Analyse (a batch of
 the links still waiting, with a bar) and Settings.
 
-- It shuts itself down after `idle_timeout` seconds without requests (default
-  900; `0` means never). The watchdog polls every 5 seconds, so the shutdown
-  can be up to 5 seconds late.
+- It stays up until you stop it. With `idle_timeout` set to some seconds it
+  shuts itself down after that long without requests (default `0`, never); the
+  watchdog polls every 5 seconds, so that shutdown can be up to 5 seconds late.
 - If the port is taken it exits with code 2 and suggests setting `web.port`.
 - **Delete moves the note to `<vault>\oknowledge\trash\`**, so you can recover
   it from Obsidian. Nothing in this project unlinks a note.
@@ -436,7 +436,6 @@ delete those two folders. Your notes in `<vault>\oknowledge\` are left alone.
 
 | | There | Here |
 |---|---|---|
-| Pasting a link | a panel in the Omarchy bar, with a global keybinding | the box in the page header |
 | The queue's lock | `fcntl.flock` | `msvcrt.locking` on one byte of the same file |
 | Where the files go | `~/.config`, `$XDG_STATE_HOME` | `%APPDATA%`, `%LOCALAPPDATA%` |
 | File permissions | `chmod 600` on the config and the `.env` | nothing: the mode decides nothing on Windows, and the folder's permissions are what guard the file |

@@ -89,7 +89,9 @@ class Config:
     phone on the same wifi -- and then anyone on that wifi can reach it too,
     which the server says out loud when it starts."""
     port: int = 8787
-    idle_timeout: int = 900
+    idle_timeout: int = 0
+    """Seconds without a request before the server stops itself; 0, the
+    default, is never."""
     ui_language: str = "en"
     """What the buttons say: `[web] language`. A different axis from
     `language` above, which is what the summaries are written in, and they
@@ -301,7 +303,7 @@ def load(path: Path = CONFIG_PATH) -> Config:
         engines=engines,
         host=_host(web),
         port=_integer(web, "port", 8787, "web.port"),
-        idle_timeout=_integer(web, "idle_timeout", 900, "web.idle_timeout"),
+        idle_timeout=_integer(web, "idle_timeout", 0, "web.idle_timeout"),
         ui_language=_ui_language(web),
         marks=_marks(web),
         trace_to=trace_run() if tracing else "",

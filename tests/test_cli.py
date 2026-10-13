@@ -88,7 +88,7 @@ def test_add_end_to_end_through_the_real_pipeline(cfg, monkeypatch, capsys):
     assert [e.status for e in Queue().entries()] == ["ok"]
 
 
-def test_add_json_is_one_object_for_the_plugin(cfg, monkeypatch, capsys):
+def test_add_json_is_one_object_for_a_script(cfg, monkeypatch, capsys):
     fake_add(monkeypatch, ok(cfg, warnings=["an index is stale"]))
     main(["add", "https://e.com/x", "--json"])
     payload = json.loads(capsys.readouterr().out)

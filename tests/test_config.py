@@ -79,7 +79,9 @@ def test_what_the_file_omits_takes_the_default(tmp_path):
     assert cfg.chain == ("opencode",)
     assert cfg.language == "es"
     assert cfg.port == 8787
-    assert cfg.idle_timeout == 900
+    # Never: the server is started by hand and left open in a browser tab,
+    # and nothing starts it again once it has gone.
+    assert cfg.idle_timeout == 0
 
 
 def test_the_paths_hang_off_the_vault(tmp_path):

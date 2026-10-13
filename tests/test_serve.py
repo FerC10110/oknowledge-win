@@ -315,7 +315,8 @@ def test_serve_starts_a_watchdog_on_the_server_with_the_configured_window(vault_
 
 
 def test_the_timer_the_watchdog_reads_is_the_one_the_app_feeds(vault_cfg, stub_uvicorn):
-    runner.serve(vault_cfg)
+    # A timeout asked for: the default is never, which starts no watchdog.
+    runner.serve(dataclasses.replace(vault_cfg, idle_timeout=900))
     (dog,) = watchdogs()
     app = stub_uvicorn.instances[0].config.app
     layer = app.middleware_stack if app.middleware_stack else app.build_middleware_stack()
