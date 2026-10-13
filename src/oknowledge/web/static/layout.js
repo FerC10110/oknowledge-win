@@ -15,8 +15,28 @@
   function settle() {
     if (!phone.matches) return;
     fold(false);
+    letGo();
+  }
+  // The browser focuses an autofocus box when it gets round to it, which
+  // can be after this has run: let go again once the page has loaded.
+  function letGo() {
     var search = document.querySelector("header input[type=search]");
-    if (search) { search.removeAttribute("autofocus"); search.blur(); }
+    if (search) {
+      search.removeAttribute("autofocus");
+      if (document.activeElement === search) search.blur();
+    }
+  }
+  window.addEventListener("load", function () { if (phone.matches) letGo(); });
+  // And whenever it does it: the first focus the box gets before anybody
+  // has touched the page is the browser's, not the user's.
+  var touched = false;
+  document.addEventListener("pointerdown", function () { touched = true; },
+                            { capture: true, once: true });
+  var box = document.querySelector("header input[type=search]");
+  if (box) {
+    box.addEventListener("focus", function () {
+      if (!touched && phone.matches) box.blur();
+    }, { once: true });
   }
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", settle);

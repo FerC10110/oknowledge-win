@@ -61,9 +61,10 @@ details.paste > summary { display: none; }
   details.paste > summary::-webkit-details-marker { display: none; }
   details.paste[open] { flex: 1 1 100%; }
   details.paste[open] > summary { margin-bottom: 0.5rem; }
-  header nav { order: 3; flex: 1 1 100%; display: flex; overflow-x: auto;
-               white-space: nowrap; scrollbar-width: none; }
-  header nav a { margin-left: 0; padding: 0.7rem 0.6rem; }
+  /* Under the rest, wrapping among themselves (the 40rem block below):
+     every link and every mark in sight, none behind a sideways scroll. */
+  header nav { order: 3; }
+  header nav a { padding: 0.55rem 0.3rem; }
 }
 main { max-width: var(--measure); margin: 0 auto; padding: 0 1rem 5rem; }
 
@@ -551,6 +552,9 @@ header nav b { font-weight: 600; font-variant-numeric: tabular-nums; }
 .mark > summary::-webkit-details-marker { display: none; }
 .mark .none { color: var(--dim); opacity: 0.6; font-size: 0.95rem; }
 .card > .mark:not([open]) .none { opacity: 0; }
+.card > .mark:not([open]) > summary { background: transparent; border-color: transparent; }
+/* Every card carries the picker now, so every title leaves its corner. */
+.card h2 { padding-right: 2.4rem; }
 .card:hover > .mark .none, .card > .mark:focus-within .none { opacity: 0.6; }
 .mark-menu { position: absolute; right: 0; top: calc(100% + 0.3rem); width: 15rem;
              background: var(--card); border: 1px solid var(--line); border-radius: 12px;
@@ -564,6 +568,8 @@ header nav b { font-weight: 600; font-variant-numeric: tabular-nums; }
 .title-row h1 { flex: 1; }
 .title-row .mark { position: relative; margin-top: 0.5rem; }
 @media (hover: none) { .card > .mark .none { opacity: 0.6; } }
+/* No hover to find it by on a phone: the plus is always there, dimmed. */
+@media (max-width: 42rem) { .card > .mark:not([open]) .none { opacity: 0.6; } }
 @media (max-width: 42rem) { .mark > summary { min-width: 2.75rem; min-height: 2.75rem; } }
 
 /* The filters' drawer. On a wide screen it stays open and its summary only
