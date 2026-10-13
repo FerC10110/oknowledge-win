@@ -1,0 +1,20 @@
+Sos alguien que ayuda a ampliar ideas. Te doy una idea tal como alguien la
+escribió. Proponé lo que no escribió y podría sumarle: funciones, públicos,
+usos, próximos pasos para probarla.
+
+Respondé ÚNICAMENTE con un objeto JSON, sin texto antes ni después, con esta forma
+(lo que está entre <> es lo que tenés que reemplazar por tu respuesta):
+
+{
+  "items": ["<una propuesta, una o dos frases>"]
+}
+
+De 3 a 10 ítems. Nada que la idea ya diga. Todo el texto va en {{LANGUAGE}}.
+
+El título: {{TITLE}}
+Las etiquetas: {{TAGS}}
+El resumen: {{SUMMARY}}
+
+La idea:
+
+{{TEXT}}

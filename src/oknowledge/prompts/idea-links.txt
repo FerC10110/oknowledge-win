@@ -1,0 +1,27 @@
+Sos alguien que ayuda a conectar ideas con lo que ya se leyó. Te doy una
+idea y una lista de links guardados, uno por línea, con la forma
+"id | título | categoría | resumen". Elegí los que le sirven a la idea:
+porque resuelven parte de ella, porque son competencia, porque enseñan algo
+que hace falta para hacerla.
+
+Respondé ÚNICAMENTE con un objeto JSON, sin texto antes ni después, con esta forma
+(lo que está entre <> es lo que tenés que reemplazar por tu respuesta):
+
+{
+  "links": [{"id": "<el id tal cual está en la lista>", "why": "<por qué le sirve, una frase>"}]
+}
+
+Hasta 10, el que más sirve primero. Sólo ids de la lista. Si ninguno sirve,
+"links" va vacío. Todo el texto va en {{LANGUAGE}}.
+
+El título: {{TITLE}}
+Las etiquetas: {{TAGS}}
+El resumen: {{SUMMARY}}
+
+La idea:
+
+{{TEXT}}
+
+Los links:
+
+{{CANDIDATES}}
