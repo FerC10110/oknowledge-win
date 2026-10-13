@@ -805,6 +805,21 @@ def create_app(cfg: Config) -> FastAPI:
         return page(request, "library.html", notes=None, hits=found, category=None,
                     tag=None, query=q, **pager("/search", {"q": q}, number, pages))
 
+    @app.get("/marked", response_class=HTMLResponse)
+    def marked(request: Request, mark: str = ""):
+        """Everything with one mark, whichever shelf it sits on. Newest
+        first, the way every listing here is."""
+        found = []
+        for shelves in (library, shelf, ideas):
+            shelves.refresh()
+            found += [n for n in shelves.notes if mark and n.mark == mark]
+        found.sort(key=lambda n: n.saved, reverse=True)
+        pages = -(-len(found) // PER_PAGE)
+        number = page_number(request.query_params.get("page", "1"), pages)
+        shown = found[(number - 1) * PER_PAGE:number * PER_PAGE]
+        return page(request, "marked.html", notes=shown, active_mark=mark or None,
+                    **pager("/marked", {"mark": mark}, number, pages))
+
     def anywhere(link_id: str):
         """(entry, the shelf it is on), looking in the links first.
 

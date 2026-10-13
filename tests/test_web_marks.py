@@ -124,3 +124,37 @@ def test_the_bad_mark_notice_is_translated():
     from oknowledge.i18n import STRINGS
     from oknowledge.web.app import NOTICES
     assert NOTICES["bad-mark"] in STRINGS["es"]
+
+
+def test_marked_shows_the_three_shelves(client):
+    for link_id in (LINK, CARD, IDEA):
+        client.post(f"/item/{link_id}/mark", data={"mark": "⭐", "back": "/"})
+    body = client.get("/marked", params={"mark": "⭐"}).text
+    assert body.index("Gimnasio") < body.index("The Terminator") < body.index("WireGuard")
+
+
+def test_marked_leaves_out_the_other_marks(client):
+    client.post(f"/item/{LINK}/mark", data={"mark": "🔥", "back": "/"})
+    client.post(f"/item/{CARD}/mark", data={"mark": "⭐", "back": "/"})
+    body = client.get("/marked", params={"mark": "⭐"}).text
+    assert "The Terminator" in body and "WireGuard" not in body
+
+
+def test_the_mark_you_are_on_is_lit_in_the_nav(client):
+    client.post(f"/item/{CARD}/mark", data={"mark": "⭐", "back": "/"})
+    assert 'class="mark on"' in nav(client.get("/marked", params={"mark": "⭐"}).text)
+
+
+@pytest.mark.parametrize("mark", ["", "🦄"])
+def test_a_mark_nobody_uses_is_an_empty_page(client, mark):
+    answer = client.get("/marked", params={"mark": mark})
+    assert answer.status_code == 200 and "card-" not in answer.text
+
+
+def test_marked_pages_like_the_library(client, cfg, monkeypatch):
+    monkeypatch.setattr("oknowledge.web.app.PER_PAGE", 1)
+    for link_id in (LINK, CARD, IDEA):
+        client.post(f"/item/{link_id}/mark", data={"mark": "⭐", "back": "/"})
+    body = client.get("/marked", params={"mark": "⭐", "page": "2"}).text
+    assert "The Terminator" in body and "WireGuard" not in body
+    assert "page=3" in body
