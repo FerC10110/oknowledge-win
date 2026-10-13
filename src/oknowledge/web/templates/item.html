@@ -79,8 +79,12 @@
              button is here and not on every card: once a model has been
              over it, asking again is a model call for nothing. #}
           <form action="/item/{{ note.id|slug }}/describe" method="post" class="row">
-            <button type="submit">{{ t('Rewrite the summary') }}</button>
+            <button type="submit"{% if rewriting %} disabled{% endif %}>
+              {{- t('rewriting…') if rewriting else t('Rewrite the summary') -}}</button>
           </form>
+          {% if rewrite_failed %}
+            <p class="failed">{{ t('Last time it failed: %1', rewrite_failed) }}</p>
+          {% endif %}
         {% endif %}
         <form action="/item/{{ note.id|slug }}/mine/note" method="post" class="field">
           <label for="field-mine">{{ t('Your note') }}</label>

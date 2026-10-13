@@ -58,6 +58,7 @@ WRITE_ROUTES = [
     # Saving a card. A cross-site POST here would reach a catalog and write
     # a note into this vault, with a picture downloaded into it.
     ("/ocio/guardar", {"tipo": "movie", "ref": "tt0088247", "via": "movie"}),
+    ("/ocio/reescribir", {}),
     # Your own three fields on a card. A cross-site POST here would rewrite
     # what you thought of something, which is the one thing nothing else
     # writes.

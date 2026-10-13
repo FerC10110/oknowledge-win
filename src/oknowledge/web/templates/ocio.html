@@ -27,6 +27,14 @@
       </div>
     {% endif %}
   </details>
+  {# Every card still in the catalog's words, in one go. Shown while there
+     is one left, and off while all of those are already being rewritten. #}
+  {% if unrewritten %}
+    <form action="/ocio/reescribir" method="post" class="rewrite-all">
+      <button type="submit"{% if rewriting|length >= unrewritten %} disabled{% endif %}>
+        {{ t('Rewrite every card not rewritten (%1)', unrewritten) }}</button>
+    </form>
+  {% endif %}
   {% if unreadable_cards %}
     <p class="quiet">{{ t('%1 cards could not be read and are not shown', unreadable_cards) }}</p>
   {% endif %}
@@ -74,7 +82,13 @@
             {# What says a model has been over it: a card is saved complete,
                with the catalog's own English synopsis, and `engine` empty is
                what means nobody has rewritten it yet. #}
-            {% if not note.engine %}<span class="unwritten">{{ t('not rewritten') }}</span>{% endif %}
+            {% if not note.engine %}
+              {% if note.id in rewriting %}<span class="unwritten">{{ t('rewriting…') }}</span>
+              {% elif note.id in rewrite_failed %}
+                {# The reason in full is on the card's page; here, on hover. #}
+                <span class="unwritten failed" title="{{ rewrite_failed[note.id] }}">{{ t('could not be rewritten') }}</span>
+              {% else %}<span class="unwritten">{{ t('not rewritten') }}</span>{% endif %}
+            {% endif %}
           </p>
         </div>
       </li>

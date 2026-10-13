@@ -82,6 +82,12 @@ STRINGS = {
         "Books": "Libros",
         "Pending": "Pendiente",
         "not rewritten": "sin reescribir",
+        "rewriting…": "reescribiendo…",
+        "could not be rewritten": "no se pudo reescribir",
+        "Rewrite every card not rewritten (%1)": "Reescribir todas las fichas sin reescribir (%1)",
+        "Rewriting the cards one after the other. Reload in a while to read them.":
+            "Reescribiendo las fichas, una después de la otra. Recargá en un rato para leerlas.",
+        "Every card is already rewritten.": "Todas las fichas ya están reescritas.",
         "Ideas": "Ideas",
         "New idea": "Nueva idea",
         "What is the idea?": "¿Cuál es la idea?",

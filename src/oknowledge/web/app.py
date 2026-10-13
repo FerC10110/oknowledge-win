@@ -129,6 +129,8 @@ NOTICES = {
     "catalogue-silent": "The catalogue has no card for that one. Try another.",
     # The rewrite runs behind the page, like every other model call here.
     "rewriting": "Writing the summary now. Reload in a moment to read it.",
+    "rewriting-all": "Rewriting the cards one after the other. Reload in a while to read them.",
+    "nothing-to-rewrite": "Every card is already rewritten.",
     # Saving an idea: it is on disk already, and its name and tags come in
     # behind the page, like a card's summary.
     "completing": "Saved. The model is filling in the title and the tags: "
@@ -696,6 +698,10 @@ def create_app(cfg: Config) -> FastAPI:
     # and per process, like the batch.
     working = Working()
     app.state.working = working
+    # The same for a card's rewrite: running, or how it last failed. A
+    # rewrite runs behind the page, and without this a failure vanished.
+    rewriting = Working()
+    app.state.rewriting = rewriting
     templates = Jinja2Templates(directory=str(WEB.joinpath("templates")))
     templates.env.filters["plain"] = plain
     templates.env.filters["slug"] = lambda value: quote(str(value), safe="")
@@ -864,6 +870,10 @@ def create_app(cfg: Config) -> FastAPI:
                           for action in ACTIONS},
                 suggested=[(stem, why, by_stem.get(stem), stem in note.related)
                            for stem, why in rows])
+        elif where.name == "ocio":
+            running, failed = rewriting.of(link_id)
+            extra.update(rewriting="describe" in running,
+                         rewrite_failed=failed.get("describe", ""))
         elif where.name == "links":
             ideas.refresh()
             extra["idea_choices"] = [(n.id, n.title) for n in ideas.notes
@@ -1063,8 +1073,8 @@ def create_app(cfg: Config) -> FastAPI:
         shelf.refresh()
         if shelf.by_id(link_id) is None:
             raise HTTPException(status_code=404, detail="no such card")
-        background.add_task(describe, current["cfg"], link_id,
-                            trace=progress.note)
+        if rewriting.start(link_id, "describe"):
+            background.add_task(rewrite, current["cfg"], link_id)
         return see_other(item_url(link_id), notice="rewriting")
 
     @app.post("/item/{link_id}/mine/state")
@@ -1302,6 +1312,31 @@ def create_app(cfg: Config) -> FastAPI:
         if result.notice == MISSING:
             raise HTTPException(status_code=404, detail="no such idea")
         return see_other(item_url(link_id), notice=result.notice)
+
+    def rewrite(live: Config, card: str) -> None:
+        """The background half of a card's rewrite: run it, then say how it
+        ended. The caller has claimed it with rewriting.start."""
+        problem: str | None = "it stopped before it could say why"
+        failures: list[str] = []
+
+        def heard(step) -> None:
+            progress.note(step)
+            if step.state == "fail" and step.detail:
+                failures.append(step.detail)
+        try:
+            done = describe(live, card, trace=heard)
+            problem = None if done else (failures[-1] if failures
+                                         else "the model did not answer")
+        except Exception as error:        # a background task has nowhere to raise to
+            problem = str(error) or type(error).__name__
+        finally:
+            rewriting.finish(card, "describe", problem)
+
+    def rewrite_all(live: Config, claimed: list[str]) -> None:
+        """One after the other: the chain is one engine at a time anyway,
+        and a free tier counts requests per minute."""
+        for card in claimed:
+            rewrite(live, card)
 
     def act(live: Config, idea: str, action: str, category: str) -> None:
         """The background half of an action: run it, then say how it ended."""
@@ -1655,7 +1690,8 @@ def create_app(cfg: Config) -> FastAPI:
         if background is not None:
             # After the response and only for a card that was just written:
             # the second save of the same card has nothing to improve.
-            background.add_task(describe, live, note.id, trace=progress.note)
+            if rewriting.start(note.id, "describe"):
+                background.add_task(rewrite, live, note.id)
         return note.id, notice
 
     @app.get("/ocio", response_class=HTMLResponse)
@@ -1673,12 +1709,27 @@ def create_app(cfg: Config) -> FastAPI:
             notes = [n for n in notes if n.type == tipo]
         if estado in vault_states:
             notes = [n for n in notes if n.state == estado]
+        running, failed = rewriting.all_of("describe")
         return page(request, "ocio.html", notes=notes, kind=tipo, state=estado,
+                    rewriting=running, rewrite_failed=failed,
+                    unrewritten=sum(1 for n in shelf.notes if not n.engine),
                     counted=_count_by(shelf.notes, "type"),
                     states=_count_by(shelf.notes, "state"),
                     unreadable_cards=shelf.unreadable,
                     KINDS=KIND_WORDS, STATES=STATE_ORDER,
                     STATE_WORDS=dict(STATE_ORDER))
+
+    @app.post("/ocio/reescribir")
+    def rewrite_every_card(background: BackgroundTasks):
+        """Every card still in the catalog's words, rewritten one after the
+        other. A card already being rewritten is left to that run."""
+        shelf.refresh()
+        claimed = [n.id for n in shelf.notes
+                   if not n.engine and rewriting.start(n.id, "describe")]
+        if not claimed:
+            return see_other("/ocio", notice="nothing-to-rewrite")
+        background.add_task(rewrite_all, current["cfg"], claimed)
+        return see_other("/ocio", notice="rewriting-all")
 
     def ask_catalogs(tipo: str, query: str, year: str = "") -> tuple[list, str]:
         """Every answer the catalogs give, and the reason a silent one gives.

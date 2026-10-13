@@ -495,6 +495,10 @@ form:has(input[name="chain"][value="api"]:not(:checked)) .api-only { display: no
 .cards .stars { margin: 0.1rem 0 0; color: var(--dim); letter-spacing: 0.1em; }
 .cards .state { color: var(--fg); }
 .cards .unwritten { color: var(--dim); font-style: italic; }
+.cards .unwritten.failed { color: var(--danger, #b3261e); cursor: help; }
+.rewrite-all { margin: 0.4rem 0 0.9rem; }
+.rewrite-all button[disabled] { opacity: .6; cursor: default; }
+.mine > .failed { color: var(--danger, #b3261e); font-size: 0.85rem; margin: 0; }
 .cards .site { display: flex; gap: 0.6rem; align-items: center; }
 
 /* The candidates of a search. A row is a poster, a name and a button, and

@@ -36,3 +36,10 @@ class Working:
         with self._lock:
             return ({action for i, action in self._running if i == idea},
                     {action: why for (i, action), why in self._failed.items() if i == idea})
+
+    def all_of(self, action: str) -> tuple[set[str], dict[str, str]]:
+        """(every id running this action, the last failure of each), for a
+        page that lists many at once."""
+        with self._lock:
+            return ({i for i, a in self._running if a == action},
+                    {i: why for (i, a), why in self._failed.items() if a == action})
