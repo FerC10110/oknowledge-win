@@ -350,8 +350,11 @@ Asking again replaces that section only. Your text is never touched.
 Every opencode run goes through [bubblewrap](https://github.com/containers/bubblewrap)
 (`pacman -S bubblewrap`). opencode is an agent with a shell and the network,
 and its prompt carries text from web pages. Inside the sandbox it sees the
-system read-only and its own folders, and nothing else of your home: not
-your vault, not `~/.config/oknowledge` and its keys, not `~/.ssh`. Without
+system read-only, a private set of opencode folders kept in
+`~/.local/share/oknowledge/opencode/` (never your own opencode config,
+plugins or session history) and no environment variables of yours; nothing
+else of your home: not your vault, not `~/.config/oknowledge` and its keys,
+not `~/.ssh`. Without
 bubblewrap opencode does not run, and the chain moves on to the next engine.
 
 ## The vault

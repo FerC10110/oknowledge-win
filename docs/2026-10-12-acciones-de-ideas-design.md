@@ -59,7 +59,8 @@ bwrap --unshare-all --share-net --die-with-parent
       --symlink usr/lib /lib  --symlink usr/lib /lib64
       --ro-bind /etc /etc  --ro-bind-try /run/systemd/resolve /run/systemd/resolve
       --proc /proc  --dev /dev  --tmpfs /tmp  --tmpfs /home
-      --bind <datos de opencode> …  (las cuatro: data, config, cache, state)
+      --clearenv --setenv PATH … --setenv HOME … --setenv LANG …
+      --bind <carpetas propias> <donde opencode las busca>  (data, config, cache, state)
       --ro-bind <carpeta del binario de opencode> <la misma>
       --bind <directorio temporal> /work  --chdir /work
       --setenv HOME <tu home>
@@ -339,3 +340,17 @@ Con esto se cierra el segundo cerebro tal como se planteó: guardar links,
 fichas de ocio, ideas, y que el modelo piense con vos sobre ellas. Lo que
 quedó afuera arriba es lo siguiente si hace falta: que Ampliar también busque,
 el repunte de las sugerencias, y la búsqueda para los proveedores `openai`.
+
+## Revisión final (2026-10-12)
+
+El revisor encontró que el encierro montaba las carpetas **reales** de
+opencode: su config tiene plugins que corren sin encierro la próxima vez que
+abrís opencode, y sus datos tienen todas tus sesiones. Ahora el encierro usa
+un juego propio en `~/.local/share/oknowledge/opencode/{data,config,cache,state}`,
+montado donde opencode las busca, y no pasa ninguna variable de entorno salvo
+`PATH`, `HOME` y `LANG`. Medido: el acceso gratis anda igual con esas
+carpetas vacías.
+
+Lo que queda abierto: el encierro comparte la red de la máquina, así que
+desde adentro se llega a `localhost` (este servidor, ollama) y al socket
+abstracto de X11.
