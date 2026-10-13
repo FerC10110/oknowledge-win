@@ -176,3 +176,14 @@ def test_the_search_box_is_let_go_after_the_browser_focuses_it():
 def test_a_focus_nobody_asked_for_is_dropped_but_a_tap_is_not():
     js = WEB.joinpath("static", "layout.js").read_text(encoding="utf-8")
     assert '"pointerdown"' in js and '"focus"' in js
+
+
+def test_an_open_picker_is_not_cut_off_by_its_card():
+    assert re.search(r"\.card:has\(> \.mark\[open\]\) \{[^}]*overflow: visible", css())
+
+
+def test_the_filters_fold_before_the_first_paint():
+    """At the end of <body> the page is still loading, but everything it
+    folds is already there: waiting for DOMContentLoaded showed them open."""
+    js = WEB.joinpath("static", "layout.js").read_text(encoding="utf-8")
+    assert 'addEventListener("DOMContentLoaded"' not in js

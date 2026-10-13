@@ -546,6 +546,9 @@ header nav b { font-weight: 600; font-variant-numeric: tabular-nums; }
 /* The mark: a corner of the card, above the cover, out of the popup's link. */
 .card { position: relative; }
 .card > .mark { position: absolute; top: 0.4rem; right: 0.4rem; z-index: 2; }
+/* A card clips what spills out of it, and an open picker is taller than a
+   card with no cover: while it is open, the card lets it out, on top. */
+.card:has(> .mark[open]) { overflow: visible; z-index: 3; }
 .mark > summary { list-style: none; cursor: pointer; display: grid; place-items: center;
                   min-width: 2.2rem; min-height: 2.2rem; border-radius: 999px;
                   background: var(--card); border: 1px solid var(--line); font-size: 1.1rem; }

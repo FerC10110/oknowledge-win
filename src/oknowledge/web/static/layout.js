@@ -38,11 +38,9 @@
       if (!touched && phone.matches) box.blur();
     }, { once: true });
   }
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", settle);
-  } else {
-    settle();
-  }
+  // Now and not on DOMContentLoaded: this file is the last thing in <body>,
+  // so what it folds is already there, and waiting showed it open first.
+  settle();
   // Turned sideways into a wide screen: nothing may stay hidden behind a
   // summary the desktop layout does not draw.
   phone.addEventListener("change", function (event) {
