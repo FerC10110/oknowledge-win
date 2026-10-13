@@ -14,6 +14,8 @@ what is still owed, and it is on disk.
 
 from __future__ import annotations
 
+import dataclasses
+import datetime
 import logging
 import threading
 from collections import deque
@@ -31,6 +33,37 @@ log = logging.getLogger("oknowledge.web")
 LINES = 200
 
 
+class Line(NamedTuple):
+    """A step as the page keeps it: the step's own fields and when it arrived."""
+
+    link: str
+    name: str
+    state: str
+    seconds: float
+    engine: str
+    detail: str
+    at: datetime.datetime
+    """Timezone-aware UTC; the page shows it in local time."""
+
+
+def in_progress(lines: tuple[Line, ...]) -> tuple[Line, ...]:
+    """The steps that started and have not ended, newest first.
+
+    A step is one `start` and then exactly one `ok` or `fail` for the same
+    link and name, so the newest line of each pair says which it is.
+    """
+    seen: set[tuple[str, str]] = set()
+    busy = []
+    for line in lines:
+        key = (line.link, line.name)
+        if key in seen:
+            continue
+        seen.add(key)
+        if line.state == "start":
+            busy.append(line)
+    return tuple(busy)
+
+
 class State(NamedTuple):
     """A run's numbers, read all at once so they cannot disagree."""
 
@@ -39,8 +72,10 @@ class State(NamedTuple):
     done: int
     failed: int
     error: str | None
-    lines: tuple[Step, ...] = ()
-    """What the run has been doing, newest first.""" 
+    lines: tuple[Line, ...] = ()
+    """What this process has been doing with a model, newest first."""
+    busy: tuple[Line, ...] = ()
+    """Of those, what has started and not ended yet.""" 
 
 
 class Batch:
@@ -59,7 +94,7 @@ class Batch:
         self._done = 0
         self._failed = 0
         self._error: str | None = None
-        self._lines: deque[Step] = deque(maxlen=LINES)
+        self._lines: deque[Line] = deque(maxlen=LINES)
 
     def start(self, total: int) -> bool:
         """Claim the run. False means one is already in flight -- do not start.
@@ -75,9 +110,8 @@ class Batch:
             self._done = 0
             self._failed = 0
             self._error = None
-            # A new run starts with an empty list: the last run's steps under
-            # this run's bar would read as this run's work.
-            self._lines.clear()
+            # The list is not cleared: it is everything this process did with
+            # a model, and an idea expanded a minute ago is still worth reading.
             return True
 
     def step(self, result: Result) -> None:
@@ -102,11 +136,11 @@ class Batch:
         Taken whether or not a batch is running, unlike the counters beside
         it: a link re-analysed from its own card is a model call like any
         other, and the page that shows model calls has to show it. A new
-        batch still clears the list, so the bar and the lines under it always
-        describe the same run.
+        batch does not clear it either.
         """
+        at = datetime.datetime.now(datetime.timezone.utc)
         with self._lock:
-            self._lines.appendleft(step)
+            self._lines.appendleft(Line(*dataclasses.astuple(step), at=at))
 
     def finish(self, error: str | None = None) -> None:
         """The run is over. The numbers stay, to be read on the next page."""
@@ -118,7 +152,8 @@ class Batch:
         with self._lock:
             return State(running=self._running, total=self._total,
                          done=self._done, failed=self._failed,
-                         error=self._error, lines=tuple(self._lines))
+                         error=self._error, lines=tuple(self._lines),
+                         busy=in_progress(tuple(self._lines)))
 
 
 def run(cfg: Config, held: Batch, limit: int) -> None:

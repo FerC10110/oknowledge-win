@@ -397,6 +397,18 @@ STATE_WORDS = {
     "idea": IDEA_STATE_WORDS,
 }
 
+# What each step of the activity page did, for a person. The pipeline's own
+# names (find, extract, analyze...) are its vocabulary, not the reader's.
+STEP_WORDS = {
+    "find": "Look for the note", "extract": "Read the page",
+    "analyze": "Analyse with the model", "cover": "Fetch the picture",
+    "save": "Save the note", "describe": "Rewrite the card",
+    "complete": "Fill in the idea", "exists": "Look for it out there",
+    "improve": "Improve the idea", "expand": "Expand the idea",
+    "links": "Find links for the idea",
+}
+STEP_STATES = {"start": "in progress", "ok": "finished", "fail": "failed"}
+
 ACTION_TITLES = {"exists": "Already out there", "improve": "Improvements",
                  "expand": "Expansion", "links": "Links that may help"}
 """Each section's heading on the page. The note's own headings are
@@ -1642,8 +1654,24 @@ def create_app(cfg: Config) -> FastAPI:
     def retry_page(request: Request):
         live = current["cfg"]
         waiting = len(owed(Queue())[0])
+        # Which note each line is about, by its title, from whichever shelf
+        # holds it. A link being saved for the first time has none yet and
+        # shows its id.
+        for each in (library, shelf, ideas):
+            each.refresh()
+        seen = {line.link for line in progress.snapshot().lines}
+        named = {}
+        for link in seen:
+            for each in (library, shelf, ideas):
+                note = each.by_id(link)
+                if note is not None:
+                    named[link] = note.title or link
+                    break
+        now = dt.datetime.now(dt.timezone.utc)
         return page(request, "retry.html", owed=waiting,
-                    size=min(live.batch, waiting), refresh=REFRESH)
+                    size=min(live.batch, waiting), refresh=REFRESH,
+                    named=named, now=now, STEP_WORDS=STEP_WORDS,
+                    STEP_STATES=STEP_STATES)
 
     # --- a link pasted into the page ---------------------------------------
     #

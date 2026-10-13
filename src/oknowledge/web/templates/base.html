@@ -34,8 +34,9 @@
       <a href="/ideas">{{ t('Ideas') }}</a>
       {# The count is here and not only on the page itself: a batch runs for an
          hour behind whatever you are reading, and this is how you see it. #}
-      <a href="/retry">{{ t('Reprocessing') }}{% if batch.running %}
-        <b>{{ batch.done }}/{{ batch.total }}</b>{% endif %}</a>
+      <a href="/retry">{{ t('Activity') }}{% if batch.running %}
+        <b>{{ batch.done }}/{{ batch.total }}</b>{% elif batch.busy %}
+        <b>{{ batch.busy|length }}</b>{% endif %}</a>
       <a href="/settings">{{ t('Settings') }}</a>
       {# Yours, most used first: one tap to everything you marked with it. #}
       {% for mark, n in used_marks %}

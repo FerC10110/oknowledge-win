@@ -184,7 +184,26 @@ STRINGS = {
         "Remove": "Quitar",
 
         # Analysing a batch of what an import left unanalysed.
-        "Reprocessing": "Reprocesando",
+        "Activity": "Actividad",
+        "AI activity": "Actividad de IA",
+        "In progress": "En curso",
+        "History": "Historial",
+        "No AI activity since the server started.": "No hubo actividad de IA desde que arrancó el servidor.",
+        "Links waiting to be analysed": "Links que esperan análisis",
+        "in progress": "en curso",
+        "finished": "listo",
+        "failed": "falló",
+        "Look for the note": "Buscar la nota",
+        "Read the page": "Leer la página",
+        "Analyse with the model": "Analizar con el modelo",
+        "Fetch the picture": "Bajar la imagen",
+        "Save the note": "Guardar la nota",
+        "Rewrite the card": "Reescribir la ficha",
+        "Fill in the idea": "Completar la idea",
+        "Look for it out there": "Buscar si ya existe",
+        "Improve the idea": "Mejorar la idea",
+        "Expand the idea": "Ampliar la idea",
+        "Find links for the idea": "Buscar links para la idea",
         "Analyse the links that are waiting": "Analizar los links que esperan",
         "Waiting to be analysed: %1": "Esperando an\u00e1lisis: %1",
         "Analyse 1 link": "Analizar 1 link",
@@ -341,7 +360,6 @@ STRINGS = {
         # entry degrades to English, which is where they already are.
         "Engine": "Motor",
         # The step list on the batch page, and the box that writes the files.
-        "What it is doing": "Qué está haciendo",
         # Choosing a model from a list instead of typing it from memory.
         # Who the api engine talks to, and the key it needs.
         "Who the api engine talks to": "Con quién habla el motor api",

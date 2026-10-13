@@ -1,4 +1,5 @@
-{# How a batch of re-analysis is going.
+{# Everything this process is doing with a model: what is running now, what
+   it did lately, and the batch of links still waiting to be analysed.
 
    The bar is the native <progress>, and the page comes back on its own with a
    meta refresh: no JavaScript, so what it shows is what the server said, and
@@ -6,14 +7,61 @@
    reloading that page every few seconds would wipe a form the user is
    halfway through filling in. #}
 {% extends "base.html" %}
-{% block title %}{{ t('Analyse the links that are waiting') }} - oknowledge{% endblock %}
+{% block title %}{{ t('AI activity') }} - oknowledge{% endblock %}
 {% block head %}
   {# To /retry and not to this URL: a reload of this URL would bring the notice
      back with it, every ten seconds, forever. #}
-  {% if batch.running %}<meta http-equiv="refresh" content="{{ refresh }}; url=/retry">{% endif %}
+  {% if batch.running or batch.busy %}<meta http-equiv="refresh" content="{{ refresh }}; url=/retry">{% endif %}
 {% endblock %}
+{% macro about(line) -%}
+  {%- if line.link in named %}<a href="/item/{{ line.link|slug }}">{{ named[line.link] }}</a>
+  {%- else %}<code>{{ line.link }}</code>{% endif -%}
+{%- endmacro %}
 {% block main %}
-  <h1>{{ t('Analyse the links that are waiting') }}</h1>
+  <h1>{{ t('AI activity') }}</h1>
+
+  {# What has started and not ended, with how long it has been at it. #}
+  {% if batch.busy %}
+    <h2>{{ t('In progress') }}</h2>
+    <ol class="steps">
+      {% for line in batch.busy %}
+        {% set waited = (now - line.at).total_seconds()|int %}
+        <li class="step start">
+          <span class="step-name">{{ t(STEP_WORDS.get(line.name, line.name)) }}</span>
+          <span class="step-about">{{ about(line) }}</span>
+          <span class="step-time">{% if waited < 60 %}{{ waited }} s{% else %}{{ waited // 60 }} min{% endif %}</span>
+          <span class="step-detail">{{ line.engine }}</span>
+        </li>
+      {% endfor %}
+    </ol>
+  {% endif %}
+
+  {# Newest first, the last two hundred steps of anything a model did here.
+     The meta refresh above brings new ones while something is running. #}
+  {# Only what has ended: a step's start would be a second line for it, and
+     what is still running is listed above. #}
+  {% set history = batch.lines|rejectattr('state', 'equalto', 'start')|list %}
+  <h2>{{ t('History') }}</h2>
+  {% if history %}
+    <ol class="steps">
+      {% for line in history %}
+        <li class="step {{ line.state }}">
+          <span class="step-when">{{ line.at.astimezone().strftime('%H:%M:%S') }}</span>
+          <span class="step-name">{{ t(STEP_WORDS.get(line.name, line.name)) }}</span>
+          <span class="step-about">{{ about(line) }}</span>
+          <span class="step-state">{{ t(STEP_STATES.get(line.state, line.state)) }}</span>
+          <span class="step-time">{{ '%.1f' % line.seconds }}s</span>
+          {# The separator only between two things. An `analyze` that has just
+             started names its engine and has no detail yet. #}
+          <span class="step-detail">{% if line.engine %}{{ line.engine }}{% if line.detail %} · {% endif %}{% endif %}{{ line.detail }}</span>
+        </li>
+      {% endfor %}
+    </ol>
+  {% elif not batch.busy %}
+    <p class="meta">{{ t('No AI activity since the server started.') }}</p>
+  {% endif %}
+
+  <h2>{{ t('Links waiting to be analysed') }}</h2>
 
   {% if batch.running %}
     <div class="batch-running">
@@ -49,31 +97,6 @@
     {% else %}
       <p class="meta">{{ t('Every link has been analysed.') }}</p>
     {% endif %}
-  {% endif %}
-
-  {# What it is doing, newest first. The run holds the last two hundred steps
-     and the meta refresh above is what brings them: no JavaScript, and a page
-     that stays readable with the tab closed and reopened. Shown after a run
-     has ended too -- that is when you read it. #}
-  {% if batch.lines %}
-    <h2>{{ t('What it is doing') }}</h2>
-    <ol class="steps">
-      {% for line in batch.lines %}
-        <li class="step {{ line.state }}">
-          {# Not translated, like the stage names beside them: find, extract,
-             analyze, ok and fail are this pipeline's vocabulary, and a reader
-             of this list is reading the pipeline. #}
-          <span class="step-name">{{ line.name }}</span>
-          <span class="step-state">{{ line.state }}</span>
-          <span class="step-time">{{ '%.1f' % line.seconds }}s</span>
-          {# The separator only between two things. An `analyze` that has just
-             started names its engine and has no detail yet -- the model is not
-             known until the engine is built -- and "opencode · " reads as a
-             line that lost half of itself. #}
-          <span class="step-detail">{% if line.engine %}{{ line.engine }}{% if line.detail %} · {% endif %}{% endif %}{{ line.detail }}</span>
-        </li>
-      {% endfor %}
-    </ol>
   {% endif %}
 
   <p><a class="button" href="/settings">{{ t('Settings') }}</a>

@@ -805,17 +805,6 @@ def test_work_outside_a_batch_is_still_work_you_can_watch():
     assert [line.link for line in held.snapshot().lines] == ["link2", "link1"]
 
 
-def test_a_new_run_does_not_start_with_the_last_one_s_lines():
-    from oknowledge.web.batch import Batch
-
-    held = Batch()
-    held.start(1)
-    held.note(step(1))
-    held.finish()
-    held.start(1)
-    assert held.snapshot().lines == ()
-
-
 def test_the_worker_hands_the_tracer_to_retry(setup, monkeypatch):
     cfg, _ = setup
     from oknowledge.web import batch as batch_module
@@ -858,7 +847,7 @@ def test_the_page_draws_what_the_run_is_doing(setup, started):
     app_batch.note(step(1, name="analyze", state="fail"))
 
     body = client.get("/retry").text
-    assert "analyze" in body
+    assert "Analyse with the model" in body
     assert "detail 1" in body
     assert "1.5" in body
 
