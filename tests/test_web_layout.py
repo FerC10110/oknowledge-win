@@ -127,3 +127,28 @@ def test_each_category_renames_from_its_own_card(client):
     assert 'href="/?category=Redes"' in card
     assert re.search(r"<details>\s*<summary[^>]*>✎</summary>", card)
     assert 'name="old" value="Redes"' in card and 'list="known"' in card
+
+
+# --- touch, focus, notices --------------------------------------------------
+
+def test_on_a_touch_screen_the_actions_are_always_there():
+    assert re.search(r"@media \(hover: none\)\s*\{\s*\.actions\s*\{\s*opacity: 1", css())
+
+
+def test_focus_is_always_visible():
+    assert ":focus-visible" in css() and "outline: 2px solid var(--focus)" in css()
+    assert css().count("--focus:") >= 2                       # light and dark
+
+
+def test_the_unreadable_notice_keeps_the_path_out_of_sight(client, cfg):
+    (cfg.links_dir / "roto.md").write_text("---\noknowledge: 1\n---\n", encoding="utf-8")
+    body = client.get("/").text
+    notice = re.search(r'<p class="quiet"[^>]*>(.*?)</p>', body, re.S)
+    assert "could not be read" in notice.group(1)
+    assert str(cfg.links_dir) not in notice.group(1)
+    assert f'title="{cfg.links_dir}"' in notice.group(0)
+
+
+def test_each_engine_is_one_compact_row(client):
+    body = client.get("/settings").text
+    assert body.count('class="row engine-row"') == 3

@@ -52,10 +52,10 @@ STRINGS = {
         "Summary language": "Idioma de los resúmenes",
         "Keep by default": "Guardar por defecto",
         "All": "Todo",
-        "1 note could not be read and is not shown (%1)":
-            "1 nota no se pudo leer y no se muestra (%1)",
-        "%1 notes could not be read and are not shown (%2)":
-            "%1 notas no se pudieron leer y no se muestran (%2)",
+        "1 note could not be read and is not shown":
+            "1 nota no se pudo leer y no se muestra",
+        "%1 notes could not be read and are not shown":
+            "%1 notas no se pudieron leer y no se muestran",
         "Nothing in this category": "No hay nada en esta categoría",
         "Nothing matches that filter": "No hay nada con ese filtro",
         "Not found": "No encontrado",

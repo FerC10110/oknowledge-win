@@ -7,7 +7,7 @@
     <h2>{{ t('Engines') }}</h2>
     <p class="meta">{{ t('Priority runs top to bottom. An engine that is not checked is not used. To change the order, edit the file by hand.') }}</p>
     {% for name in engines %}
-      <p class="row">
+      <p class="row engine-row">
         <label><input type="checkbox" name="chain" value="{{ name }}"
                       {% if name in cfg.chain %}checked{% endif %}> {{ name }}</label>
         {# An <input list> and not a <select>: the list is a convenience and
