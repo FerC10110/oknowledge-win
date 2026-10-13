@@ -13,11 +13,12 @@ import dataclasses
 import datetime as dt
 import logging
 import re
+import unicodedata
 from importlib.resources import files
 from pathlib import Path
 from collections.abc import Callable
 from typing import NamedTuple
-from urllib.parse import quote, urlencode
+from urllib.parse import parse_qsl, quote, urlencode, urlsplit
 
 from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.exception_handlers import http_exception_handler
@@ -87,6 +88,7 @@ NOTICES = {
     "bad-category": 'That name cannot be used as a category: at most 80 '
                     'characters, no dots at either end, no control characters, '
                     'and none of \\ / : * ? " < > |',
+    "bad-mark": "That is not an emoji the mark can be.",
     "renamed-one": "1 note moved.",
     "renamed": "%1 notes moved.",
     "merged-one": "1 note merged into a category that was already there.",
@@ -498,6 +500,25 @@ def tag_chips(tags: dict[str, int], home: dict[str, str], active: str | None
 
 def item_url(link_id: str) -> str:
     return "/item/" + quote(link_id, safe="")
+
+
+def local_path(back: str) -> str | None:
+    """A page of ours to go back to, or None.
+
+    It arrives from a form, so it can arrive as anything: only a path on
+    this server is taken, never another host (//x, \\x, a scheme), and a
+    notice it already carries is dropped so they do not pile up.
+    """
+    text = (back or "").strip()
+    if not text.startswith("/") or text.startswith("//") or "\\" in text:
+        return None
+    if any(unicodedata.category(ch)[0] == "C" for ch in text):
+        return None
+    parts = urlsplit(text)
+    if parts.scheme or parts.netloc:
+        return None
+    query = urlencode([(k, v) for k, v in parse_qsl(parts.query) if k != "notice"])
+    return parts.path + ("?" + query if query else "")
 
 
 # The two listings a card's button may send the user back to, and no others.
@@ -1062,6 +1083,32 @@ def create_app(cfg: Config) -> FastAPI:
         if result.notice == MISSING:
             raise HTTPException(status_code=404, detail="no such idea")
         return see_other(item_url(link_id), notice=result.notice)
+
+    @app.post("/item/{link_id}/mark")
+    def set_mark(link_id: str, mark: str = Form(""), back: str = Form("")):
+        """Your one emoji on a note, on any shelf. Back to the card it was
+        set from, so marking ten cards is ten taps and no scrolling.
+
+        Success says nothing: the mark itself, on the card, is the answer.
+        """
+        shelves, which = held_by(link_id)
+        if shelves.by_id(link_id) is None:
+            raise HTTPException(status_code=404, detail="no such note")
+        home = local_path(back) or item_url(link_id)
+
+        def to_card(notice: str):
+            answer = see_other(home, notice=notice)
+            answer.headers["location"] += "#card-" + quote(link_id, safe="")
+            return answer
+
+        if clean_mark(mark) is None:
+            return to_card("bad-mark")
+        result = edit(link_id, lambda cfg, language: update_note(
+            cfg, link_id, language, shelf=cfg.shelf(which.name), mark=mark),
+            "", "indexes-stale", shelves=shelves)
+        if result.notice == MISSING:
+            raise HTTPException(status_code=404, detail="no such note")
+        return to_card(result.notice)
 
     @app.post("/item/{link_id}/mentions/delete")
     def drop_mention(link_id: str, name: str = Form("")):

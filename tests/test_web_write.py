@@ -76,6 +76,9 @@ WRITE_ROUTES = [
     ("/collections/add", {"name": "Casa", "id": ["a1"]}),
     ("/collections/remove", {"name": "Casa", "id": ["a1"]}),
     ("/item/a1/collections", {"add": "Casa"}),
+    # Your mark on a note. A cross-site POST here would rewrite one of
+    # your notes.
+    ("/item/a1/mark", {"mark": "⭐"}),
 ]
 
 

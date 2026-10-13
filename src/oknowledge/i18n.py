@@ -26,6 +26,7 @@ STRINGS = {
         "Categories": "Categorías",
         "Settings": "Ajustes",
         "Marked %1": "Marcadas con %1",
+        "That is not an emoji the mark can be.": "Eso no es un emoji que pueda ser una marca.",
         "No results": "Sin resultados",
         "Nothing saved yet": "Todavía no guardaste nada",
         "Open original": "Abrir el original",

@@ -71,3 +71,56 @@ def test_the_marks_in_use_are_in_the_nav_most_used_first(client, cfg):
         write_note(cfg, note, "es", path=path)
     links = re.findall(r'href="/marked\?mark=([^"]+)"', nav(client.get("/").text))
     assert links == [quote("⭐"), quote("🔥")]
+
+
+@pytest.mark.parametrize("link_id", [LINK, CARD, IDEA])
+def test_a_mark_goes_on_a_link_a_card_and_an_idea(client, cfg, link_id):
+    client.post(f"/item/{link_id}/mark", data={"mark": "⭐", "back": "/"})
+    assert mark_of(cfg, link_id) == "⭐"
+
+
+def test_an_empty_mark_takes_it_off(client, cfg):
+    client.post(f"/item/{LINK}/mark", data={"mark": "⭐", "back": "/"})
+    client.post(f"/item/{LINK}/mark", data={"mark": "", "back": "/"})
+    assert mark_of(cfg, LINK) == ""
+
+
+def test_it_goes_back_to_the_same_card(client):
+    answer = client.post(f"/item/{LINK}/mark", data={"mark": "⭐", "back": "/?category=Redes"},
+                         follow_redirects=False)
+    assert answer.status_code == 303
+    assert answer.headers["location"] == f"/?category=Redes#card-{LINK}"
+
+
+def test_what_is_not_a_mark_writes_nothing_and_says_so(client, cfg):
+    files = sorted(cfg.root.rglob("*.md"))
+    before = [p.read_text(encoding="utf-8") for p in files]
+    answer = client.post(f"/item/{LINK}/mark", data={"mark": "ok", "back": "/"},
+                         follow_redirects=False)
+    assert answer.headers["location"] == f"/?notice=bad-mark#card-{LINK}"
+    assert [p.read_text(encoding="utf-8") for p in files] == before
+
+
+@pytest.mark.parametrize("back", ["//evil.com/x", "https://evil.com/", "/\\evil.com",
+                                  "evil", "", "/\x07"])
+def test_a_way_back_that_is_not_ours_goes_to_the_note(client, back):
+    answer = client.post(f"/item/{LINK}/mark", data={"mark": "⭐", "back": back},
+                         follow_redirects=False)
+    assert answer.headers["location"] == f"/item/{LINK}#card-{LINK}"
+
+
+def test_notices_do_not_pile_up_in_the_way_back(client):
+    answer = client.post(f"/item/{LINK}/mark",
+                         data={"mark": "ok", "back": "/?notice=bad-mark&page=2"},
+                         follow_redirects=False)
+    assert answer.headers["location"] == f"/?page=2&notice=bad-mark#card-{LINK}"
+
+
+def test_a_note_that_is_not_there_is_404(client):
+    assert client.post("/item/000000000000/mark", data={"mark": "⭐"}).status_code == 404
+
+
+def test_the_bad_mark_notice_is_translated():
+    from oknowledge.i18n import STRINGS
+    from oknowledge.web.app import NOTICES
+    assert NOTICES["bad-mark"] in STRINGS["es"]
