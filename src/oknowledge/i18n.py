@@ -25,6 +25,7 @@ STRINGS = {
         "Search your library": "Buscá en tu biblioteca",
         "Categories": "Categorías",
         "Settings": "Ajustes",
+        "Marked %1": "Marcadas con %1",
         "No results": "Sin resultados",
         "Nothing saved yet": "Todavía no guardaste nada",
         "Open original": "Abrir el original",

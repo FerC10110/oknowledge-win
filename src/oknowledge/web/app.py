@@ -40,6 +40,7 @@ from ..config import CONFIG_PATH, CONTENT_MODES, ENGINE_NAMES, MENTION_MODES, Co
 from ..config import save as save_config
 from ..ideas import IdeaFull, add_related, drop_related, new_idea
 from ..i18n import LANGUAGES, NATIVE_NAMES, translator
+from ..marks import clean_mark, rank_marks
 from ..pipeline import add as add_link
 from ..pipeline import describe, download_cover, icon_path, import_links
 from ..pipeline import is_domain, owed
@@ -690,7 +691,10 @@ def create_app(cfg: Config) -> FastAPI:
         # be in the language that was just picked.
         language = current["cfg"].ui_language
         t = translator(language)
-        base = {"t": t, "lang": language, "query": "",
+        # Where this page is, for the forms that bring you back to it.
+        here = request.url.path + ("?" + request.url.query if request.url.query else "")
+        base = {"t": t, "lang": language, "query": "", "here": here,
+                "marks": current["cfg"].marks, "used_marks": [], "active_mark": None,
                 "unreadable": library.unreadable, "links_dir": cfg.links_dir,
                 "heading": None, "prev_url": None, "next_url": None,
                 "page": 1, "pages": 1, "notice": notice_for(request, t),
@@ -703,9 +707,17 @@ def create_app(cfg: Config) -> FastAPI:
                 request=request, name="error.html", status_code=503,
                 context={**base, "error": library.error, "categories": {},
                          "tags": {}, "collections": {}})
+        # Every shelf, because the filter is in the nav and the nav is on
+        # every page. Each refresh is a stat per file, and the library one
+        # already ran for this request anyway.
+        for other in (shelf, ideas):
+            other.refresh()
+        used = rank_marks([*library.notes, *shelf.notes, *ideas.notes],
+                          current["cfg"].marks)
         return templates.TemplateResponse(
             request=request, name=name, status_code=status_code,
-            context={**base, "categories": library.categories(), "tags": library.tags(),
+            context={**base, "used_marks": used,
+                     "categories": library.categories(), "tags": library.tags(),
                      "collections": library.collections(), "collection": None,
                      "picking": False, **context},
         )

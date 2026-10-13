@@ -34,6 +34,11 @@
       <a href="/retry">{{ t('Reprocessing') }}{% if batch.running %}
         <b>{{ batch.done }}/{{ batch.total }}</b>{% endif %}</a>
       <a href="/settings">{{ t('Settings') }}</a>
+      {# Yours, most used first: one tap to everything you marked with it. #}
+      {% for mark, n in used_marks %}
+        <a href="/marked?mark={{ mark|urlencode }}" class="mark{% if active_mark == mark %} on{% endif %}"
+           title="{{ n }}" aria-label="{{ t('Marked %1', mark) }}">{{ mark }}</a>
+      {% endfor %}
     </nav>
   </header>
   {% if unreadable %}
