@@ -558,3 +558,21 @@ header nav b { font-weight: 600; font-variant-numeric: tabular-nums; }
 .title-row .mark { position: relative; margin-top: 0.5rem; }
 @media (hover: none) { .card > .mark .none { opacity: 0.6; } }
 @media (max-width: 42rem) { .mark > summary { min-width: 2.75rem; min-height: 2.75rem; } }
+
+/* The filters' drawer. On a wide screen it stays open and its summary only
+   carries Select, at the right; the words keep their place, hidden, so the
+   link does not jump. On a phone the summary is the one line you see. */
+details.filters { margin-bottom: 0.6rem; }
+details.filters > summary { display: flex; align-items: center; justify-content: space-between;
+                            gap: 1rem; cursor: pointer; list-style: none;
+                            color: var(--dim); font-size: 0.85rem; padding: 0.3rem 0; }
+details.filters > summary::-webkit-details-marker { display: none; }
+details.filters > summary > span::before { content: "▸ "; }
+details.filters[open] > summary > span::before { content: "▾ "; }
+@media (min-width: 42.01rem) {
+  details.filters > summary > span { visibility: hidden; }
+}
+@media (max-width: 42rem) {
+  details.filters > summary { min-height: 2.75rem; font-size: 0.95rem; }
+  .chips .chip { padding-top: 0.55rem; padding-bottom: 0.55rem; }
+}

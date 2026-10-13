@@ -5,53 +5,60 @@
 <script src="/static/redo.js" defer></script>{% endblock %}
 {% block main %}
   {% if notes is not none %}
-    {# The user's own groupings, above the model's: of the three rows this is
-       the one they made on purpose. Nothing at all until there is one. #}
-    {% if collections %}
-      <div class="chips mine">
-        {% for name, count in collections.items() %}
-          <a href="/?collection={{ name|urlencode }}{% if when %}&amp;when={{ when|urlencode }}{% endif %}"
-             class="chip {% if collection == name %}on{% endif %}">{{ name }} <b>{{ count }}</b></a>
+    {# All the filters in one drawer: open on a wide screen, closed on a
+       phone by layout.js, where they were a screen of chips before the
+       first card. The summary says what is on, so a closed drawer still
+       tells you why the list is short. #}
+    <details class="filters" open>
+      <summary>
+        <span>{{ t('Filters') }} · {{ collection or category or ('#' ~ tag if tag else t('All')) }}</span>
+        {# Here and not on a line of its own: it is a link most visits never use. #}
+        <a class="pick-mode" href="{% if picking %}{{ cancel_url }}{% else %}{{ pick_url }}{% endif %}"
+           >{{ t('Cancel') if picking else t('Select') }}</a>
+      </summary>
+      {# The user's own groupings, above the model's: of the three rows this is
+         the one they made on purpose. Nothing at all until there is one. #}
+      {% if collections %}
+        <div class="chips mine">
+          {% for name, count in collections.items() %}
+            <a href="/?collection={{ name|urlencode }}{% if when %}&amp;when={{ when|urlencode }}{% endif %}"
+               class="chip {% if collection == name %}on{% endif %}">{{ name }} <b>{{ count }}</b></a>
+          {% endfor %}
+        </div>
+      {% endif %}
+      <div class="chips">
+        <a href="/{% if when %}?when={{ when|urlencode }}{% endif %}"
+           class="chip {% if not category and not tag and not collection %}on{% endif %}">{{ t('All') }}</a>
+        {% for name, count in categories.items() %}
+          <a href="/?category={{ name|urlencode }}{% if when %}&amp;when={{ when|urlencode }}{% endif %}"
+             class="chip {% if category == name %}on{% endif %}">{{ name }} <b>{{ count }}</b></a>
         {% endfor %}
       </div>
-    {% endif %}
-    <div class="chips">
-      <a href="/{% if when %}?when={{ when|urlencode }}{% endif %}"
-         class="chip {% if not category and not tag and not collection %}on{% endif %}">{{ t('All') }}</a>
-      {% for name, count in categories.items() %}
-        <a href="/?category={{ name|urlencode }}{% if when %}&amp;when={{ when|urlencode }}{% endif %}"
-           class="chip {% if category == name %}on{% endif %}">{{ name }} <b>{{ count }}</b></a>
-      {% endfor %}
-      {# On this row and not on one of its own: a line of its own is vertical
-         space on every page, paid by everyone, for a link most visits never
-         use. #}
-      <a class="pick-mode" href="{% if picking %}{{ cancel_url }}{% else %}{{ pick_url }}{% endif %}"
-         >{{ t('Cancel') if picking else t('Select') }}</a>
-    </div>
-    {# The most used tags only, sitting next to the others of their category.
-       The rest are a click away rather than a screen of chips between the
-       user and their own cards, and they get the titles there is no room for
-       up here: a title per group turns this one line into one line each. #}
-    <div class="chips tags">
-      {% for name, count in tags %}
-        <a href="/?tag={{ name|urlencode }}{% if when %}&amp;when={{ when|urlencode }}{% endif %}"
-           class="chip small {% if tag == name %}on{% endif %}">#{{ name }}</a>
-      {% endfor %}
-    </div>
-    {% if tag_groups %}
-      <details class="more-tags">
-        <summary>{{ t('%1 more tags', hidden_tags) }}</summary>
-        {% for group, names in tag_groups.items() %}
-          {% if group %}<p class="group">{{ group }}</p>{% endif %}
-          <div class="chips tags">
-            {% for name, count in names %}
-              <a href="/?tag={{ name|urlencode }}{% if when %}&amp;when={{ when|urlencode }}{% endif %}"
-                 class="chip small {% if tag == name %}on{% endif %}">#{{ name }}</a>
-            {% endfor %}
-          </div>
+      {# The most used tags only, sitting next to the others of their category.
+         The rest are a click away rather than a screen of chips between the
+         user and their own cards, and they get the titles there is no room for
+         up here: a title per group turns this one line into one line each. #}
+      <div class="chips tags">
+        {% for name, count in tags %}
+          <a href="/?tag={{ name|urlencode }}{% if when %}&amp;when={{ when|urlencode }}{% endif %}"
+             class="chip small {% if tag == name %}on{% endif %}">#{{ name }}</a>
         {% endfor %}
-      </details>
-    {% endif %}
+      </div>
+      {% if tag_groups %}
+        <details class="more-tags">
+          <summary>{{ t('%1 more tags', hidden_tags) }}</summary>
+          {% for group, names in tag_groups.items() %}
+            {% if group %}<p class="group">{{ group }}</p>{% endif %}
+            <div class="chips tags">
+              {% for name, count in names %}
+                <a href="/?tag={{ name|urlencode }}{% if when %}&amp;when={{ when|urlencode }}{% endif %}"
+                   class="chip small {% if tag == name %}on{% endif %}">#{{ name }}</a>
+              {% endfor %}
+            </div>
+          {% endfor %}
+        </details>
+      {% endif %}
+    </details>
     {% if years %}<div class="withtime">{% endif %}
     {% if not notes %}<p class="empty">{% if filtered %}{{ t('Nothing in this category') if category else t('Nothing matches that filter') }}{% else %}{{ t('Nothing saved yet') }}{% endif %}</p>{% endif %}
     <ul class="grid">

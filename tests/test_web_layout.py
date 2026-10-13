@@ -63,3 +63,27 @@ def test_the_layout_script_closes_and_unfocuses_on_a_phone():
     js = WEB.joinpath("static", "layout.js").read_text(encoding="utf-8")
     assert "(max-width: 42rem)" in js
     assert "details.filters" in js and "details.paste" in js and "blur" in js
+
+
+# --- the filters ------------------------------------------------------------
+
+def filters_summary(body):
+    return re.search(r'<details class="filters" open>\s*<summary[^>]*>(.*?)</summary>',
+                     body, re.S)
+
+
+@pytest.mark.parametrize("path", ["/", "/ocio", "/ideas"])
+def test_the_filters_fold_into_one_line(client, path):
+    assert filters_summary(client.get(path).text)
+
+
+def test_the_summary_says_what_is_on(client):
+    assert "Redes" in filters_summary(client.get("/?category=Redes").text).group(1)
+
+
+def test_the_summary_says_all_when_nothing_is_on(client):
+    assert "All" in filters_summary(client.get("/").text).group(1)
+
+
+def test_select_moved_into_the_summary(client):
+    assert "pick-mode" in filters_summary(client.get("/").text).group(1)

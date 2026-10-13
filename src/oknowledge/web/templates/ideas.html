@@ -14,23 +14,26 @@
       <span class="row"><button type="submit">{{ t('Save') }}</button></span>
     </form>
   </details>
-  <div class="chips">
-    <a href="/ideas" class="chip {% if not state and not tag %}on{% endif %}">{{ t('All') }}</a>
-    {% for name, label in STATES %}
-      {% if states.get(name) %}
-        <a href="/ideas?estado={{ name }}" class="chip {% if state == name %}on{% endif %}"
-           >{{ t(label) }} <b>{{ states[name] }}</b></a>
-      {% endif %}
-    {% endfor %}
-  </div>
-  {% if idea_tags %}
-    <div class="chips tags">
-      {% for name, n in idea_tags.items() %}
-        <a href="/ideas?tag={{ name|urlencode }}{% if state %}&amp;estado={{ state }}{% endif %}"
-           class="chip small {% if tag == name %}on{% endif %}">#{{ name }} <b>{{ n }}</b></a>
+  <details class="filters" open>
+    <summary><span>{{ t('Filters') }} · {{ ('#' ~ tag) if tag else t('All') }}</span></summary>
+    <div class="chips">
+      <a href="/ideas" class="chip {% if not state and not tag %}on{% endif %}">{{ t('All') }}</a>
+      {% for name, label in STATES %}
+        {% if states.get(name) %}
+          <a href="/ideas?estado={{ name }}" class="chip {% if state == name %}on{% endif %}"
+             >{{ t(label) }} <b>{{ states[name] }}</b></a>
+        {% endif %}
       {% endfor %}
     </div>
-  {% endif %}
+    {% if idea_tags %}
+      <div class="chips tags">
+        {% for name, n in idea_tags.items() %}
+          <a href="/ideas?tag={{ name|urlencode }}{% if state %}&amp;estado={{ state }}{% endif %}"
+             class="chip small {% if tag == name %}on{% endif %}">#{{ name }} <b>{{ n }}</b></a>
+        {% endfor %}
+      </div>
+    {% endif %}
+  </details>
   {% if unreadable_ideas %}
     <p class="quiet">{{ t('%1 ideas could not be read and are not shown', unreadable_ideas) }}</p>
   {% endif %}

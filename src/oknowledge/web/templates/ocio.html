@@ -3,25 +3,30 @@
 {% block body_class %}wide{% endblock %}
 {% block scripts %}<script src="/static/popup.js" defer></script>{% endblock %}
 {% block main %}
-  <div class="chips">
-    <a href="/ocio" class="chip {% if not kind and not state %}on{% endif %}">{{ t('All') }}</a>
-    {% for name, label in KINDS %}
-      {% if counted.get(name) %}
-        <a href="/ocio?tipo={{ name }}" class="chip {% if kind == name %}on{% endif %}"
-           >{{ t(label) }} <b>{{ counted[name] }}</b></a>
-      {% endif %}
-    {% endfor %}
-  </div>
-  {% if states %}
-    <div class="chips tags">
-      {% for name, label in STATES %}
-        {% if states.get(name) %}
-          <a href="/ocio?estado={{ name }}{% if kind %}&amp;tipo={{ kind }}{% endif %}"
-             class="chip small {% if state == name %}on{% endif %}">{{ t(label) }} <b>{{ states[name] }}</b></a>
+  <details class="filters" open>
+    <summary><span>{{ t('Filters') }} ·
+      {% for name, label in KINDS %}{% if name == kind %}{{ t(label) }}{% endif %}{% endfor %}
+      {%- if not kind %}{{ t('All') }}{% endif %}</span></summary>
+    <div class="chips">
+      <a href="/ocio" class="chip {% if not kind and not state %}on{% endif %}">{{ t('All') }}</a>
+      {% for name, label in KINDS %}
+        {% if counted.get(name) %}
+          <a href="/ocio?tipo={{ name }}" class="chip {% if kind == name %}on{% endif %}"
+             >{{ t(label) }} <b>{{ counted[name] }}</b></a>
         {% endif %}
       {% endfor %}
     </div>
-  {% endif %}
+    {% if states %}
+      <div class="chips tags">
+        {% for name, label in STATES %}
+          {% if states.get(name) %}
+            <a href="/ocio?estado={{ name }}{% if kind %}&amp;tipo={{ kind }}{% endif %}"
+               class="chip small {% if state == name %}on{% endif %}">{{ t(label) }} <b>{{ states[name] }}</b></a>
+          {% endif %}
+        {% endfor %}
+      </div>
+    {% endif %}
+  </details>
   {% if unreadable_cards %}
     <p class="quiet">{{ t('%1 cards could not be read and are not shown', unreadable_cards) }}</p>
   {% endif %}

@@ -28,6 +28,7 @@ STRINGS = {
         "Marked %1": "Marcadas con %1",
         "Mark": "Marcar",
         "Another emoji": "Otro emoji",
+        "Filters": "Filtros",
         "OK": "Listo",
         "That is not an emoji the mark can be.": "Eso no es un emoji que pueda ser una marca.",
         "No results": "Sin resultados",
