@@ -24,6 +24,7 @@ class FakeEngine:
     """
 
     name = "fake"
+    searches = True
 
     def __init__(self, replies, model: str = ""):
         self._answer = replies if callable(replies) else None
@@ -63,3 +64,7 @@ class FakeEngine:
         if not isinstance(reply, str):
             raise TypeError(f"the fake engine needs a str reply, got {type(reply).__name__}: {reply!r}")
         return reply
+
+    def search(self, prompt: str) -> str:
+        """The same replies as complete(): a test decides what was found."""
+        return self.complete(prompt)

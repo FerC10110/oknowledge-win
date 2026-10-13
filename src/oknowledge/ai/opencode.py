@@ -9,13 +9,14 @@ opencode's own folders, an empty temporary directory to work in, --pure.
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import subprocess
 import tempfile
 from pathlib import Path
 
-from .base import EngineError, clean_models
+from .base import NO_SEARCH, EngineError, clean_models
 
 
 LIST_TIMEOUT = 5
@@ -76,8 +77,51 @@ def parse_opencode_models(text: str) -> list[str]:
     return clean_models(text.splitlines())
 
 
+SEARCH_TOOLS = ("websearch", "webfetch")
+
+
+def parse_events(stdout: str) -> str:
+    """The answer in `opencode run --format json` output, once the model is
+    seen to have searched.
+
+    One JSON event per line. The answer is the text parts, in order; a
+    search is a websearch or webfetch tool part that completed. An error
+    event is the error, whatever else came before it.
+    """
+    texts: list[str] = []
+    searched = False
+    for line in stdout.splitlines():
+        try:
+            event = json.loads(line)
+        except ValueError:
+            continue
+        if not isinstance(event, dict):
+            continue
+        if event.get("type") == "error":
+            error = event.get("error")
+            data = error.get("data") if isinstance(error, dict) else None
+            message = data.get("message") if isinstance(data, dict) else None
+            raise EngineError(f"opencode failed: {str(message or error)[:300]}")
+        part = event.get("part")
+        if not isinstance(part, dict):
+            continue
+        if part.get("type") == "text" and isinstance(part.get("text"), str):
+            texts.append(part["text"])
+        elif (part.get("type") == "tool" and part.get("tool") in SEARCH_TOOLS
+              and isinstance(part.get("state"), dict)
+              and part["state"].get("status") == "completed"):
+            searched = True
+    text = "".join(texts).strip()
+    if not searched:
+        raise EngineError(NO_SEARCH)
+    if not text:
+        raise EngineError("opencode returned an empty answer")
+    return text
+
+
 class OpenCodeEngine:
     name = "opencode"
+    searches = True
 
     def __init__(self, model: str, binary: str = "opencode", timeout: int = 300):
         self.model = model
@@ -109,6 +153,20 @@ class OpenCodeEngine:
         if not proc.stdout.strip():
             raise EngineError("opencode returned an empty answer")
         return proc.stdout
+
+    def search(self, prompt: str) -> str:
+        proc = self._run([self.binary, "run", "--pure", "--format", "json",
+                          "-m", self.model, prompt])
+        if proc.returncode != 0:
+            # A refused model says why in an error event, which parse_events
+            # raises. Anything else is stderr's to explain.
+            try:
+                parse_events(proc.stdout)
+            except EngineError as error:
+                if str(error).startswith("opencode failed:"):
+                    raise
+            raise EngineError(f"opencode failed: {proc.stderr.strip()[:300]}")
+        return parse_events(proc.stdout)
 
     def models(self) -> list[str]:
         """Every model opencode will accept, or [] if it cannot say.

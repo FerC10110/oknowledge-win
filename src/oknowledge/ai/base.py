@@ -63,10 +63,19 @@ class AnalysisError(Exception):
     """The engine answered, but the answer is no use."""
 
 
+NO_SEARCH = "the model did not search the web"
+"""What an engine that can search says when its model answered without
+looking. A "nothing like this exists" from memory is worse than no answer."""
+
+
 class Engine(Protocol):
     name: str
+    searches: bool
+    """Whether search() exists: the engine can look things up on the web."""
 
     def complete(self, prompt: str) -> str: ...
+
+    def search(self, prompt: str) -> str: ...
 
 
 @dataclass

@@ -96,6 +96,7 @@ def _server_message(response) -> str:
 
 class OllamaEngine:
     name = "ollama"
+    searches = False
 
     def __init__(self, model: str, url: str = "http://localhost:11434",
                  timeout: int = 300, ensure=None):
