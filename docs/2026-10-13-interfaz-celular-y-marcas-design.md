@@ -58,8 +58,9 @@ links en cuatro años, 6 fichas, 3 ideas), sobre main 840f018:
 
 Un campo nuevo en el frontmatter, `mark`, con un emoji o ausente. Es tuyo
 como `state`, `score` y `my_note`: ningún modelo lo escribe. `Note.mark: str =
-""`; `render()` lo escribe sólo si no está vacío; `read_note()` lo lee con el
-mismo criterio que `_as_text`.
+""`; `render()` lo escribe sólo si no está vacío; `read_note()` lo pasa por
+`clean_mark` y lee como sin marca lo que no pase (una marca escrita a mano en
+Obsidian nunca hace ilegible la nota).
 
 ### Sobrevivir a las reescrituras
 
@@ -77,11 +78,12 @@ se pase se pierde en silencio. Todo camino que reescribe una nota conserva
 
 ### Validación
 
-`clean_mark(value) -> str | None` en `vault.py`:
+`clean_mark(value) -> str | None` en `marks.py`, un módulo sin dependencias que importan `config.py` y `vault.py` (config no puede importar vault):
 
 - se recortan los espacios de los bordes; vacío significa "sacar la marca";
-- se acepta si tiene entre 1 y 8 code points y ninguno es letra, dígito,
-  espacio ni control (categorías Unicode `L*`, `N*`, `Z*`, `C*` salvo ZWJ
+- se acepta si tiene entre 1 y 8 code points, al menos uno es un símbolo
+  (categoría `So`, la de todo emoji), y ninguno es letra, dígito, espacio ni
+  control (categorías Unicode `L*`, `N*`, `Z*`, `C*` salvo ZWJ
   U+200D y el selector de variación U+FE0F, que forman 👍🏽, ❤️ y familias);
 - cualquier otra cosa devuelve `None` y no se escribe nada. Los keycaps
   (1️⃣) llevan un dígito y quedan afuera: es el precio de una regla simple.
@@ -164,10 +166,12 @@ donde se dice.
 
 En el celular deja de ser una fila con scroll: los años en una fila que
 envuelve, y los meses del año elegido en una fila propia debajo, también
-envolviendo. Para eso la plantilla dibuja los meses en un contenedor aparte
-(`<div class="months">`) después de los años, no intercalados. Los nombres
-siguen saliendo de `MONTHS` traducidos ("ene", "feb"...). En el escritorio el
-contenedor sigue en la columna lateral, debajo de su año como hoy.
+envolviendo. El HTML no cambia de orden (los meses siguen después de su año,
+que es lo que la columna del escritorio necesita): la plantilla agrega un
+`<i class="break">` antes del primer mes, y en el celular el CSS les da
+`order: 1` al corte y a los meses, con el corte a `flex-basis: 100%`. En el
+escritorio el corte no se dibuja. Los nombres siguen saliendo de `MONTHS`
+traducidos ("ene", "feb"...).
 
 ### Tarjetas
 
@@ -221,8 +225,8 @@ línea; textos nuevos con su traducción en `i18n.py`.
   no escribe, `back` ajeno se ignora, 404, same-origin; `/marked` mezcla las
   tres estanterías y pagina; el nav ordena y marca el activo; `Config.marks`
   lee, descarta inválidas y Ajustes la escribe.
-- Plantillas: tests de HTML (el `<details class="filters">`, los meses en
-  `div.months`, Categorías sin `ul.hits`, "Completo" en la cabecera, `id` de
+- Plantillas: tests de HTML (el `<details class="filters">`, el corte `i.break`
+  antes del primer mes, Categorías sin `ul.hits`, "Completo" en la cabecera, `id` de
   tarjeta, `layout.js` cargado).
 - Visual: capturas de chromium a 390px y 1366px, claro y oscuro, antes y
   después, de cada página.
