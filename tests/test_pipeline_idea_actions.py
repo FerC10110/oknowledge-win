@@ -163,3 +163,21 @@ def test_it_is_traced_start_and_end(cfg, engine):
     steps = []
     run_idea_action(cfg, note.id, "expand", trace=steps.append)
     assert [(s.name, s.state) for s in steps] == [("expand", "start"), ("expand", "ok")]
+
+
+def test_a_lock_busy_for_a_moment_does_not_throw_the_answer_away(cfg, engine, monkeypatch):
+    from contextlib import nullcontext
+    tries = []
+
+    class BusyOnce:
+        def lock(self, link):
+            tries.append(link)
+            if len(tries) == 1:
+                raise Locked(link)
+            return nullcontext()
+
+    monkeypatch.setattr("oknowledge.pipeline.Queue", BusyOnce)
+    monkeypatch.setattr("oknowledge.pipeline.LOCK_WAIT", 0)
+    note, _ = put(cfg)
+    assert run_idea_action(cfg, note.id, "expand") is None
+    assert now(cfg, note)[1].actions == {"expand": "- Modo offline"}

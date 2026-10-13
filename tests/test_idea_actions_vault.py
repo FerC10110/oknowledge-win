@@ -94,3 +94,24 @@ def test_a_hand_edited_section_survives_another_action(cfg):
 def test_all_entries_pairs_each_note_with_its_file(cfg):
     note, path = roundtrip(cfg, idea())
     assert all_entries(cfg, cfg.ideas) == [(path, find_note(cfg, note.id, shelf=cfg.ideas)[1])]
+
+
+def test_a_heading_of_yours_after_a_section_is_not_swallowed_by_it(cfg):
+    note, path = roundtrip(cfg, idea(my_note="", actions={"improve": "- a"}))
+    text = path.read_text(encoding="utf-8")
+    path.write_text(text.rstrip() + "\n\n## Notas mías\n\nalgo que escribí\n", encoding="utf-8")
+    after = read_note(path)
+    assert after.actions == {"improve": "- a"}
+    assert after.my_note == "## Notas mías\n\nalgo que escribí"
+    write_note(cfg, after, "es", path=path)
+    assert read_note(path).my_note == after.my_note
+
+
+def test_your_heading_and_your_note_are_both_kept(cfg):
+    note, path = roundtrip(cfg, idea(actions={"improve": "- a"}))
+    text = path.read_text(encoding="utf-8").replace(
+        "## Mi nota", "## Notas mías\n\nantes\n\n## Mi nota")
+    path.write_text(text, encoding="utf-8")
+    after = read_note(path)
+    assert after.actions == {"improve": "- a"}
+    assert after.my_note == "## Notas mías\n\nantes\n\nUna app de rutinas."

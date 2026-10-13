@@ -76,6 +76,7 @@ def test_a_button_queues_its_action_and_says_it_is_thinking(cfg, ran):
 
 
 def test_links_carries_the_category(cfg, ran):
+    a_link(cfg)
     note = put(cfg)
     TestClient(create_app(cfg)).post(f"/item/{note.id}/actions/links",
                                      data={"category": "Redes"})
@@ -261,3 +262,11 @@ def test_suggestions_are_split_from_the_rest():
         "*Entre: Redes.*\n\n- [[a/2026-x.md|alias]] — porque\n- [[b]]\nNinguno.")
     assert rows == [("2026-x", "porque"), ("b", "")]
     assert other == "*Entre: Redes.*\n\nNinguno."
+
+
+def test_a_category_that_is_not_in_the_library_is_ignored(cfg, ran):
+    a_link(cfg)
+    note = put(cfg)
+    TestClient(create_app(cfg)).post(f"/item/{note.id}/actions/links",
+                                     data={"category": "Redes\n\n## Mi nota\n\nx"})
+    assert ran[0] == [(note.id, "links", "")]

@@ -27,24 +27,30 @@ takes five seconds has already failed."""
 
 NO_BWRAP = "opencode needs bubblewrap to run sandboxed: install it (pacman -S bubblewrap)"
 
-_XDG = (("XDG_DATA_HOME", ".local/share"), ("XDG_CONFIG_HOME", ".config"),
-        ("XDG_CACHE_HOME", ".cache"), ("XDG_STATE_HOME", ".local/state"))
+_XDG = (("data", ".local/share"), ("config", ".config"),
+        ("cache", ".cache"), ("state", ".local/state"))
 
 
-def opencode_dirs() -> list[Path]:
-    """opencode's own four folders: its sessions, its config, its cache and
-    its state. The only part of the home it gets to see."""
+def opencode_dirs() -> list[tuple[Path, Path]]:
+    """(a folder of ours, where opencode looks for it) for its four folders.
+
+    Never your real ones: your opencode config holds plugins that run, with
+    no sandbox, the next time you open opencode yourself, and its data holds
+    every session you ever had. A command planted from a web page must reach
+    neither, so the sandbox gets a set of its own, kept beside oknowledge's
+    data, mounted where opencode expects to find them.
+    """
     home = Path.home()
-    return [Path(os.environ.get(var) or home / default) / "opencode"
-            for var, default in _XDG]
+    private = Path(os.environ.get("XDG_DATA_HOME") or home / ".local/share") / "oknowledge" / "opencode"
+    return [(private / name, home / default / "opencode") for name, default in _XDG]
 
 
 def sandboxed(argv: list[str], cwd: str) -> list[str]:
     """`argv` wrapped in bubblewrap.
 
     Only what opencode needs is mounted: the system read-only, the resolver
-    the network needs, its own folders, the binary's folder and `cwd` as
-    /work. Your vault, your projects, ~/.config/oknowledge with the API keys
+    the network needs, a private set of its folders, the binary's folder and
+    `cwd` as /work. Your vault, your projects, ~/.config/oknowledge with the API keys
     and ~/.ssh are not there at all -- there is nothing to read them from.
     """
     bwrap = shutil.which("bwrap")
@@ -55,20 +61,24 @@ def sandboxed(argv: list[str], cwd: str) -> list[str]:
         raise EngineError(f"opencode is not installed (no '{argv[0]}' on PATH)")
     # A mise shim points at the real executable, which is what gets mounted.
     binary = os.path.realpath(found)
-    wrapped = [bwrap, "--unshare-all", "--share-net", "--die-with-parent",
+    where = os.path.dirname(binary)
+    # Nothing of your environment goes in: an exported token is one `env`
+    # away from a page's instructions, and DISPLAY is a way out to the screen.
+    path = "/usr/bin:/bin" if where.startswith("/usr/") else f"/usr/bin:/bin:{where}"
+    wrapped = [bwrap, "--unshare-all", "--share-net", "--die-with-parent", "--clearenv",
+               "--setenv", "PATH", path, "--setenv", "HOME", str(Path.home()),
+               "--setenv", "LANG", os.environ.get("LANG") or "C.UTF-8",
                "--ro-bind", "/usr", "/usr", "--symlink", "usr/bin", "/bin",
                "--symlink", "usr/lib", "/lib", "--symlink", "usr/lib", "/lib64",
                "--ro-bind", "/etc", "/etc",
                "--ro-bind-try", "/run/systemd/resolve", "/run/systemd/resolve",
                "--proc", "/proc", "--dev", "/dev", "--tmpfs", "/tmp", "--tmpfs", "/home"]
-    for folder in opencode_dirs():
-        folder.mkdir(parents=True, exist_ok=True)
-        wrapped += ["--bind", str(folder), str(folder)]
-    where = os.path.dirname(binary)
+    for ours, theirs in opencode_dirs():
+        ours.mkdir(parents=True, exist_ok=True)
+        wrapped += ["--bind", str(ours), str(theirs)]
     if not where.startswith("/usr/"):
         wrapped += ["--ro-bind", where, where]
-    wrapped += ["--bind", cwd, "/work", "--chdir", "/work",
-                "--setenv", "HOME", str(Path.home()), binary, *argv[1:]]
+    wrapped += ["--bind", cwd, "/work", "--chdir", "/work", binary, *argv[1:]]
     return wrapped
 
 

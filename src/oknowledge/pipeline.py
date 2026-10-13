@@ -1407,6 +1407,13 @@ def retitle_idea(cfg: Config, idea: str, title: str | None, text: str,
     return path, trouble
 
 
+LOCK_TRIES = 5
+LOCK_WAIT = 0.5
+"""How long an action's finished answer waits for its idea: two actions
+ending together, or one ending while you save, hold the lock for a moment,
+and a minute of model work is not thrown away over a moment."""
+
+
 def run_idea_action(cfg: Config, idea: str, action: str, category: str = "",
                     trace: Tracer | None = None) -> str | None:
     """One action on one idea, behind the page: None when its section is
@@ -1435,19 +1442,23 @@ def run_idea_action(cfg: Config, idea: str, action: str, category: str = "",
         text, engine, model = compose_action(cfg, found[1], action, category, today())
     except AllEnginesFailed as error:
         return failed(str(error))
-    try:
-        with Queue().lock(idea):
-            fresh = find_note(cfg, idea, shelf=cfg.ideas)
-            if fresh is None:
-                # Thrown away in the meantime: writing would resurrect it.
-                return failed("the idea is no longer there")
-            path, note = fresh
-            note.actions[action] = text
-            write_note(cfg, note, cfg.language, path=path)
-    except Locked:
-        return failed("the idea was busy: ask again")
-    except (OSError, ProtectedNote) as error:
-        return failed(str(error))
+    for attempt in range(LOCK_TRIES):
+        try:
+            with Queue().lock(idea):
+                fresh = find_note(cfg, idea, shelf=cfg.ideas)
+                if fresh is None:
+                    # Thrown away in the meantime: writing would resurrect it.
+                    return failed("the idea is no longer there")
+                path, note = fresh
+                note.actions[action] = text
+                write_note(cfg, note, cfg.language, path=path)
+            break
+        except Locked:
+            if attempt == LOCK_TRIES - 1:
+                return failed("the idea was busy: ask again")
+            time.sleep(LOCK_WAIT)
+        except (OSError, ProtectedNote) as error:
+            return failed(str(error))
     tell(Step(link=idea, name=action, state="ok",
               seconds=time.monotonic() - clock, engine=engine, detail=model))
     return None

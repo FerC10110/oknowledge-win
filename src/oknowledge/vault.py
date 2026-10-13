@@ -256,6 +256,9 @@ def _split_body(
     original: list[str] = []
     found: dict[str, list[str]] = {}
     current: list[str] = []
+    # A heading of yours after an action section: yours, not the section's,
+    # or asking again would delete it. It joins your note.
+    loose: list[str] = []
     mode = "summary"
     for line in lines[start:]:
         marker = line.rstrip()
@@ -291,14 +294,21 @@ def _split_body(
                 mentions.append(_mention(item.group("text").strip()))
             elif line.strip() and not re.fullmatch(r"\s*[-*+]\s*", line):
                 extra.append(line.rstrip())
+        elif mode == "action" and marker.startswith("## "):
+            mode = "loose"
+            loose.append(line)
         elif mode == "action":
             current.append(line)
+        elif mode == "loose":
+            loose.append(line)
         else:
             original.append(line)
     content = "\n".join(original).strip()
     sections = {action: "\n".join(lines).strip() for action, lines in found.items()}
+    yours = "\n\n".join(text for text in ("\n".join(loose).strip(),
+                                            "\n".join(mine).strip()) if text)
     return ("\n".join(summary).strip(), points, mentions, extra,
-            "\n".join(mine).strip(), content or None,
+            yours, content or None,
             {action: text for action, text in sections.items() if text})
 
 

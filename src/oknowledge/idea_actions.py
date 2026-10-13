@@ -53,10 +53,18 @@ def _words(language: str) -> dict[str, str]:
 
 
 def _line(value) -> str:
-    """One line of model text, or "" for anything that is not usable text."""
+    """One line of model text, or "" for anything that is not usable text.
+
+    Obsidian renders the note, so the text is made inert there too: no
+    image (which it would fetch the moment the note opens), no link of the
+    model's own, no HTML. The only links in a section are the ones the app
+    writes, from URLs it checked.
+    """
     if not isinstance(value, str) or _is_placeholder(value):
         return ""
-    return " ".join(value.split())
+    text = " ".join(value.split())
+    text = re.sub(r"!+\[", "[", text).replace("](", "] (")
+    return text.replace("<", "‹").replace(">", "›")
 
 
 def _escape(name: str) -> str:

@@ -62,21 +62,9 @@ def test_the_home_is_empty_and_your_files_are_not_mounted(home, tmp_path, monkey
         assert not any(secret in src for src in mounted), secret
 
 
-def test_opencode_keeps_its_own_four_folders_and_they_exist(home, tmp_path, monkeypatch):
-    monkeypatch.setattr("shutil.which", which({"bwrap": "/usr/bin/bwrap",
-                                               "opencode": "/usr/bin/opencode"}))
-    argv = sandboxed(ARGV, str(tmp_path / "work"))
-    folders = [home / ".local/share/opencode", home / ".config/opencode",
-               home / ".cache/opencode", home / ".local/state/opencode"]
-    assert opencode_dirs() == folders
-    for folder in folders:
-        assert (str(folder), str(folder)) in pairs(argv, "--bind")
-        assert folder.is_dir()
-
-
-def test_the_xdg_variables_move_opencode_s_folders(home, tmp_path, monkeypatch):
+def test_the_xdg_variables_move_the_private_folders(home, tmp_path, monkeypatch):
     monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "data"))
-    assert opencode_dirs()[0] == tmp_path / "data" / "opencode"
+    assert opencode_dirs()[0][0] == tmp_path / "data" / "oknowledge" / "opencode" / "data"
 
 
 def test_the_resolver_and_the_work_folder_are_mounted(home, tmp_path, monkeypatch):
@@ -86,7 +74,8 @@ def test_the_resolver_and_the_work_folder_are_mounted(home, tmp_path, monkeypatc
     assert ("/run/systemd/resolve", "/run/systemd/resolve") in pairs(argv, "--ro-bind-try")
     assert (str(tmp_path / "work"), "/work") in pairs(argv, "--bind")
     assert argv[argv.index("--chdir") + 1] == "/work"
-    assert argv[argv.index("--setenv") + 1:argv.index("--setenv") + 3] == ["HOME", str(home)]
+    setenv = {argv[i + 1]: argv[i + 2] for i, part in enumerate(argv) if part == "--setenv"}
+    assert setenv["HOME"] == str(home)
 
 
 def test_a_binary_outside_usr_has_its_folder_mounted_read_only(home, tmp_path, monkeypatch):
@@ -150,3 +139,41 @@ def test_without_bwrap_opencode_is_never_launched(monkeypatch):
     monkeypatch.setattr("subprocess.run", run)
     with pytest.raises(EngineError, match="bubblewrap"):
         OpenCodeEngine(model="opencode/x-free").complete("hola")
+
+
+# --- final review: what the sandbox must not share --------------------------
+
+def test_opencode_s_real_folders_are_never_mounted(home, tmp_path, monkeypatch):
+    """Its real config holds plugins that run unsandboxed the next time you
+    open opencode, and its data holds every session you ever had: a command
+    planted from a web page must reach neither."""
+    monkeypatch.setattr("shutil.which", which({"bwrap": "/usr/bin/bwrap",
+                                               "opencode": "/usr/bin/opencode"}))
+    argv = sandboxed(ARGV, str(tmp_path / "work"))
+    sources = [src for src, _ in pairs(argv, "--bind")]
+    for real in (".config/opencode", ".local/share/opencode", ".cache/opencode",
+                 ".local/state/opencode"):
+        assert str(home / real) not in sources
+
+
+def test_a_private_set_of_folders_stands_in_for_them(home, tmp_path, monkeypatch):
+    monkeypatch.setattr("shutil.which", which({"bwrap": "/usr/bin/bwrap",
+                                               "opencode": "/usr/bin/opencode"}))
+    argv = sandboxed(ARGV, str(tmp_path / "work"))
+    private = home / ".local/share/oknowledge/opencode"
+    for name, target in (("data", ".local/share/opencode"), ("config", ".config/opencode"),
+                         ("cache", ".cache/opencode"), ("state", ".local/state/opencode")):
+        assert (str(private / name), str(home / target)) in pairs(argv, "--bind")
+        assert (private / name).is_dir()
+
+
+def test_the_environment_is_cleared_down_to_what_opencode_needs(home, tmp_path, monkeypatch):
+    monkeypatch.setattr("shutil.which", which({"bwrap": "/usr/bin/bwrap",
+                                               "opencode": "/usr/bin/opencode"}))
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-secret")
+    monkeypatch.setenv("DISPLAY", ":0")
+    argv = sandboxed(ARGV, str(tmp_path / "work"))
+    assert "--clearenv" in argv
+    names = [argv[i + 1] for i, part in enumerate(argv) if part == "--setenv"]
+    assert sorted(names) == ["HOME", "LANG", "PATH"]
+    assert "sk-secret" not in argv

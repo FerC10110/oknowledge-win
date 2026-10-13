@@ -1254,6 +1254,11 @@ def create_app(cfg: Config) -> FastAPI:
         ideas.refresh()
         if ideas.by_id(link_id) is None:
             return see_other("/ideas", notice="no-such-idea")
+        library.refresh()
+        if category not in library.categories():
+            # Only a name the library has: this one is written into the
+            # note, and a newline in it would be a heading of its own.
+            category = ""
         live = current["cfg"]
         if action == "exists" and not can_search(live):
             return see_other(item_url(link_id), notice="cannot-search")
