@@ -136,7 +136,7 @@ def test_the_box_has_its_own_line_on_a_phone():
               for part in css.split("@media (max-width: 40rem)")[1:]]
 
     assert blocks
-    assert any(".paste input" in block for block in blocks)
+    assert any(".paste-form input" in block for block in blocks)
 
 
 # --- the half that runs after the answer --------------------------------------

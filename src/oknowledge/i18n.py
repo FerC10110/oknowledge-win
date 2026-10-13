@@ -135,7 +135,7 @@ STRINGS = {
         "Nothing found for “%1”.": "No se encontró nada para “%1”.",
         "The catalogue could not be reached. Try again in a moment.":
             "No se pudo consultar el catálogo. Reintentá en un momento.",
-        "Full": "Todo",
+        "Full": "Completo",
         "Summary": "Resumen",
         "Saved.": "Guardado.",
         "The note was moved to the trash folder inside your vault. "

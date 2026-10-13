@@ -19,12 +19,15 @@
        config's `default_content` is a preference, and this is a decision
        about this link. Type, not url: a bare example.com/x is a link the
        server takes, and the browser would refuse to send it. #}
-    <form class="paste" action="/add" method="post">
-      <input type="text" inputmode="url" name="url" autocomplete="off"
-             placeholder="https://…" aria-label="{{ t('Paste a link') }}">
-      <button type="submit" name="content" value="full">{{ t('Full') }}</button>
-      <button type="submit" name="content" value="summary">{{ t('Summary') }}</button>
-    </form>
+    <details class="paste" open>
+      <summary title="{{ t('Paste a link') }}" aria-label="{{ t('Paste a link') }}">＋</summary>
+      <form class="paste-form" action="/add" method="post">
+        <input type="text" inputmode="url" name="url" autocomplete="off"
+               placeholder="https://…" aria-label="{{ t('Paste a link') }}">
+        <button type="submit" name="content" value="full">{{ t('Full') }}</button>
+        <button type="submit" name="content" value="summary">{{ t('Summary') }}</button>
+      </form>
+    </details>
     <nav>
       <a href="/categories">{{ t('Categories') }}</a>
       <a href="/ocio">{{ t('Leisure') }}</a>
@@ -46,6 +49,8 @@
   {% endif %}
   {% if notice %}<p class="notice">{{ notice }}</p>{% endif %}
   <main>{% block main %}{% endblock %}</main>
+  {# Not deferred: it has to fold the page before the first paint. #}
+  <script src="/static/layout.js"></script>
   {% block scripts %}{% endblock %}
 </body>
 </html>

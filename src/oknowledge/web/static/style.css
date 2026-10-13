@@ -42,10 +42,29 @@ header nav a.mark.on { outline: 2px solid var(--accent); outline-offset: 2px; bo
    in it that would gain anything. The explicit padding is because a
    type=text input matches the form rule further down and the header rule
    above it, and the two boxes have to look like the same box. */
-.paste { flex: 1 1 100%; display: flex; gap: 0.5rem; }
-.paste input { flex: 1; }
-header .paste input { padding: 0.6rem 0.9rem; }
-.paste button { white-space: nowrap; }
+.paste-form { flex: 1 1 100%; display: flex; gap: 0.5rem; }
+.paste-form input { flex: 1; }
+header .paste-form input { padding: 0.6rem 0.9rem; }
+.paste-form button { white-space: nowrap; }
+details.paste { flex: 1 1 100%; }
+details.paste > summary { display: none; }
+@media (max-width: 42rem) {
+  /* One row: the brand, the search and a plus that opens the paste box.
+     The nav goes under it, one line that scrolls sideways. */
+  header { padding: 0.8rem 1rem 0.4rem; gap: 0.5rem 0.6rem; }
+  header form[role="search"] { flex: 1 1 8rem; }
+  details.paste { flex: 0 0 auto; order: 2; }
+  details.paste > summary { display: grid; place-items: center; list-style: none;
+                            width: 2.75rem; height: 2.75rem; border-radius: 9px;
+                            border: 1px solid var(--line); background: var(--card);
+                            cursor: pointer; font-size: 1.2rem; }
+  details.paste > summary::-webkit-details-marker { display: none; }
+  details.paste[open] { flex: 1 1 100%; }
+  details.paste[open] > summary { margin-bottom: 0.5rem; }
+  header nav { order: 3; flex: 1 1 100%; display: flex; overflow-x: auto;
+               white-space: nowrap; scrollbar-width: none; }
+  header nav a { margin-left: 0; padding: 0.7rem 0.6rem; }
+}
 main { max-width: var(--measure); margin: 0 auto; padding: 0 1rem 5rem; }
 
 .chips { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 0.6rem; }
@@ -497,9 +516,9 @@ header nav b { font-weight: 600; font-variant-numeric: tabular-nums; }
   /* The box on its own line and the two buttons under it, each half the
      width: side by side with the box they would leave it four characters
      wide, which is the state the whole media query exists to avoid. */
-  .paste { flex-wrap: wrap; }
-  .paste input { flex: 1 1 100%; }
-  .paste button { flex: 1; }
+  .paste-form { flex-wrap: wrap; }
+  .paste-form input { flex: 1 1 100%; }
+  .paste-form button { flex: 1; }
 }
 
 /* An idea's links: one per line, an x to take one off, and a link that is

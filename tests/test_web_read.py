@@ -587,7 +587,7 @@ def many_tags(tmp_path):
 
 def tag_chips(body):
     """(the tags shown at once, the tags behind the disclosure)."""
-    head, _, tail = body.partition("<details")
+    head, _, tail = body.partition('<details class="more-tags"')
     found = lambda part: re.findall(r'class="chip small[^"]*">#([^<]+)</a>', part)
     return found(head), found(tail)
 
@@ -712,7 +712,7 @@ def test_the_hidden_half_is_grouped_under_the_category_names(tmp_path):
 def test_a_long_tag_list_is_grouped_by_name_inside_the_disclosure(many_tags):
     body = many_tags.get("/").text
 
-    assert "<details" in body
+    assert '<details class="more-tags"' in body
     assert '<p class="group">' in body
 
 
@@ -949,7 +949,7 @@ def test_the_tags_behind_the_disclosure_keep_it_too(many_tags):
     """Eighteen of the thirty are down there, and they are chips like the
     others: clicking one must not cost the year."""
     body = many_tags.get("/?when=2026").text
-    hidden = body.partition("<details")[2]
+    hidden = body.partition('<details class="more-tags"')[2]
     chips = re.findall(r'<a href="(/\?tag=[^"]*)"', hidden)
 
     assert len(chips) == 18
