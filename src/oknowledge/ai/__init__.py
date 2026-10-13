@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable, Iterator
 from itertools import count
 from time import monotonic
+from typing import TypeVar
 
 from ..config import Config
 from ..model import Mention
@@ -212,3 +213,62 @@ def mentions_with_chain(cfg: Config, text: str,
             failures.append(f"{name}: {error}")
     raise AllEnginesFailed("every engine failed: " + "; ".join(failures),
                            answered=answered)
+
+
+T = TypeVar("T")
+
+
+def _through_chain(cfg: Config, prompt: str, parse: Callable[[str], T],
+                   web: bool) -> tuple[T, str, str]:
+    """Each listed engine in order, until one answers something `parse`
+    accepts. With `web`, only the engines that can search are asked, and
+    they are asked to search."""
+    if not cfg.chain:
+        raise AllEnginesFailed("no engine is enabled: [ai] chain is empty")
+    failures = []
+    answered = False
+    asked = False
+    for name in cfg.chain:
+        try:
+            engine = build_engine(name, cfg)
+            if web and not getattr(engine, "searches", False):
+                continue
+            asked = True
+            reply = engine.search(prompt) if web else engine.complete(prompt)
+            result = parse(reply)
+        except AnalysisError as error:
+            answered = True
+            failures.append(f"{name}: {error}")
+            continue
+        except EngineError as error:
+            failures.append(f"{name}: {error}")
+            continue
+        return result, name, str(getattr(engine, "model", ""))
+    if web and not asked:
+        raise AllEnginesFailed("no engine in the chain can search the web")
+    raise AllEnginesFailed("every engine failed: " + "; ".join(failures),
+                           answered=answered)
+
+
+def ask_with_chain(cfg: Config, prompt: str,
+                   parse: Callable[[str], T]) -> tuple[T, str, str]:
+    """Ask the chain to think about `prompt`. Returns (parsed, engine, model)."""
+    return _through_chain(cfg, prompt, parse, web=False)
+
+
+def search_with_chain(cfg: Config, prompt: str,
+                      parse: Callable[[str], T]) -> tuple[T, str, str]:
+    """Ask the first engines of the chain that can search the web."""
+    return _through_chain(cfg, prompt, parse, web=True)
+
+
+def can_search(cfg: Config) -> bool:
+    """Whether search_with_chain has anyone to ask. Calls no model: building
+    an engine reads its config and nothing else."""
+    for name in cfg.chain:
+        try:
+            if getattr(build_engine(name, cfg), "searches", False):
+                return True
+        except EngineError:
+            continue
+    return False
