@@ -108,7 +108,7 @@ class Engine(Protocol):
 | `ollama` | `False` | — |
 | `fake` | `True` | devuelve la respuesta siguiente de su lista, igual que `complete()` |
 
-`search_with_chain(cfg, prompt)` recorre la cadena en tu orden y prueba sólo
+`search_with_chain(cfg, prompt, parse)` (y su par sin internet, `ask_with_chain`) recorre la cadena en tu orden y prueba sólo
 los motores con `searches` en `True`. Si ninguno de la cadena busca, levanta
 `AllEnginesFailed("no engine in the chain can search the web")` sin llamar a
 nadie. `can_search(cfg) -> bool` dice lo mismo sin llamar a nadie, para la
@@ -233,7 +233,7 @@ escribiste ahí tiene que sobrevivir a que la app relea y reescriba la nota.
 2. Toma el lock de la idea y la relee.
 3. Si la idea ya no está, no escribe nada.
 4. Si sigue, pone sólo `note.actions[action]` y la escribe.
-5. Reconstruye el índice de ideas.
+5. No reconstruye el índice de ideas: el índice muestra título y resumen, y una acción no cambia ninguno de los dos.
 
 Dos acciones distintas sobre la misma idea pueden correr juntas: cada una
 relee bajo el lock y escribe sólo su clave, así que ninguna pisa a la otra.
