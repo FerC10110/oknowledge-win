@@ -31,6 +31,7 @@ from .ai import (
 from .ai.base import DEFAULT_LIMIT, UNCATEGORIZED
 from .config import CONTENT_MODES, Config, Shelf
 from .extract import Unreadable, detect_type, extract
+from .idea_actions import compose as compose_action
 from .ideas import clean_title
 from .model import Extracted, Note, QueueEntry
 from .net import fetch
@@ -38,6 +39,7 @@ from .queue import Locked, Queue
 from .trace import SILENT, Step, Tracer, guarded
 from .urls import link_id, normalize
 from .vault import (
+    ACTIONS,
     IndexesStale,
     ProtectedNote,
     all_notes,
@@ -1403,3 +1405,49 @@ def retitle_idea(cfg: Config, idea: str, title: str | None, text: str,
     except OSError as error:
         raise IndexesStale((path, trouble), error) from error
     return path, trouble
+
+
+def run_idea_action(cfg: Config, idea: str, action: str, category: str = "",
+                    trace: Tracer | None = None) -> str | None:
+    """One action on one idea, behind the page: None when its section is
+    written, otherwise why not, in words the page can show.
+
+    The skeleton of complete_idea(): the model outside the lock, the idea
+    read again under it, and only this action's section written. Two
+    actions on one idea can run at once for that reason -- each writes its
+    own key into what it has just read.
+    """
+    if action not in ACTIONS:
+        raise ValueError(f"no such action: {action!r}")
+    tell = guarded(trace or SILENT)
+    found = find_note(cfg, idea, shelf=cfg.ideas)
+    if found is None:
+        return "the idea is no longer there"
+    clock = time.monotonic()
+    tell(Step(link=idea, name=action, state="start", seconds=0.0))
+
+    def failed(why: str) -> str:
+        tell(Step(link=idea, name=action, state="fail",
+                  seconds=time.monotonic() - clock, detail=why))
+        return why
+
+    try:
+        text, engine, model = compose_action(cfg, found[1], action, category, today())
+    except AllEnginesFailed as error:
+        return failed(str(error))
+    try:
+        with Queue().lock(idea):
+            fresh = find_note(cfg, idea, shelf=cfg.ideas)
+            if fresh is None:
+                # Thrown away in the meantime: writing would resurrect it.
+                return failed("the idea is no longer there")
+            path, note = fresh
+            note.actions[action] = text
+            write_note(cfg, note, cfg.language, path=path)
+    except Locked:
+        return failed("the idea was busy: ask again")
+    except (OSError, ProtectedNote) as error:
+        return failed(str(error))
+    tell(Step(link=idea, name=action, state="ok",
+              seconds=time.monotonic() - clock, engine=engine, detail=model))
+    return None
