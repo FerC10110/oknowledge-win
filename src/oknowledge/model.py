@@ -80,6 +80,12 @@ class Note:
     written as wikilinks so the idea reads on its own in Obsidian. Only an
     idea has them, only the user adds them, and nothing a model does ever
     changes them."""
+    actions: dict[str, str] = field(default_factory=dict)
+    """An idea's action sections -- Already out there, Improvements,
+    Expansion, Links that may help -- each as the markdown in the file,
+    keyed by vault.ACTIONS. Text and not structure, for the reason my_note
+    is: you can edit them in Obsidian, and an edit has to survive the app
+    reading the note and writing it back. Only an idea has them."""
     mentions_extra: list[str] = field(default_factory=list)
     """Lines of the mentions section that are not a bullet: a sentence the user
     typed there, a numbered item. Kept verbatim and written back after the

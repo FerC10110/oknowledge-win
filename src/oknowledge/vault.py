@@ -41,6 +41,16 @@ HEADINGS = {
     "en": ("Key points", "Mentions", "Original content", "My note"),
 }
 
+ACTIONS = ("exists", "improve", "expand", "links")
+"""What can be asked about an idea, in the order its sections are written."""
+
+ACTION_HEADINGS = {
+    "es": {"exists": "Ya existe", "improve": "Mejoras", "expand": "Ampliación",
+           "links": "Links que pueden servir"},
+    "en": {"exists": "Already out there", "improve": "Improvements",
+           "expand": "Expansion", "links": "Links that may help"},
+}
+
 FRONTMATTER_ORDER = (
     "url", "title", "category", "tags", "collections", "related", "type", "source",
     "author", "published", "saved", "cover", "length", "rating", "score",
@@ -131,6 +141,12 @@ def render(note: Note, language: str) -> str:
     if note.points:
         bullets = "\n".join(f"- {p}" for p in note.points)
         parts.append(f"## {points_heading}\n\n{bullets}\n")
+    # Before Mi nota: in an idea that section runs to the end of the file.
+    named = ACTION_HEADINGS.get(language, ACTION_HEADINGS["en"])
+    for action in ACTIONS:
+        text = note.actions.get(action, "").strip()
+        if text:
+            parts.append(f"## {named[action]}\n\n{text}\n")
     if note.mentions is not None:
         bullets = "\n".join(f"- [{_escape_name(m.name)}]({m.url})"
                             for m in note.mentions)
@@ -187,6 +203,8 @@ _POINTS_HEADINGS = {f"## {h[0]}" for h in HEADINGS.values()}
 _MENTIONS_HEADINGS = {f"## {h[1]}" for h in HEADINGS.values()}
 _CONTENT_HEADINGS = {f"## {h[2]}" for h in HEADINGS.values()}
 _MINE_HEADINGS = {f"## {h[3]}" for h in HEADINGS.values()}
+_ACTION_HEADINGS = {f"## {heading}": action for table in ACTION_HEADINGS.values()
+                    for action, heading in table.items()}
 # Any bullet a person types: -, * or +, indented or not.
 _LIST_ITEM = re.compile(r"^\s*[-*+]\s+(?P<text>\S.*)$")
 _BULLET = re.compile(r"^\[(?P<name>.*)\]\((?P<url>.*)\)$")
@@ -209,8 +227,9 @@ def _mention(text: str) -> Mention:
 
 
 def _split_body(
-    body: str, mine_to_end: bool = False,
-) -> tuple[str, list[str], list[Mention] | None, list[str], str, str | None]:
+    body: str, mine_to_end: bool = False, actions: bool = False,
+) -> tuple[str, list[str], list[Mention] | None, list[str], str, str | None,
+           dict[str, str]]:
     """Return (summary, points, mentions, mentions_extra, my note, content).
 
     From a body written by render(), or edited by hand. Lines in the mentions
@@ -223,6 +242,9 @@ def _split_body(
     `mine_to_end` does the same for your own section, for an idea: there it
     is the idea itself, written by you, and a line of it that happens to
     read like one of the app's headings is still a line of yours.
+
+    `actions` reads an idea's action sections; anywhere else those headings
+    are just text.
     """
     lines = body.splitlines()
     start = next((i + 1 for i, line in enumerate(lines) if line.startswith("# ")), 0)
@@ -232,11 +254,16 @@ def _split_body(
     extra: list[str] = []
     mine: list[str] = []
     original: list[str] = []
+    found: dict[str, list[str]] = {}
+    current: list[str] = []
     mode = "summary"
     for line in lines[start:]:
         marker = line.rstrip()
         if mode == "mine" and mine_to_end:
             mine.append(line)
+        elif actions and mode != "content" and marker in _ACTION_HEADINGS:
+            mode = "action"
+            current = found.setdefault(_ACTION_HEADINGS[marker], [])
         elif mode != "content" and marker in _CONTENT_HEADINGS:
             mode = "content"
         elif mode != "content" and marker in _MENTIONS_HEADINGS:
@@ -264,11 +291,15 @@ def _split_body(
                 mentions.append(_mention(item.group("text").strip()))
             elif line.strip() and not re.fullmatch(r"\s*[-*+]\s*", line):
                 extra.append(line.rstrip())
+        elif mode == "action":
+            current.append(line)
         else:
             original.append(line)
     content = "\n".join(original).strip()
+    sections = {action: "\n".join(lines).strip() for action, lines in found.items()}
     return ("\n".join(summary).strip(), points, mentions, extra,
-            "\n".join(mine).strip(), content or None)
+            "\n".join(mine).strip(), content or None,
+            {action: text for action, text in sections.items() if text})
 
 
 _REQUIRED_TEXT = ("id", "url", "title", "category", "type", "source")
@@ -373,8 +404,9 @@ def read_note(path: Path) -> Note | None:
     made = {key: front.get(key) for key in ("engine", "model")}
     made = {key: value if isinstance(value, str) else "" for key, value in made.items()}
     related = front.get("related")
-    summary, points, mentions, extra, mine, body = _split_body(
-        rest, mine_to_end=required["type"] == "idea")
+    is_idea = required["type"] == "idea"
+    summary, points, mentions, extra, mine, body, actions = _split_body(
+        rest, mine_to_end=is_idea, actions=is_idea)
     return Note(
         id=required["id"],
         url=required["url"],
@@ -403,6 +435,7 @@ def read_note(path: Path) -> Note | None:
         score=_as_score(front.get("score")),
         state=_as_text(front.get("state")),
         my_note=mine,
+        actions=actions,
     )
 
 
@@ -528,6 +561,12 @@ def _scan(cfg: Config, shelf: Shelf | None = None) -> tuple[list[tuple[Path, Not
 
 def all_notes(cfg: Config, shelf: Shelf | None = None) -> list[Note]:
     return [note for _, note in _scan(cfg, shelf)[0]]
+
+
+def all_entries(cfg: Config, shelf: Shelf | None = None) -> list[tuple[Path, Note]]:
+    """Every readable note on the shelf with the file it is in: the file
+    name is what a wikilink to it says."""
+    return _scan(cfg, shelf)[0]
 
 
 def find_note(cfg: Config, link_id: str, shelf: Shelf | None = None) -> tuple[Path, Note] | None:
