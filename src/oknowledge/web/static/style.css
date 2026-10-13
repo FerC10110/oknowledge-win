@@ -444,6 +444,8 @@ header nav b { font-weight: 600; font-variant-numeric: tabular-nums; }
    scroll sideways on a phone or shrink the address to nothing, and the
    address is the thing worth reading. Stacked, every line wraps, so the same
    markup is the phone layout and the desktop one. */
+/* The api section follows the api box live, before anything is saved. */
+form:has(input[name="chain"][value="api"]:not(:checked)) .api-only { display: none; }
 /* The thirteen providers, one row each and the row you tick opened. The
    radio sits beside the name and above the detail rather than inside the
    label, because `:checked ~` only reaches a sibling -- which is what lets

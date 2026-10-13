@@ -39,6 +39,9 @@
        radio and the block beside it -- because this page has no script and
        a provider you have not saved yet still has to be able to tell you
        how to get its key. #}
+    {# Shown only while the api box above is ticked, by a CSS rule on the
+       form: the providers mean nothing to the other engines. #}
+    <div class="api-only">
     <h2>{{ t('Who the api engine talks to') }}</h2>
     {% if 'api' not in cfg.chain %}
       {# Said here and not only by the unticked box above: somebody who pastes
@@ -89,6 +92,7 @@
       {% endfor %}
     </ul>
     <p class="meta">{{ t('What is marked in use is what is saved, not what the box shows: save first. The key itself never goes in config.toml -- this page rewrites that file.') }}</p>
+    </div>
 
     {# Both groups loop over the same order. Written out by hand they had drifted
        into opposite orders, so clicking the first option of each -- two groups

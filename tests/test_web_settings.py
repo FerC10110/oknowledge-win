@@ -612,3 +612,34 @@ def test_saving_settings_keeps_your_own_marks(tmp_path):
                                    "ui_language": "es", "batch": "2"},
                 follow_redirects=False)
     assert load(tmp_path / "config" / "config.toml").marks == ("🦄", "⭐")
+
+
+# --- the api section only shows with the api engine ticked ---------------------
+
+def api_section(html):
+    """What sits inside the block the api checkbox shows and hides."""
+    start = html.index('<div class="api-only">')
+    return html[start:html.index('</ul>', start)]
+
+
+def test_the_api_section_sits_in_its_own_block(client):
+    page = client.get("/settings").text
+    section = api_section(page)
+    assert "providers" in section
+    assert 'name="api_provider"' in section
+    assert page.count('name="api_provider"') == section.count('name="api_provider"')
+
+
+def test_the_api_block_sits_inside_the_form_with_the_checkbox(client):
+    """The rule reads the checkbox through the form, so both have to share it."""
+    page = client.get("/settings").text
+    form = page[page.index('<form action="/settings"'):]
+    form = form[:form.index("</form>")]
+    assert 'name="chain" value="api"' in form
+    assert '<div class="api-only">' in form
+
+
+def test_unticking_api_hides_its_block_without_a_script():
+    css = (Path(module.__file__).parent / "static" / "style.css").read_text()
+    assert ('form:has(input[name="chain"][value="api"]:not(:checked)) .api-only'
+            in css)
