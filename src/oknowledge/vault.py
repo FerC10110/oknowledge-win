@@ -28,6 +28,7 @@ from .ai.base import (
 )
 from .atomic import atomic_write
 from .config import Config, Shelf
+from .marks import clean_mark
 from .model import Mention, Note
 from .queue import Locked
 from .urls import search_url
@@ -54,7 +55,7 @@ ACTION_HEADINGS = {
 FRONTMATTER_ORDER = (
     "url", "title", "category", "tags", "collections", "related", "type", "source",
     "author", "published", "saved", "cover", "length", "rating", "score",
-    "state", "content", "engine", "model", "status", "id", MARKER,
+    "state", "mark", "content", "engine", "model", "status", "id", MARKER,
 )
 
 
@@ -125,6 +126,7 @@ def render(note: Note, language: str) -> str:
         "rating": note.rating or None,
         "score": note.score or None,
         "state": note.state or None,
+        "mark": note.mark or None,
         "content": note.content,
         # `or None` for the same reason collections has it: a thousand notes
         # that nobody analysed should not each carry two empty lines.
@@ -444,6 +446,7 @@ def read_note(path: Path) -> Note | None:
         rating=_as_text(front.get("rating")),
         score=_as_score(front.get("score")),
         state=_as_text(front.get("state")),
+        mark=clean_mark(front.get("mark")) or "",
         my_note=mine,
         actions=actions,
     )
@@ -746,6 +749,7 @@ def update_note(cfg: Config, link_id: str, language: str,
                 found: tuple[Path, Note] | None = None,
                 state: str | None = None, score: str | int | None = None,
                 my_note: str | None = None,
+                mark: str | None = None,
                 shelf: Shelf | None = None) -> Path | None:
     """Change one of our notes' classification and rebuild the indexes.
 
@@ -792,6 +796,9 @@ def update_note(cfg: Config, link_id: str, language: str,
         note.score = picked if picked else note.score
     if my_note is not None:
         note.my_note = my_note.strip()
+    if mark is not None:
+        picked = clean_mark(mark)
+        note.mark = note.mark if picked is None else picked
     if drop_mention is not None and note.mentions is not None:
         # `is not None`, not a truthiness test: a note nobody asked has None
         # here, and turning that into [] would tell the backfill this video

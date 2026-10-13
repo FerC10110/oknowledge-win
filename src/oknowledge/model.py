@@ -69,6 +69,9 @@ class Note:
     """What you wrote under `## Mi nota`, verbatim. Like mentions_extra, a
     re-analysis carries it across untouched: the model rewrites the summary
     around it and never the note itself."""
+    mark: str = ""
+    """Yours: one emoji, or nothing. Like state and score, no model ever
+    writes it, and every rewrite of a note carries it across."""
 
     collections: list[str] = field(default_factory=list)
     """The user's own grouping: a project they are working on, a list they are
