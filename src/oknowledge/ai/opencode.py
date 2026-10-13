@@ -1,13 +1,19 @@
 """opencode, the engine that needs no credentials.
 
-It runs in an empty temporary directory and with --pure: it is an agent, not a
-text service, so everything that could tempt it to touch files is taken away.
+It is an agent, not a text service: it has bash and the network, and the
+prompt it gets carries text from a web page. Restricting its tools from its
+own config makes the free tier refuse it (measured: 403), so every run is
+locked in from the outside, with bubblewrap: an empty /home except
+opencode's own folders, an empty temporary directory to work in, --pure.
 """
 
 from __future__ import annotations
 
+import os
+import shutil
 import subprocess
 import tempfile
+from pathlib import Path
 
 from .base import EngineError, clean_models
 
@@ -16,6 +22,53 @@ LIST_TIMEOUT = 5
 """Seconds to wait for a listing. `opencode models` answers instantly on this
 machine; a completion gets 300 because it is doing work, and a question that
 takes five seconds has already failed."""
+
+
+NO_BWRAP = "opencode needs bubblewrap to run sandboxed: install it (pacman -S bubblewrap)"
+
+_XDG = (("XDG_DATA_HOME", ".local/share"), ("XDG_CONFIG_HOME", ".config"),
+        ("XDG_CACHE_HOME", ".cache"), ("XDG_STATE_HOME", ".local/state"))
+
+
+def opencode_dirs() -> list[Path]:
+    """opencode's own four folders: its sessions, its config, its cache and
+    its state. The only part of the home it gets to see."""
+    home = Path.home()
+    return [Path(os.environ.get(var) or home / default) / "opencode"
+            for var, default in _XDG]
+
+
+def sandboxed(argv: list[str], cwd: str) -> list[str]:
+    """`argv` wrapped in bubblewrap.
+
+    Only what opencode needs is mounted: the system read-only, the resolver
+    the network needs, its own folders, the binary's folder and `cwd` as
+    /work. Your vault, your projects, ~/.config/oknowledge with the API keys
+    and ~/.ssh are not there at all -- there is nothing to read them from.
+    """
+    bwrap = shutil.which("bwrap")
+    if bwrap is None:
+        raise EngineError(NO_BWRAP)
+    found = shutil.which(argv[0])
+    if found is None:
+        raise EngineError(f"opencode is not installed (no '{argv[0]}' on PATH)")
+    # A mise shim points at the real executable, which is what gets mounted.
+    binary = os.path.realpath(found)
+    wrapped = [bwrap, "--unshare-all", "--share-net", "--die-with-parent",
+               "--ro-bind", "/usr", "/usr", "--symlink", "usr/bin", "/bin",
+               "--symlink", "usr/lib", "/lib", "--symlink", "usr/lib", "/lib64",
+               "--ro-bind", "/etc", "/etc",
+               "--ro-bind-try", "/run/systemd/resolve", "/run/systemd/resolve",
+               "--proc", "/proc", "--dev", "/dev", "--tmpfs", "/tmp", "--tmpfs", "/home"]
+    for folder in opencode_dirs():
+        folder.mkdir(parents=True, exist_ok=True)
+        wrapped += ["--bind", str(folder), str(folder)]
+    where = os.path.dirname(binary)
+    if not where.startswith("/usr/"):
+        wrapped += ["--ro-bind", where, where]
+    wrapped += ["--bind", cwd, "/work", "--chdir", "/work",
+                "--setenv", "HOME", str(Path.home()), binary, *argv[1:]]
+    return wrapped
 
 
 def parse_opencode_models(text: str) -> list[str]:
@@ -31,15 +84,16 @@ class OpenCodeEngine:
         self.binary = binary
         self.timeout = timeout
 
-    def complete(self, prompt: str) -> str:
-        argv = [self.binary, "run", "--pure", "-m", self.model, prompt]
+    def _run(self, argv: list[str]) -> subprocess.CompletedProcess:
+        """One run of opencode, inside the sandbox, with every way it can
+        fail turned into an EngineError."""
         try:
             with tempfile.TemporaryDirectory() as cwd:
                 # stdin must be closed: opencode blocks on an open non-TTY pipe.
                 # stdout only is the answer; its header and ANSI codes go to stderr.
-                proc = subprocess.run(
-                    argv, cwd=cwd, capture_output=True, text=True, timeout=self.timeout,
-                    stdin=subprocess.DEVNULL,
+                return subprocess.run(
+                    sandboxed(argv, cwd), cwd=cwd, capture_output=True, text=True,
+                    timeout=self.timeout, stdin=subprocess.DEVNULL,
                 )
         except FileNotFoundError as error:
             raise EngineError(f"opencode is not installed (no '{self.binary}' on PATH): {error}") from error
@@ -47,6 +101,9 @@ class OpenCodeEngine:
             raise EngineError(f"opencode timed out after {self.timeout}s") from error
         except OSError as error:
             raise EngineError(f"opencode could not be run: {error}") from error
+
+    def complete(self, prompt: str) -> str:
+        proc = self._run([self.binary, "run", "--pure", "-m", self.model, prompt])
         if proc.returncode != 0:
             raise EngineError(f"opencode failed: {proc.stderr.strip()[:300]}")
         if not proc.stdout.strip():

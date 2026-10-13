@@ -11,6 +11,13 @@ from oknowledge.ai.ollama import OllamaEngine
 from oknowledge.ai.opencode import OpenCodeEngine
 from oknowledge.config import Config
 
+@pytest.fixture(autouse=True)
+def no_sandbox(monkeypatch):
+    """These tests are about opencode's own argv and errors: the sandbox
+    around it has its own file, test_opencode_sandbox.py."""
+    monkeypatch.setattr("oknowledge.ai.opencode.sandboxed", lambda argv, cwd: argv)
+
+
 GOOD = json.dumps({
     "title": "T", "summary": "S", "points": ["p"], "category": "Redes", "tags": ["vpn"],
 })
