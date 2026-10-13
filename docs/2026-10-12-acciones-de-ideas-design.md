@@ -351,6 +351,12 @@ montado donde opencode las busca, y no pasa ninguna variable de entorno salvo
 `PATH`, `HOME` y `LANG`. Medido: el acceso gratis anda igual con esas
 carpetas vacías.
 
-Lo que queda abierto: el encierro comparte la red de la máquina, así que
-desde adentro se llega a `localhost` (este servidor, ollama) y al socket
-abstracto de X11.
+El encierro compartía la red de la máquina, así que desde adentro se llegaba
+a `localhost` (este servidor, que acepta un POST sin Origin; ollama) y a los
+sockets abstractos. Ahora corre dentro de una red propia hecha con `pasta`
+(paquete `passt`): sin puertos reenviados en ningún sentido, sin mapear el
+gateway a la máquina y sin servidor de nombres propio (los nombres se
+resuelven por el socket de resolved). Medido: `127.0.0.1`, `::1` y las
+direcciones propias de la máquina no responden, internet sí, no se ve ningún
+socket abstracto, y el acceso gratis y la búsqueda andan igual. Sin `pasta`,
+opencode no corre.

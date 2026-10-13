@@ -354,8 +354,11 @@ system read-only, a private set of opencode folders kept in
 `~/.local/share/oknowledge/opencode/` (never your own opencode config,
 plugins or session history) and no environment variables of yours; nothing
 else of your home: not your vault, not `~/.config/oknowledge` and its keys,
-not `~/.ssh`. Without
-bubblewrap opencode does not run, and the chain moves on to the next engine.
+not `~/.ssh`. Its network is its own, made by
+[pasta](https://passt.top) (`pacman -S passt`): it reaches the internet, but
+not `localhost` or anything else on this machine, so not the oknowledge
+server either. Without bubblewrap or pasta opencode does not run, and the
+chain moves on to the next engine.
 
 ## The vault
 

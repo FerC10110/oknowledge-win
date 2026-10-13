@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 
 from oknowledge.ai.base import EngineError
-from oknowledge.ai.opencode import NO_BWRAP, OpenCodeEngine, opencode_dirs, sandboxed
+from oknowledge.ai.opencode import NO_BWRAP, NO_PASTA, OpenCodeEngine, opencode_dirs, sandboxed
 
 XDG = ("XDG_DATA_HOME", "XDG_CONFIG_HOME", "XDG_CACHE_HOME", "XDG_STATE_HOME")
 
@@ -40,17 +40,17 @@ ARGV = ["opencode", "run", "--pure", "-m", "opencode/x-free", "hola"]
 
 
 def test_the_sandbox_runs_bwrap_and_ends_with_the_real_command(home, tmp_path, monkeypatch):
-    monkeypatch.setattr("shutil.which", which({"bwrap": "/usr/bin/bwrap",
+    monkeypatch.setattr("shutil.which", which({"bwrap": "/usr/bin/bwrap", "pasta": "/usr/bin/pasta",
                                                "opencode": "/usr/bin/opencode"}))
     argv = sandboxed(ARGV, str(tmp_path / "work"))
-    assert argv[0] == "/usr/bin/bwrap"
+    assert argv[argv.index("--") + 1] == "/usr/bin/bwrap"
     assert argv[-6:] == ["/usr/bin/opencode", "run", "--pure", "-m", "opencode/x-free", "hola"]
     for flag in ("--unshare-all", "--share-net", "--die-with-parent"):
         assert flag in argv
 
 
 def test_the_home_is_empty_and_your_files_are_not_mounted(home, tmp_path, monkeypatch):
-    monkeypatch.setattr("shutil.which", which({"bwrap": "/usr/bin/bwrap",
+    monkeypatch.setattr("shutil.which", which({"bwrap": "/usr/bin/bwrap", "pasta": "/usr/bin/pasta",
                                                "opencode": "/usr/bin/opencode"}))
     argv = sandboxed(ARGV, str(tmp_path / "work"))
     tmpfs = [argv[j + 1] for j, part in enumerate(argv) if part == "--tmpfs"]
@@ -68,7 +68,7 @@ def test_the_xdg_variables_move_the_private_folders(home, tmp_path, monkeypatch)
 
 
 def test_the_resolver_and_the_work_folder_are_mounted(home, tmp_path, monkeypatch):
-    monkeypatch.setattr("shutil.which", which({"bwrap": "/usr/bin/bwrap",
+    monkeypatch.setattr("shutil.which", which({"bwrap": "/usr/bin/bwrap", "pasta": "/usr/bin/pasta",
                                                "opencode": "/usr/bin/opencode"}))
     argv = sandboxed(ARGV, str(tmp_path / "work"))
     assert ("/run/systemd/resolve", "/run/systemd/resolve") in pairs(argv, "--ro-bind-try")
@@ -82,7 +82,7 @@ def test_a_binary_outside_usr_has_its_folder_mounted_read_only(home, tmp_path, m
     binary = tmp_path / "mise" / "opencode" / "1.18.35" / "opencode"
     binary.parent.mkdir(parents=True)
     binary.write_text("")
-    monkeypatch.setattr("shutil.which", which({"bwrap": "/usr/bin/bwrap",
+    monkeypatch.setattr("shutil.which", which({"bwrap": "/usr/bin/bwrap", "pasta": "/usr/bin/pasta",
                                                "opencode": str(binary)}))
     argv = sandboxed(ARGV, str(tmp_path / "work"))
     assert (str(binary.parent), str(binary.parent)) in pairs(argv, "--ro-bind")
@@ -90,7 +90,7 @@ def test_a_binary_outside_usr_has_its_folder_mounted_read_only(home, tmp_path, m
 
 
 def test_a_binary_under_usr_needs_no_extra_mount(home, tmp_path, monkeypatch):
-    monkeypatch.setattr("shutil.which", which({"bwrap": "/usr/bin/bwrap",
+    monkeypatch.setattr("shutil.which", which({"bwrap": "/usr/bin/bwrap", "pasta": "/usr/bin/pasta",
                                                "opencode": "/usr/bin/opencode"}))
     argv = sandboxed(ARGV, str(tmp_path / "work"))
     assert ("/usr/bin", "/usr/bin") not in pairs(argv, "--ro-bind")
@@ -105,7 +105,7 @@ def test_without_bwrap_it_refuses_with_the_way_to_install_it(home, tmp_path, mon
 
 
 def test_without_opencode_it_says_so(home, tmp_path, monkeypatch):
-    monkeypatch.setattr("shutil.which", which({"bwrap": "/usr/bin/bwrap"}))
+    monkeypatch.setattr("shutil.which", which({"bwrap": "/usr/bin/bwrap", "pasta": "/usr/bin/pasta"}))
     with pytest.raises(EngineError, match="opencode is not installed.*'opencode'"):
         sandboxed(ARGV, str(tmp_path))
 
@@ -147,7 +147,7 @@ def test_opencode_s_real_folders_are_never_mounted(home, tmp_path, monkeypatch):
     """Its real config holds plugins that run unsandboxed the next time you
     open opencode, and its data holds every session you ever had: a command
     planted from a web page must reach neither."""
-    monkeypatch.setattr("shutil.which", which({"bwrap": "/usr/bin/bwrap",
+    monkeypatch.setattr("shutil.which", which({"bwrap": "/usr/bin/bwrap", "pasta": "/usr/bin/pasta",
                                                "opencode": "/usr/bin/opencode"}))
     argv = sandboxed(ARGV, str(tmp_path / "work"))
     sources = [src for src, _ in pairs(argv, "--bind")]
@@ -157,7 +157,7 @@ def test_opencode_s_real_folders_are_never_mounted(home, tmp_path, monkeypatch):
 
 
 def test_a_private_set_of_folders_stands_in_for_them(home, tmp_path, monkeypatch):
-    monkeypatch.setattr("shutil.which", which({"bwrap": "/usr/bin/bwrap",
+    monkeypatch.setattr("shutil.which", which({"bwrap": "/usr/bin/bwrap", "pasta": "/usr/bin/pasta",
                                                "opencode": "/usr/bin/opencode"}))
     argv = sandboxed(ARGV, str(tmp_path / "work"))
     private = home / ".local/share/oknowledge/opencode"
@@ -168,7 +168,7 @@ def test_a_private_set_of_folders_stands_in_for_them(home, tmp_path, monkeypatch
 
 
 def test_the_environment_is_cleared_down_to_what_opencode_needs(home, tmp_path, monkeypatch):
-    monkeypatch.setattr("shutil.which", which({"bwrap": "/usr/bin/bwrap",
+    monkeypatch.setattr("shutil.which", which({"bwrap": "/usr/bin/bwrap", "pasta": "/usr/bin/pasta",
                                                "opencode": "/usr/bin/opencode"}))
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-secret")
     monkeypatch.setenv("DISPLAY", ":0")
@@ -177,3 +177,51 @@ def test_the_environment_is_cleared_down_to_what_opencode_needs(home, tmp_path, 
     names = [argv[i + 1] for i, part in enumerate(argv) if part == "--setenv"]
     assert sorted(names) == ["HOME", "LANG", "PATH"]
     assert "sk-secret" not in argv
+
+
+# --- final review: the server on localhost -----------------------------------
+
+def test_bwrap_runs_in_a_network_of_its_own_made_by_pasta(home, tmp_path, monkeypatch):
+    """With the host's network shared, a page's instructions reach the
+    oknowledge server on localhost, which takes a POST that carries no
+    Origin. pasta gives the run a namespace of its own with a way out to
+    the internet and none back to this machine (measured)."""
+    monkeypatch.setattr("shutil.which", which({"bwrap": "/usr/bin/bwrap", "pasta": "/usr/bin/pasta",
+                                               "opencode": "/usr/bin/opencode"}))
+    argv = sandboxed(ARGV, str(tmp_path / "work"))
+    assert argv[0] == "/usr/bin/pasta"
+    split = argv.index("--")
+    assert "--config-net" in argv[:split]
+    assert argv[split + 1] == "/usr/bin/bwrap"
+    # bwrap joins pasta's namespace instead of making an unconnected one.
+    assert "--share-net" in argv[split:]
+
+
+def test_pasta_forwards_no_port_and_maps_no_way_back_to_the_host(home, tmp_path, monkeypatch):
+    monkeypatch.setattr("shutil.which", which({"bwrap": "/usr/bin/bwrap", "pasta": "/usr/bin/pasta",
+                                               "opencode": "/usr/bin/opencode"}))
+    argv = sandboxed(ARGV, str(tmp_path / "work"))
+    options = argv[:argv.index("--")]
+    for flag in ("-t", "-u", "-T", "-U"):
+        assert options[options.index(flag) + 1] == "none", flag
+    assert "--no-map-gw" in options
+
+
+def test_without_pasta_it_refuses_with_the_way_to_install_it(home, tmp_path, monkeypatch):
+    monkeypatch.setattr("shutil.which", which({"bwrap": "/usr/bin/bwrap",
+                                               "opencode": "/usr/bin/opencode"}))
+    with pytest.raises(EngineError) as raised:
+        sandboxed(ARGV, str(tmp_path))
+    assert str(raised.value) == NO_PASTA
+    assert "pacman -S passt" in NO_PASTA
+
+
+def test_pasta_hands_out_no_nameserver(home, tmp_path, monkeypatch):
+    """Without -D none pasta warns on stderr that it found no nameserver
+    (resolved's is on loopback), and stderr is what a failed run shows you.
+    Names resolve through resolved's socket either way (measured)."""
+    monkeypatch.setattr("shutil.which", which({"bwrap": "/usr/bin/bwrap", "pasta": "/usr/bin/pasta",
+                                               "opencode": "/usr/bin/opencode"}))
+    argv = sandboxed(ARGV, str(tmp_path / "work"))
+    options = argv[:argv.index("--")]
+    assert options[options.index("-D") + 1] == "none"

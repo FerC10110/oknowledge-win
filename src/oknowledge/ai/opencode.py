@@ -26,6 +26,16 @@ takes five seconds has already failed."""
 
 
 NO_BWRAP = "opencode needs bubblewrap to run sandboxed: install it (pacman -S bubblewrap)"
+NO_PASTA = "opencode needs pasta to run in a network of its own: install it (pacman -S passt)"
+
+PASTA = ["--quiet", "--config-net", "-D", "none", "-t", "none", "-u", "none", "-T", "none", "-U", "none",
+         "--no-map-gw"]
+"""A network namespace with a way out to the internet and none back to this
+machine: no port forwarded either way and the gateway not mapped to the host,
+so localhost inside is the sandbox's own, and the host's address is shadowed
+by the copy pasta gives the namespace. No nameserver is handed out (pasta
+would warn on stderr that it found none): names resolve through resolved's
+socket, which is a file, not an address."""
 
 _XDG = (("data", ".local/share"), ("config", ".config"),
         ("cache", ".cache"), ("state", ".local/state"))
@@ -52,10 +62,17 @@ def sandboxed(argv: list[str], cwd: str) -> list[str]:
     the network needs, a private set of its folders, the binary's folder and
     `cwd` as /work. Your vault, your projects, ~/.config/oknowledge with the API keys
     and ~/.ssh are not there at all -- there is nothing to read them from.
+
+    The network is pasta's, not the host's: the oknowledge server listens on
+    this machine and takes a POST that carries no Origin, and a page's
+    instructions must not be able to reach it.
     """
     bwrap = shutil.which("bwrap")
     if bwrap is None:
         raise EngineError(NO_BWRAP)
+    pasta = shutil.which("pasta")
+    if pasta is None:
+        raise EngineError(NO_PASTA)
     found = shutil.which(argv[0])
     if found is None:
         raise EngineError(f"opencode is not installed (no '{argv[0]}' on PATH)")
@@ -65,7 +82,8 @@ def sandboxed(argv: list[str], cwd: str) -> list[str]:
     # Nothing of your environment goes in: an exported token is one `env`
     # away from a page's instructions, and DISPLAY is a way out to the screen.
     path = "/usr/bin:/bin" if where.startswith("/usr/") else f"/usr/bin:/bin:{where}"
-    wrapped = [bwrap, "--unshare-all", "--share-net", "--die-with-parent", "--clearenv",
+    # --share-net shares pasta's namespace, not the host's.
+    wrapped = [pasta, *PASTA, "--", bwrap, "--unshare-all", "--share-net", "--die-with-parent", "--clearenv",
                "--setenv", "PATH", path, "--setenv", "HOME", str(Path.home()),
                "--setenv", "LANG", os.environ.get("LANG") or "C.UTF-8",
                "--ro-bind", "/usr", "/usr", "--symlink", "usr/bin", "/bin",
