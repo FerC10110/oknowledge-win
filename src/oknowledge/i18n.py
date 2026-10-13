@@ -185,6 +185,10 @@ STRINGS = {
 
         # Analysing a batch of what an import left unanalysed.
         "Activity": "Actividad",
+        "Add a model": "Agregar un modelo",
+        "Add a model…": "Agregar un modelo…",
+        "Several models go by comma and are tried in order: if one fails, the next one is asked before the next engine. Picking one from the list adds it at the end and saves.":
+            "Podés poner varios modelos separados por coma: se prueban en orden y, si uno falla, se pide al siguiente antes de pasar al otro motor. Elegir uno de la lista lo agrega al final y guarda.",
         "AI activity": "Actividad de IA",
         "In progress": "En curso",
         "History": "Historial",

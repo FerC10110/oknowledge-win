@@ -64,9 +64,12 @@ def test_opening_settings_asks_no_engine_anything(client, monkeypatch):
 
 
 def test_the_box_offers_a_list_and_stays_typable(client):
+    """The list adds to the box instead of filling it: the box holds the
+    models in the order they are tried."""
+    models_cache.remember("opencode", ["a/one"])
     body = client.get("/settings").text
-    assert 'list="models-opencode"' in body
-    assert '<datalist id="models-opencode">' in body
+    assert 'name="opencode_model"' in body
+    assert '<select class="add-model" data-for="opencode_model"' in body
     # A <select> would be the obvious control and the wrong one: an engine
     # that cannot be asked has to leave you able to type the name yourself.
     assert '<select name="opencode_model"' not in body
@@ -86,7 +89,7 @@ def test_the_page_says_how_old_the_list_is(client):
 
 
 def test_a_list_nobody_has_looked_for_says_nothing_about_dates(client):
-    assert "models-opencode" in client.get("/settings").text   # the datalist is there
+    assert 'name="opencode_model"' in client.get("/settings").text   # the box is there
     assert client.get("/settings").text.count("Looked up") == 0
 
 
@@ -111,7 +114,8 @@ def test_a_search_that_finds_nothing_says_so_and_keeps_the_box_typable(client,
 
     assert "notice=models-none" in answer.headers["location"]
     body = client.get("/settings").text
-    assert 'list="models-ollama"' in body          # the datalist is still there, empty
+    assert 'name="ollama_model"' in body           # the box is still there to type in
+    assert 'data-for="ollama_model"' not in body   # and no empty picker beside it
 
 
 def test_an_engine_that_cannot_even_be_built_is_an_answer_not_a_crash(client,
@@ -643,3 +647,48 @@ def test_unticking_api_hides_its_block_without_a_script():
     css = (Path(module.__file__).parent / "static" / "style.css").read_text()
     assert ('form:has(input[name="chain"][value="api"]:not(:checked)) .api-only'
             in css)
+
+
+# --- several models for one engine, in order --------------------------------------
+
+def save(client, **fields):
+    data = {"chain": ["opencode"], "language": "es", "default_content": "full",
+            "mentions": "tools", "ui_language": "es", "batch": "2"}
+    data.update(fields)
+    return client.post("/settings", data=data, follow_redirects=False)
+
+
+def saved_engines(tmp_path):
+    from oknowledge.config import load
+    return load(tmp_path / "config" / "config.toml").engines
+
+
+def test_several_models_are_saved_in_order_and_tidied(client, tmp_path):
+    save(client, opencode_model=" a/one ,b/two,, a/one , c/three ")
+    assert saved_engines(tmp_path)["opencode"]["model"] == "a/one, b/two, c/three"
+
+
+def test_the_box_shows_the_saved_list(client):
+    save(client, opencode_model="a/one, b/two")
+    assert 'value="a/one, b/two"' in client.get("/settings").text
+
+
+def test_the_page_says_the_models_are_tried_in_order(client):
+    assert "tried in order" in client.get("/settings").text
+
+
+def test_picking_from_the_list_adds_and_saves_by_script(client):
+    body = client.get("/settings").text
+    assert '<script src="/static/settings.js" defer></script>' in body
+    script = (Path(module.__file__).parent / "static" / "settings.js").read_text()
+    assert "requestSubmit" in script          # saved at once, no scrolling to Save
+    assert "includes(" in script              # a model already listed is not added twice
+    assert 'join(", ")' in script
+
+
+def test_the_picker_is_hidden_until_the_script_runs(client):
+    """Without the script a select would sit there doing nothing."""
+    models_cache.remember("opencode", ["a/one"])
+    body = client.get("/settings").text
+    picker = body[body.index('<select class="add-model" data-for="opencode_model"'):]
+    assert picker[:picker.index(">")].rstrip().endswith("hidden")

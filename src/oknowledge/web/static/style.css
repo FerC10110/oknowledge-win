@@ -679,14 +679,21 @@ select:focus-visible, textarea:focus-visible, .chip:focus-visible {
   outline: 2px solid var(--focus); outline-offset: 2px;
 }
 
-/* Settings: each engine on one row, the button under it on a phone. */
-.engine-row { display: grid; grid-template-columns: auto 1fr auto; gap: 0.5rem;
+/* Settings: each engine on two lines -- its box as wide as the column, since
+   it holds a list of models, and under it the picker that adds one and the
+   button that looks for them. */
+.engine-row { display: grid; grid-template-columns: 7rem 1fr auto; gap: 0.5rem;
               align-items: center; padding: 0.4rem 0; }
+.engine-row .model-box { grid-column: 2 / -1; min-width: 0; }
+.engine-row .add-model { grid-column: 2; min-width: 0; }
+.engine-row button { grid-column: 3; }
 .engine-row .meta { grid-column: 1 / -1; }
 
 @media (max-width: 42rem) {
   .mine .stars button { min-width: 2.75rem; min-height: 2.75rem; font-size: 1.4rem; }
-  .engine-row { grid-template-columns: auto 1fr; }
-  .engine-row button { grid-column: 1 / -1; }
+  .engine-row { grid-template-columns: 1fr auto; }
+  .engine-row > label, .engine-row .model-box { grid-column: 1 / -1; }
+  .engine-row .add-model { grid-column: 1; }
+  .engine-row button { grid-column: 2; }
   .providers label { display: flex; align-items: center; min-height: 2.75rem; }
 }

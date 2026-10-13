@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 from collections.abc import Callable, Iterator
 from itertools import count
 from time import monotonic
@@ -56,6 +57,45 @@ def build_engine(name: str, cfg: Config) -> Engine:
     raise EngineError(f"unknown engine: {name!r}")
 
 
+def models_of(cfg: Config, name: str) -> list[str]:
+    """The models one engine is given, in the order they are tried.
+
+    `model = "a, b"` is a list: a free model that is down for the afternoon
+    should not take its engine down with it. [] means the engine's default.
+    """
+    raw = cfg.engines.get(name, {}).get("model", "")
+    if not isinstance(raw, str):
+        return []
+    return [model.strip() for model in raw.split(",") if model.strip()]
+
+
+def _with_model(cfg: Config, name: str, model: str) -> Config:
+    engines = {key: dict(value) for key, value in cfg.engines.items()}
+    engines.setdefault(name, {})["model"] = model
+    return dataclasses.replace(cfg, engines=engines)
+
+
+def attempts(cfg: Config, names) -> list[tuple[str, str, Config]]:
+    """Every (engine, label, config to build it from) to try, in order:
+    each engine of `names`, and inside it each of its models.
+
+    build_engine is handed a config naming one model, so it keeps the one
+    signature everything else calls it with. The label names the model only
+    when the engine has more than one, which is when it tells two apart.
+    """
+    found = []
+    for name in names:
+        models = models_of(cfg, name)
+        if not models:
+            found.append((name, name, cfg))
+        elif len(models) == 1:
+            found.append((name, name, _with_model(cfg, name, models[0])))
+        else:
+            found.extend((name, f"{name} [{model}]", _with_model(cfg, name, model))
+                         for model in models)
+    return found
+
+
 def _recorder(cfg: Config, link: str, tally: Iterator[int], engine: str,
               model: str, meta: dict) -> Callable[[str, str, str], None] | None:
     """A `record` for `analyze()` that writes one trace file per attempt.
@@ -107,7 +147,7 @@ def analyze_with_chain(cfg: Config, text: str, meta: dict, known,
         raise AllEnginesFailed("no engine is enabled: [ai] chain is empty")
     failures = []
     tally = count(1)
-    for name in names:
+    for name, label, built in attempts(cfg, names):
         # One step per turn of this loop, which is the whole point of tracing
         # here rather than around the call: a link that fails on the first
         # engine and comes out of the second shows two lines, and that is
@@ -118,13 +158,13 @@ def analyze_with_chain(cfg: Config, text: str, meta: dict, known,
         try:
             # build_engine stays inside the try: an engine named in the chain
             # that does not exist is a failure to record, not one to raise.
-            engine_used = build_engine(name, cfg)
+            engine_used = build_engine(name, built)
             model = str(getattr(engine_used, "model", ""))
             analysis = analyze(engine_used, text, meta, known, cfg.language,
                                mentions=mentions,
                                record=_recorder(cfg, link, tally, name, model, meta))
         except (EngineError, AnalysisError) as error:
-            failures.append(f"{name}: {error}")
+            failures.append(f"{label}: {error}")
             trace(Step(link=link, name="analyze", state="fail",
                        seconds=monotonic() - clock, engine=name,
                        detail=" · ".join(p for p in (model, str(error)) if p)))
@@ -146,17 +186,17 @@ def describe_with_chain(cfg: Config, note) -> tuple[str, list[str], str, str]:
         raise AllEnginesFailed("no engine is enabled: [ai] chain is empty")
     failures = []
     answered = False
-    for name in cfg.chain:
+    for name, label, built in attempts(cfg, cfg.chain):
         try:
-            engine = build_engine(name, cfg)
+            engine = build_engine(name, built)
             summary, points = describe_card(engine, note, cfg.language)
         except AnalysisError as error:
             # The engine replied; what it said was no use.
             answered = True
-            failures.append(f"{name}: {error}")
+            failures.append(f"{label}: {error}")
             continue
         except EngineError as error:
-            failures.append(f"{name}: {error}")
+            failures.append(f"{label}: {error}")
             continue
         return summary, points, name, str(getattr(engine, "model", ""))
     raise AllEnginesFailed("every engine failed: " + "; ".join(failures),
@@ -171,16 +211,16 @@ def complete_idea_with_chain(cfg: Config, note) -> tuple[IdeaAnswer, str, str]:
         raise AllEnginesFailed("no engine is enabled: [ai] chain is empty")
     failures = []
     answered = False
-    for name in cfg.chain:
+    for name, label, built in attempts(cfg, cfg.chain):
         try:
-            engine = build_engine(name, cfg)
+            engine = build_engine(name, built)
             answer = complete_idea(engine, note, cfg.language)
         except AnalysisError as error:
             answered = True
-            failures.append(f"{name}: {error}")
+            failures.append(f"{label}: {error}")
             continue
         except EngineError as error:
-            failures.append(f"{name}: {error}")
+            failures.append(f"{label}: {error}")
             continue
         return answer, name, str(getattr(engine, "model", ""))
     raise AllEnginesFailed("every engine failed: " + "; ".join(failures),
@@ -201,16 +241,16 @@ def mentions_with_chain(cfg: Config, text: str,
         raise AllEnginesFailed("no engine is enabled: [ai] chain is empty")
     failures = []
     answered = False
-    for name in cfg.chain:
+    for name, label, built in attempts(cfg, cfg.chain):
         try:
-            return mentions_only(build_engine(name, cfg), text, meta,
+            return mentions_only(build_engine(name, built), text, meta,
                                  cfg.language, cfg.mentions), name
         except AnalysisError as error:
             # The engine replied; what it said was no use.
             answered = True
-            failures.append(f"{name}: {error}")
+            failures.append(f"{label}: {error}")
         except EngineError as error:
-            failures.append(f"{name}: {error}")
+            failures.append(f"{label}: {error}")
     raise AllEnginesFailed("every engine failed: " + "; ".join(failures),
                            answered=answered)
 
@@ -228,9 +268,9 @@ def _through_chain(cfg: Config, prompt: str, parse: Callable[[str], T],
     failures = []
     answered = False
     asked = False
-    for name in cfg.chain:
+    for name, label, built in attempts(cfg, cfg.chain):
         try:
-            engine = build_engine(name, cfg)
+            engine = build_engine(name, built)
             if web and not getattr(engine, "searches", False):
                 continue
             asked = True
@@ -238,10 +278,10 @@ def _through_chain(cfg: Config, prompt: str, parse: Callable[[str], T],
             result = parse(reply)
         except AnalysisError as error:
             answered = True
-            failures.append(f"{name}: {error}")
+            failures.append(f"{label}: {error}")
             continue
         except EngineError as error:
-            failures.append(f"{name}: {error}")
+            failures.append(f"{label}: {error}")
             continue
         return result, name, str(getattr(engine, "model", ""))
     if web and not asked:
@@ -265,9 +305,9 @@ def search_with_chain(cfg: Config, prompt: str,
 def can_search(cfg: Config) -> bool:
     """Whether search_with_chain has anyone to ask. Calls no model: building
     an engine reads its config and nothing else."""
-    for name in cfg.chain:
+    for name, _label, built in attempts(cfg, cfg.chain):
         try:
-            if getattr(build_engine(name, cfg), "searches", False):
+            if getattr(build_engine(name, built), "searches", False):
                 return True
         except EngineError:
             continue

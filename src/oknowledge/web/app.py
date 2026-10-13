@@ -598,11 +598,22 @@ def batch_size(raw: str, saved: int) -> int:
 
 
 def model_name(raw: str) -> str | None:
-    """A model name from a form: trimmed, "" to clear it, None if it is not one."""
-    name = raw.strip()[:200]
-    if not name:
-        return ""
-    return name if name.isprintable() else None
+    """The models from a form, in order: "a, b", "" to clear them, None if
+    it is not a list of names.
+
+    Each is trimmed, the empty ones between two commas dropped and a repeat
+    kept only where it first appears -- asking a model that just failed
+    again is a wait for the same answer.
+    """
+    text = raw.strip()[:1000]
+    if not text.isprintable():
+        return None
+    names: list[str] = []
+    for part in text.split(","):
+        name = part.strip()[:200]
+        if name and name not in names:
+            names.append(name)
+    return ", ".join(names)
 
 
 def same_origin(headers: Headers, scheme: str) -> bool:

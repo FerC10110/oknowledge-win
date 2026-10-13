@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block title %}{{ t('Settings') }} - oknowledge{% endblock %}
+{% block scripts %}<script src="/static/settings.js" defer></script>{% endblock %}
 {% block main %}
   <h1>{{ t('Settings') }}</h1>
   <p class="warn-block">{{ t('Saving rewrites %1 from scratch: your comments, your formatting and any key oknowledge does not read are not kept. The file it replaces is copied to config.toml.bak first.', config_path) }}</p>
@@ -10,18 +11,24 @@
       <p class="row engine-row">
         <label><input type="checkbox" name="chain" value="{{ name }}"
                       {% if name in cfg.chain %}checked{% endif %}> {{ name }}</label>
-        {# An <input list> and not a <select>: the list is a convenience and
-           the typing is the guarantee. An engine that is not installed, not
-           running or behind somebody else's gateway cannot be asked, and that
-           must not be the day you cannot name your model. #}
-        <input name="{{ name }}_model" placeholder="model" list="models-{{ name }}"
+        {# A box and not a <select>: the typing is the guarantee. An engine that
+           is not installed, not running or behind somebody else's gateway
+           cannot be asked, and that must not be the day you cannot name your
+           model. It holds the models in the order they are tried, by comma. #}
+        <input name="{{ name }}_model" placeholder="model" class="model-box"
                aria-label="{{ name }} model"
                value="{{ cfg.engines.get(name, {}).get('model', '') }}">
-        <datalist id="models-{{ name }}">
-          {% for found in models.get(name, {}).get('found', []) %}
-            <option value="{{ found }}">
-          {% endfor %}
-        </datalist>
+        {# What the engine said it has, as a picker that adds to the box and
+           saves. Hidden until settings.js shows it: without the script it
+           would sit there doing nothing. #}
+        {% if models.get(name, {}).get('found') %}
+          <select class="add-model" data-for="{{ name }}_model" aria-label="{{ t('Add a model') }}" hidden>
+            <option value="">{{ t('Add a model…') }}</option>
+            {% for found in models[name]['found'] %}
+              <option value="{{ found }}">{{ found }}</option>
+            {% endfor %}
+          </select>
+        {% endif %}
         {# The button belongs to its own form, declared at the end of the page:
            a form cannot nest inside another, and this press must not save the
            settings form half-typed. #}
@@ -31,6 +38,7 @@
         {% endif %}
       </p>
     {% endfor %}
+    <p class="meta">{{ t('Several models go by comma and are tried in order: if one fails, the next one is asked before the next engine. Picking one from the list adds it at the end and saves.') }}</p>
     <p class="meta">{{ t('Looking for models asks that engine and reloads this page, so save anything you have typed first. A list from a month ago is still a list: the date beside each button says which.') }}</p>
 
     {# Who the api engine talks to. The list is the picker: one row a
