@@ -577,6 +577,33 @@ form:has(input[name="chain"][value="api"]:not(:checked)) .api-only { display: no
 @media (max-width: 42rem) { .card > .mark:not([open]) .none { opacity: 0.6; } }
 @media (max-width: 42rem) { .mark > summary { min-width: 2.75rem; min-height: 2.75rem; } }
 
+/* The new-idea drawer: a panel with its fields one under the other, each as
+   wide as the panel. The page-wide `form label` rule sets labels inline,
+   beside their box, which here put the question to the left of the text. */
+details.new-idea { margin: 0 0 1.2rem; border: 1px solid var(--line);
+                   border-radius: 10px; background: var(--card); }
+details.new-idea > summary { list-style: none; cursor: pointer; padding: 0.7rem 1rem;
+                             font-weight: 600; border-radius: 10px; }
+details.new-idea > summary::-webkit-details-marker { display: none; }
+details.new-idea > summary::before { content: "＋"; margin-right: 0.45rem; color: var(--accent); }
+details.new-idea[open] > summary { border-bottom: 1px solid var(--line);
+                                   border-radius: 10px 10px 0 0; }
+details.new-idea[open] > summary::before { content: "−"; }
+.new-idea form { display: flex; flex-direction: column; gap: 0.35rem; padding: 0.9rem 1rem 1rem; }
+.new-idea label { display: block; margin: 0.4rem 0 0; color: var(--dim); font-size: 0.85rem; }
+.new-idea textarea, .new-idea input { width: 100%; box-sizing: border-box;
+                                      padding: 0.6rem 0.9rem; font: inherit;
+                                      border: 1px solid var(--line); border-radius: 8px;
+                                      background: var(--bg); color: inherit; }
+.new-idea textarea { resize: vertical; min-height: 7rem; line-height: 1.45; }
+.new-idea .row { display: flex; justify-content: flex-end; margin-top: 0.5rem; }
+.new-idea button[type="submit"] { border-color: var(--accent); color: var(--accent);
+                                  padding: 0.5rem 1.4rem; }
+@media (max-width: 42rem) {
+  details.new-idea > summary { min-height: 2.75rem; display: flex; align-items: center; }
+  .new-idea button[type="submit"] { flex: 1; min-height: 2.75rem; }
+}
+
 /* The filters' drawer. On a wide screen it stays open and its summary only
    carries Select, at the right; the words keep their place, hidden, so the
    link does not jump. On a phone the summary is the one line you see. */
