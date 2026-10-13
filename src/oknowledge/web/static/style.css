@@ -506,3 +506,10 @@ header nav b { font-weight: 600; font-variant-numeric: tabular-nums; }
 .related li { display: flex; gap: .5em; align-items: center; }
 .related li form { display: inline; }
 .related li.gone { opacity: .55; }
+
+/* An idea's four actions: each section above its own button. */
+.idea-actions { display: grid; gap: 1rem; margin-top: 1.5rem; }
+.idea-action h2 { margin-bottom: .25rem; }
+.idea-action .why { color: var(--dim); margin-left: .5rem; }
+.idea-action .failed { color: var(--danger, #b3261e); }
+.idea-action button[disabled] { opacity: .6; cursor: default; }

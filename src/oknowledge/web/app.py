@@ -32,7 +32,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from .. import cards, env, places
 from ..catalog import Candidate, cinemeta, openlibrary
-from ..ai import build_engine
+from ..ai import build_engine, can_search
 from ..ai.base import normalize_collections
 from ..ai.providers import PROVIDERS
 from ..ai.providers import find as find_provider
@@ -43,13 +43,13 @@ from ..i18n import LANGUAGES, NATIVE_NAMES, translator
 from ..pipeline import add as add_link
 from ..pipeline import describe, download_cover, icon_path, import_links
 from ..pipeline import is_domain, owed
-from ..pipeline import complete_idea, retitle_idea, today
+from ..pipeline import complete_idea, retitle_idea, run_idea_action, today
 from ..models_cache import read as read_models
 from ..models_cache import remember as remember_models
 from ..queue import Locked, Queue
 from ..trace import trace_run
 from ..urls import is_search_url, link_id, normalize
-from ..vault import IDEA_STATES, states_for
+from ..vault import ACTIONS, IDEA_STATES, states_for
 from ..vault import STATES as vault_states
 from ..vault import (
     BadCategory, IndexesStale, ProtectedNote, clean_category, delete_note,
@@ -61,6 +61,8 @@ from .batch import Batch
 from .batch import run as run_batch
 from .import_file import BadUpload, drop, stage, staged, text_of
 from .index import PER_PAGE, Library, read_full, tally, terms
+from .markup import blocks, split_suggestions
+from .working import Working
 
 WEB = files("oknowledge").joinpath("web")
 log = logging.getLogger(__name__)
@@ -131,6 +133,10 @@ NOTICES = {
     "idea-empty": "Write the idea first: there is nothing to save yet.",
     "idea-full": "That idea already has 16 links. Take one off before adding another.",
     "no-such-idea": "That idea is not there any more.",
+    # An idea's action: it runs behind the page, like a card's summary.
+    "thinking": "Thinking it over. Reload in a moment to read it.",
+    "cannot-search": "No engine in your chain searches the web: "
+                     "opencode or the Anthropic API do.",
     "not-a-link": "That is not a link: it has to be an address, like "
                   "https://example.com/page.",
     "searched": "That is a page of search results, not a page. Open the result "
@@ -385,6 +391,13 @@ STATE_WORDS = {
     "book": {"pending": "to read", "doing": "reading", "done": "read"},
     "idea": IDEA_STATE_WORDS,
 }
+
+ACTION_TITLES = {"exists": "Already out there", "improve": "Improvements",
+                 "expand": "Expansion", "links": "Links that may help"}
+"""Each section's heading on the page. The note's own headings are
+vault.ACTION_HEADINGS, in the content language; these follow the UI."""
+ACTION_BUTTONS = {"exists": "Already out there?", "improve": "Improve",
+                  "expand": "Expand", "links": "Links that may help"}
 
 KIND_WORDS = (("movie", "Movies"), ("series", "Series"),
               ("anime", "Anime"), ("book", "Books"))
@@ -657,6 +670,10 @@ def create_app(cfg: Config) -> FastAPI:
     # does, so there is nothing to resume after a restart and no stale file to
     # explain -- the queue on disk is the record of what is still owed.
     progress = Batch()
+    # Which idea actions are running, and how each one last ended. In memory
+    # and per process, like the batch.
+    working = Working()
+    app.state.working = working
     templates = Jinja2Templates(directory=str(WEB.joinpath("templates")))
     templates.env.filters["plain"] = plain
     templates.env.filters["slug"] = lambda value: quote(str(value), safe="")
@@ -787,6 +804,18 @@ def create_app(cfg: Config) -> FastAPI:
             library.refresh()
             by_stem = {e.path.stem: e.note for e in library.entries}
             extra["related"] = [(stem, by_stem.get(stem)) for stem in note.related]
+            running, failed = working.of(link_id)
+            rest, rows = split_suggestions(note.actions.get("links", ""))
+            extra.update(
+                actions=ACTIONS, action_titles=ACTION_TITLES,
+                action_buttons=ACTION_BUTTONS, running=running, failed=failed,
+                searchable=can_search(current["cfg"]),
+                link_categories=list(library.categories()),
+                sections={action: blocks(rest if action == "links"
+                                         else note.actions.get(action, ""))
+                          for action in ACTIONS},
+                suggested=[(stem, why, by_stem.get(stem), stem in note.related)
+                           for stem, why in rows])
         elif where.name == "links":
             ideas.refresh()
             extra["idea_choices"] = [(n.id, n.title) for n in ideas.notes
@@ -1166,27 +1195,29 @@ def create_app(cfg: Config) -> FastAPI:
         return see_other(item_url(link_id), notice=result.notice)
 
     @app.post("/item/{link_id}/ideas")
-    def join_idea(link_id: str, idea: str = Form("")):
+    def join_idea(link_id: str, idea: str = Form(""), back: str = Form("")):
         """Add this link to one of your ideas.
 
         The idea's note is the one written -- the relation lives there, so
         the idea reads on its own in Obsidian -- under the idea's lock, and
         read again inside it. Only a link joins: a card or another idea is
-        not something an idea is built from.
+        not something an idea is built from. `back=idea` is the Add button
+        of a suggestion on the idea's page, which returns there.
         """
         library.refresh()
         entry = library.entry(link_id)
         if entry is None:
             raise HTTPException(status_code=404, detail="no such link")
         stem = entry.path.stem
+        home = item_url(idea) if back == "idea" else item_url(link_id)
         try:
             result = edit(idea, lambda cfg, language: add_related(
                 cfg, idea, stem, language), "saved", "indexes-stale", shelves=ideas)
         except IdeaFull:
-            return see_other(item_url(link_id), notice="idea-full")
+            return see_other(home, notice="idea-full")
         if result.notice == MISSING:
             return see_other(item_url(link_id), notice="no-such-idea")
-        return see_other(item_url(link_id), notice=result.notice)
+        return see_other(home, notice=result.notice)
 
     @app.post("/item/{link_id}/related/drop")
     def leave_idea(link_id: str, stem: str = Form("")):
@@ -1197,6 +1228,38 @@ def create_app(cfg: Config) -> FastAPI:
         if result.notice == MISSING:
             raise HTTPException(status_code=404, detail="no such idea")
         return see_other(item_url(link_id), notice=result.notice)
+
+    def act(live: Config, idea: str, action: str, category: str) -> None:
+        """The background half of an action: run it, then say how it ended."""
+        problem: str | None = "it stopped before it could say why"
+        try:
+            problem = run_idea_action(live, idea, action, category,
+                                      trace=progress.note)
+        except Exception as error:        # a background task has nowhere to raise to
+            problem = str(error) or type(error).__name__
+        finally:
+            working.finish(idea, action, problem)
+
+    @app.post("/item/{link_id}/actions/{action}")
+    def ask_about_idea(background: BackgroundTasks, link_id: str, action: str,
+                       category: str = Form("")):
+        """One of the four actions on an idea, behind the page.
+
+        Already out there? needs an engine that searches; when the chain has
+        none it is refused here, before anything is queued, and the page
+        already shows the button off with the reason.
+        """
+        if action not in ACTIONS:
+            raise HTTPException(status_code=404, detail="no such action")
+        ideas.refresh()
+        if ideas.by_id(link_id) is None:
+            return see_other("/ideas", notice="no-such-idea")
+        live = current["cfg"]
+        if action == "exists" and not can_search(live):
+            return see_other(item_url(link_id), notice="cannot-search")
+        if working.start(link_id, action):
+            background.add_task(act, live, link_id, action, category)
+        return see_other(item_url(link_id), notice="thinking")
 
     @app.get("/categories", response_class=HTMLResponse)
     def category_page(request: Request):

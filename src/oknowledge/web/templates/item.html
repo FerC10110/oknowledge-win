@@ -123,6 +123,68 @@
             {% endfor %}
           </ul>
         {% endif %}
+        {# The four actions. Each writes its own section into the idea's
+           note, beside your text and never over it. #}
+        <section class="idea-actions">
+          {% for action in actions %}
+            {% set has = note.actions.get(action) %}
+            {% set busy = action in running %}
+            {% set blocked = action == 'exists' and not searchable %}
+            <div class="idea-action">
+              {% if has %}
+                <h2>{{ t(action_titles[action]) }}</h2>
+                {% for kind, body in sections[action] %}
+                  {% if kind == 'ul' %}<ul>{% for item in body %}<li>{{ item }}</li>{% endfor %}</ul>
+                  {% else %}<p>{{ body }}</p>{% endif %}
+                {% endfor %}
+                {% if action == 'links' and suggested %}
+                  <ul class="related">
+                    {% for stem, why, found, linked in suggested %}
+                      <li{% if not found %} class="gone"{% endif %}>
+                        {% if found %}
+                          <a href="/item/{{ found.id|slug }}">{{ found.title }}</a>
+                          <span class="cat">{{ found.category }}</span>
+                        {% else %}
+                          <span title="{{ t('This note is not in your library any more') }}">{{ stem }}</span>
+                        {% endif %}
+                        {% if why %}<span class="why">{{ why }}</span>{% endif %}
+                        {% if found and linked %}
+                          <span class="meta">{{ t('already linked') }}</span>
+                        {% elif found %}
+                          <form action="/item/{{ found.id|slug }}/ideas" method="post">
+                            <input type="hidden" name="idea" value="{{ note.id }}">
+                            <input type="hidden" name="back" value="idea">
+                            <button type="submit">{{ t('Add to the idea') }}</button>
+                          </form>
+                        {% endif %}
+                      </li>
+                    {% endfor %}
+                  </ul>
+                {% endif %}
+              {% endif %}
+              <form action="/item/{{ note.id|slug }}/actions/{{ action }}" method="post" class="row">
+                {% if action == 'links' %}
+                  <label for="field-among">{{ t('Among') }}</label>
+                  <select id="field-among" name="category">
+                    <option value="">{{ t('All categories') }}</option>
+                    {% for name in link_categories %}<option value="{{ name }}">{{ name }}</option>{% endfor %}
+                  </select>
+                {% endif %}
+                <button type="submit"{% if busy or blocked %} disabled{% endif %}>
+                  {%- if busy %}{{ t('thinking…') }}
+                  {%- elif has %}{{ t('Ask again') }}
+                  {%- else %}{{ t(action_buttons[action]) }}{% endif -%}
+                </button>
+              </form>
+              {% if blocked %}
+                <p class="meta">{{ t('No engine in your chain searches the web: opencode or the Anthropic API do.') }}</p>
+              {% endif %}
+              {% if failed.get(action) %}
+                <p class="failed">{{ t('Last time it failed: %1', failed[action]) }}</p>
+              {% endif %}
+            </div>
+          {% endfor %}
+        </section>
         {% include "mine-buttons.html" %}
         {# Always offered, unlike a card's: an idea grows, and fresh tags
            and points for what you added is the reason to ask again. #}
