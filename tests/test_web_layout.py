@@ -112,3 +112,18 @@ def test_the_phone_css_puts_the_months_on_their_own_row():
 
 def test_while_picking_the_mark_gives_its_corner_to_the_checkbox():
     assert re.search(r"body\.picking \.card > \.mark\s*\{\s*display: none", css())
+
+
+# --- the categories page ----------------------------------------------------
+
+def test_categories_are_a_grid_not_rows(client):
+    body = client.get("/categories").text
+    assert '<ul class="cat-grid">' in body and 'class="hits"' not in body
+
+
+def test_each_category_renames_from_its_own_card(client):
+    body = client.get("/categories").text
+    card = re.search(r'<li class="cat-card">.*?</li>', body, re.S).group(0)
+    assert 'href="/?category=Redes"' in card
+    assert re.search(r"<details>\s*<summary[^>]*>✎</summary>", card)
+    assert 'name="old" value="Redes"' in card and 'list="known"' in card

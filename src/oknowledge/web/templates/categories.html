@@ -3,20 +3,23 @@
 {% block main %}
   <h1>{{ t('Categories') }}</h1>
   {% if categories %}
-    <ul class="hits">
+    <ul class="cat-grid">
       {% for name, count in categories.items() %}
-        <li>
-          <form class="row" action="/categories/rename" method="post">
-            <input type="hidden" name="old" value="{{ name }}">
-            <a class="cat" href="/?category={{ name|urlencode }}">{{ name }}</a>
-            <span class="meta">{{ count }}</span>
-            <span class="actions">
-              <input name="new" list="known" required
-                     placeholder="{{ t('Rename') }} / {{ t('Merge into') }}"
+        <li class="cat-card">
+          <a class="cat-name" href="/?category={{ name|urlencode }}">
+            <span>{{ name }}</span><b>{{ count }}</b>
+          </a>
+          {# Out of the way until wanted: renaming is rare, reading is not. #}
+          <details>
+            <summary title="{{ t('Rename') }} / {{ t('Merge into') }}"
+                     aria-label="{{ t('Rename') }} / {{ t('Merge into') }}">✎</summary>
+            <form action="/categories/rename" method="post" class="row">
+              <input type="hidden" name="old" value="{{ name }}">
+              <input name="new" list="known" required value="{{ name }}"
                      aria-label="{{ t('Rename') }} / {{ t('Merge into') }}">
               <button type="submit">{{ t('Save') }}</button>
-            </span>
-          </form>
+            </form>
+          </details>
         </li>
       {% endfor %}
     </ul>

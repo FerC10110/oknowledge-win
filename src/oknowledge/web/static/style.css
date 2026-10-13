@@ -593,3 +593,22 @@ details.filters[open] > summary > span::before { content: "▾ "; }
 }
 /* Picking cards is not marking them: the corner is the checkbox's. */
 body.picking .card > .mark { display: none; }
+
+/* The categories page: small cards, as many to a row as fit, the number
+   large and the rename behind a pencil. It was one row each, most of it
+   an empty box. */
+.cat-grid { list-style: none; padding: 0; margin: 1rem 0; display: grid; gap: 0.6rem;
+            grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr)); }
+.cat-card { position: relative; background: var(--card); border: 1px solid var(--line);
+            border-radius: 12px; padding: 0.8rem 2.6rem 0.8rem 0.9rem; }
+.cat-name { display: flex; flex-direction: column; text-decoration: none; color: var(--fg); }
+.cat-name b { font-size: 1.4rem; font-weight: 600; color: var(--dim); }
+.cat-card > details > summary { position: absolute; top: 0.4rem; right: 0.4rem;
+                                list-style: none; cursor: pointer; color: var(--dim);
+                                width: 2.2rem; height: 2.2rem; display: grid; place-items: center;
+                                border-radius: 8px; }
+.cat-card > details > summary::-webkit-details-marker { display: none; }
+.cat-card > details[open] { margin-top: 0.6rem; }
+.cat-card > details .row { padding: 0; }
+.cat-card > details .row input { flex: 1 1 100%; }
+@media (max-width: 42rem) { .cat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
