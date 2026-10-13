@@ -329,6 +329,31 @@ An English interface with Spanish summaries is a normal setup. Changing the
 interface language never touches saved notes, and changing the content language
 only affects notes saved afterwards.
 
+#### Asking about an idea
+
+Four buttons on an idea's page, each writing its own section into the
+idea's note, between the points and your text:
+
+- **Already out there?** searches the web for the same thing or something
+  close, with links. It needs an engine that searches: opencode, or the API
+  engine with the Anthropic provider. The answer is checked: a model that
+  answers without having searched is an error, not a verdict.
+- **Improve** points out weak spots and how to fix them.
+- **Expand** proposes what the idea does not say yet.
+- **Links that may help** picks, among your saved links of a category,
+  the ones that serve the idea, each with an **Add to the idea** button.
+
+Asking again replaces that section only. Your text is never touched.
+
+#### opencode runs sandboxed
+
+Every opencode run goes through [bubblewrap](https://github.com/containers/bubblewrap)
+(`pacman -S bubblewrap`). opencode is an agent with a shell and the network,
+and its prompt carries text from web pages. Inside the sandbox it sees the
+system read-only and its own folders, and nothing else of your home: not
+your vault, not `~/.config/oknowledge` and its keys, not `~/.ssh`. Without
+bubblewrap opencode does not run, and the chain moves on to the next engine.
+
 ## The vault
 
 ```
