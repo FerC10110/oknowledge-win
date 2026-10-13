@@ -438,3 +438,44 @@ def test_saving_keeps_the_interface_language(tmp_path):
     save(Config(vault=vault, ui_language="es"), out)
 
     assert load(out).ui_language == "es"
+
+
+def test_the_marks_default_to_the_short_list(tmp_path):
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    from oknowledge.marks import DEFAULT_MARKS
+    assert load(write_config(tmp_path, f'vault = "{vault}"\n')).marks == DEFAULT_MARKS
+
+
+def test_your_own_marks_are_read_and_the_bad_ones_dropped(tmp_path):
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    path = write_config(tmp_path, f'vault = "{vault}"\n[web]\n'
+                                  'marks = ["🦄", "hola", "⭐", "🦄", ""]\n')
+    assert load(path).marks == ("🦄", "⭐")
+
+
+@pytest.mark.parametrize("value", ['"⭐"', "3", "[1, 2]"])
+def test_marks_that_are_not_a_list_of_text_are_refused_by_name(tmp_path, value):
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    path = write_config(tmp_path, f'vault = "{vault}"\n[web]\nmarks = {value}\n')
+    with pytest.raises(ConfigError, match="web.marks"):
+        load(path)
+
+
+def test_saving_keeps_your_marks(tmp_path):
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    out = tmp_path / "out.toml"
+    save(Config(vault=vault, marks=("🦄", "⭐")), out)
+    assert load(out).marks == ("🦄", "⭐")
+
+
+def test_the_default_marks_are_not_written(tmp_path):
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    out = tmp_path / "out.toml"
+    save(Config(vault=vault), out)
+    import tomllib
+    assert "marks" not in tomllib.loads(out.read_text(encoding="utf-8"))["web"]

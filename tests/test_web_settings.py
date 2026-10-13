@@ -596,3 +596,19 @@ def test_a_row_keeps_its_detail_shut_until_it_is_ticked():
 def test_the_row_you_tick_is_the_one_that_opens():
     shown = block('.providers input[type="radio"]:checked ~ .detail')
     assert "display: block" in shown
+
+
+def test_saving_settings_keeps_your_own_marks(tmp_path):
+    """The page rewrites config.toml from scratch, and has no box for the
+    marks: a list somebody typed by hand must not go with the rewrite."""
+    from oknowledge.config import load
+    vault = tmp_path / "vault"
+    (vault / "oknowledge" / "links").mkdir(parents=True)
+    cfg = Config(vault=vault, marks=("🦄", "⭐"))
+    rebuild_indexes(cfg, "es")
+    client = TestClient(create_app(cfg))
+    client.post("/settings", data={"chain": ["opencode"], "language": "es",
+                                   "default_content": "full", "mentions": "tools",
+                                   "ui_language": "es", "batch": "2"},
+                follow_redirects=False)
+    assert load(tmp_path / "config" / "config.toml").marks == ("🦄", "⭐")

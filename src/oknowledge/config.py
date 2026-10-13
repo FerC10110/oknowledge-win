@@ -16,6 +16,7 @@ from . import places
 from .atomic import atomic_write
 from .i18n import LANGUAGES
 from .perms import only_you
+from .marks import DEFAULT_MARKS, clean_mark
 from .trace import trace_run
 
 FILE = "config.toml"
@@ -94,6 +95,9 @@ class Config:
     `language` above, which is what the summaries are written in, and they
     were always two. English by default because the keys in the code are the
     English text, so it is the one language that cannot be half-translated."""
+    marks: tuple[str, ...] = DEFAULT_MARKS
+    """The emojis the picker offers. Any other can be typed into its box;
+    these are the ones a tap away."""
     trace_to: str = ""
     """The run folder this process writes prompt-and-reply traces into, or ""
     for the usual case of not tracing at all. One value and not a flag plus a
@@ -185,6 +189,21 @@ def _ui_language(web: dict) -> str:
         raise ConfigError(f"web.language must be one of {', '.join(LANGUAGES)}, "
                           f"not {value!r}")
     return value
+
+
+def _marks(web: dict) -> tuple[str, ...]:
+    """The picker's list, or a ConfigError naming the key. A mark that is
+    not one is dropped rather than refused: the list is a convenience, and
+    one typo in it should not keep the server from starting."""
+    value = web.get("marks", DEFAULT_MARKS)
+    if not isinstance(value, (list, tuple)) or not all(isinstance(m, str) for m in value):
+        raise ConfigError(f"web.marks must be a list of emojis in quotes, not {value!r}")
+    kept: list[str] = []
+    for raw in value:
+        mark = clean_mark(raw)
+        if mark and mark not in kept:
+            kept.append(mark)
+    return tuple(kept)
 
 
 def load(path: Path = CONFIG_PATH) -> Config:
@@ -284,6 +303,7 @@ def load(path: Path = CONFIG_PATH) -> Config:
         port=_integer(web, "port", 8787, "web.port"),
         idle_timeout=_integer(web, "idle_timeout", 900, "web.idle_timeout"),
         ui_language=_ui_language(web),
+        marks=_marks(web),
         trace_to=trace_run() if tracing else "",
         source=path,
     )
@@ -315,7 +335,10 @@ def save(cfg: Config, path: Path | None = None) -> Path:
                "mentions": cfg.mentions,
                **{name: dict(options) for name, options in cfg.engines.items()}},
         "web": {"host": cfg.host, "port": cfg.port,
-                "idle_timeout": cfg.idle_timeout, "language": cfg.ui_language},
+                "idle_timeout": cfg.idle_timeout, "language": cfg.ui_language,
+                # Only a list of your own: the default in everybody's file
+                # would be twelve emojis nobody chose.
+                **({"marks": list(cfg.marks)} if cfg.marks != DEFAULT_MARKS else {})},
         # Written only when it is on: a `trace = false` in everybody's config
         # file is a line that explains nothing and has to be read anyway.
         **({"debug": {"trace": True}} if cfg.trace_to else {}),
