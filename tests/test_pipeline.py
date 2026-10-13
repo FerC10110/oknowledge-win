@@ -2380,6 +2380,36 @@ def test_a_retry_that_fails_again_keeps_the_collections(cfg, q, monkeypatch):
     assert read_note(second.path).collections == ["Casa nueva"]
 
 
+def test_a_reprocess_keeps_the_mark(cfg, q, monkeypatch):
+    extraction(monkeypatch, PAGE)
+    no_pictures(monkeypatch)
+    first = add(cfg, "https://arstechnica.com/vpn", queue=q)
+    note = read_note(first.path)
+    note.mark = "⭐"
+    write_note(cfg, note, "es", path=first.path)
+
+    again = dataclasses.replace(cfg, engines={"fake": {"replies": [OTHER_ANSWER]}})
+    second = add(again, "https://arstechnica.com/vpn", reprocess=True, queue=q)
+
+    done = read_note(second.path)
+    assert done.category == "Cocina"                              # really reprocessed
+    assert done.mark == "⭐"
+
+
+def test_a_retry_that_fails_again_keeps_the_mark(cfg, q, monkeypatch):
+    extraction(monkeypatch, Unreadable("503"))
+    no_pictures(monkeypatch)
+    first = add(cfg, "https://arstechnica.com/vpn", queue=q)
+    note = read_note(first.path)
+    note.mark = "🔥"
+    write_note(cfg, note, "es", path=first.path)
+
+    second = retry(cfg, queue=q)[0]
+
+    assert second.status == "partial"
+    assert read_note(second.path).mark == "🔥"
+
+
 # ---- which engine and model produced the note
 
 

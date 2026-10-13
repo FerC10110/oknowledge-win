@@ -190,3 +190,12 @@ def test_a_card_thrown_away_while_the_model_wrote_stays_thrown_away(cfg, fake_en
     fake_engine.complete = while_it_thinks
     assert describe(cfg, CARD) is False
     assert not gone.exists()
+
+
+def test_the_rewrite_keeps_your_mark(cfg, fake_engine):
+    path, note = find_note(cfg, CARD, shelf=cfg.ocio)
+    note.mark = "📚"
+    write_note(cfg, note, "es", path=path)
+    fake_engine.answers('{"summary": "Otra cosa.", "points": []}')
+    describe(cfg, CARD)
+    assert note_now(cfg).mark == "📚"

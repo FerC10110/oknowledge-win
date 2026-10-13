@@ -181,5 +181,13 @@ def test_retitling_keeps_the_rest(cfg):
     assert (after.state, after.score, after.related) == ("done", 5, ["x"])
 
 
+
+def test_completing_and_retitling_keep_the_mark(cfg, engine):
+    note, _ = put(cfg, mark="💡")
+    complete_idea(cfg, note.id)
+    assert now(cfg, note)[1].mark == "💡"
+    retitle_idea(cfg, note.id, "Otro nombre", "Texto.", "es")
+    assert now(cfg, note)[1].mark == "💡"
+
 def test_retitling_an_idea_that_is_not_there_is_none(cfg):
     assert retitle_idea(cfg, "000000000000", "t", "x", "es") is None
