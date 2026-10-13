@@ -17,7 +17,7 @@ from pathlib import Path
 import httpx
 
 from .. import env
-from .base import EngineError, clean_models
+from .base import NO_SEARCH, EngineError, clean_models
 from .providers import PROVIDERS, find, models_url
 
 
@@ -25,6 +25,10 @@ MESSAGE_LIMIT = 300
 LIST_TIMEOUT = 5
 """Seconds to wait for a listing, against the 300 a completion gets: this one
 answers a page somebody is looking at."""
+
+SEARCH_TOOL = {"type": "web_search_20250305", "name": "web_search", "max_uses": 5}
+"""Anthropic's own web search, run on their side. The openai-compatible
+providers each have a variant of their own, and none is spoken here."""
 
 
 def _server_message(response) -> str:
@@ -89,12 +93,26 @@ class ApiEngine:
     def _redact(text: str, secret: str) -> str:
         return text.replace(secret, "***")
 
+    @property
+    def searches(self) -> bool:
+        return self.protocol == "anthropic"
+
     def complete(self, prompt: str) -> str:
+        return self._ask(prompt, search=False)
+
+    def search(self, prompt: str) -> str:
+        if not self.searches:
+            raise EngineError(f"{self.provider} cannot search the web")
+        return self._ask(prompt, search=True)
+
+    def _ask(self, prompt: str, search: bool) -> str:
         secret = self._secret()
         messages = [{"role": "user", "content": prompt}]
         if self.protocol == "anthropic":
             headers = {"x-api-key": secret, "anthropic-version": "2023-06-01"}
             body = {"model": self.model, "max_tokens": self.max_tokens, "messages": messages}
+            if search:
+                body["tools"] = [SEARCH_TOOL]
         else:
             headers = {"Authorization": f"Bearer {secret}"}
             body = {"model": self.model, "messages": messages}
@@ -106,7 +124,14 @@ class ApiEngine:
                     f"{self._redact(_server_message(response), secret)[:MESSAGE_LIMIT] or f'HTTP {response.status_code}'}"
                 )
             data = response.json()
-            if self.protocol == "anthropic":
+            if self.protocol == "anthropic" and search:
+                # With a tool the answer is many blocks, cut around its
+                # citations: content[0] is no longer the text.
+                blocks = data["content"]
+                if not any(b.get("type") == "web_search_tool_result" for b in blocks):
+                    raise EngineError(NO_SEARCH)
+                text = "".join(b["text"] for b in blocks if b.get("type") == "text")
+            elif self.protocol == "anthropic":
                 text = data["content"][0]["text"]
             else:
                 text = data["choices"][0]["message"]["content"]
