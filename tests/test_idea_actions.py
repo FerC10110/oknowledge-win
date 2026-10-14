@@ -449,3 +449,35 @@ def test_may_serve_keeps_six_with_something_in_common_and_drops_the_linked():
 
 def test_may_serve_with_nothing_in_common_is_empty():
     assert acts.may_serve(idea(), [link(1, "Recetas", summary="pan casero")]) == []
+
+
+# --- stopwords do not make a link "in common" ------------------------------------
+
+def test_a_shared_function_word_is_not_in_common():
+    note = idea("Montar una vpn para la familia.", "VPN familiar", tags=["vpn"])
+    _, other = link(1, "Rust para pythonistas", summary="Una guía para empezar.", tags=["rust"])
+    assert not acts.in_common(note, other)
+    assert acts.may_serve(note, [link(1, "Rust para pythonistas", tags=["rust"])]) == []
+
+
+def test_a_shared_content_word_or_tag_still_qualifies():
+    note = idea("Montar una vpn para la familia.", "VPN familiar", tags=["vpn"])
+    _, by_word = link(1, "Fotos de la familia", tags=["fotos"])
+    _, by_tag = link(2, "Otra cosa", tags=["vpn"])
+    assert acts.in_common(note, by_word) and acts.in_common(note, by_tag)
+
+
+def test_accented_stopwords_are_folded():
+    note = idea("Hablamos después, también.", "Idea", tags=[])
+    _, other = link(1, "Despues", summary="Tambien después.")
+    assert not acts.in_common(note, other)
+
+
+def test_the_whole_library_scope_skips_links_that_share_only_stopwords(tmp_path):
+    cfg = Config(vault=tmp_path / "vault")
+    (cfg.vault / "oknowledge" / "links").mkdir(parents=True)
+    write_note(cfg, link(1, "Rust para pythonistas", tags=["rust"])[1], "es")
+    write_note(cfg, link(2, "Fotos de la familia", tags=["fotos"])[1], "es")
+    note = idea("Montar una vpn para la familia.", "VPN familiar", tags=["vpn"])
+    titles = [n.title for n in acts.scoped_links(cfg, note, "todos")]
+    assert titles == ["Fotos de la familia"]

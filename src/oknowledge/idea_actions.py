@@ -10,6 +10,7 @@ not offered, a placeholder copied from the prompt.
 from __future__ import annotations
 
 import re
+import unicodedata
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from importlib.resources import files
@@ -184,8 +185,26 @@ def expand_section(data: dict) -> str:
 
 # --- links that may help --------------------------------------------------------
 
+_STOP = frozenset("""
+    para como sobre pero entre esta este esto estos estas desde cuando donde porque
+    tambien cada todo toda todos todas hasta hacia segun muy mas menos otro otra otros
+    otras ellos ellas nuestro nuestra puede pueden hacer tiene tienen solo algo alguno
+    alguna ningun mismo misma cual quien aqui alli ahora antes despues mientras aunque
+    siempre nunca bien eso esas esos aquel aquella unos unas sido ser fue son era hay
+    with that this from have your what when about into they them will just than then
+    there their these those which while where would could should been being more most
+    some such only also very over each other here were does done make made many much
+    """.split())
+"""Function words of four letters or more, folded: they say nothing about a topic."""
+
+
+def _fold(word: str) -> str:
+    return "".join(c for c in unicodedata.normalize("NFD", word.lower())
+                   if not unicodedata.combining(c))
+
+
 def _bag(text: str) -> set[str]:
-    return {word.lower() for word in _WORD.findall(text)}
+    return {word.lower() for word in _WORD.findall(text) if _fold(word) not in _STOP}
 
 
 def candidates(note: Note, entries: list[tuple[Path, Note]],
