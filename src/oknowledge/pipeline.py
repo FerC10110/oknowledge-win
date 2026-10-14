@@ -18,7 +18,7 @@ import datetime as dt
 import os
 import secrets
 import time
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Callable, Iterator
 from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -1435,7 +1435,7 @@ and a minute of model work is not thrown away over a moment."""
 
 
 def run_idea_action(cfg: Config, idea: str, action: str, category: str = "",
-                    trace: Tracer | None = None, use: Sequence[str] = ()) -> str | None:
+                    trace: Tracer | None = None, scope: str = "vinculados") -> str | None:
     """One action on one idea, behind the page: None when its section is
     written, otherwise why not, in words the page can show.
 
@@ -1460,7 +1460,7 @@ def run_idea_action(cfg: Config, idea: str, action: str, category: str = "",
 
     try:
         text, engine, model = compose_action(cfg, found[1], action, category, today(),
-                                            use=use)
+                                            scope=scope)
     except AllEnginesFailed as error:
         return failed(str(error))
     for attempt in range(LOCK_TRIES):

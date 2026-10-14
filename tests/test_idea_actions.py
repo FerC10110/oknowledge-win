@@ -361,17 +361,91 @@ def asked(monkeypatch):
     return prompts
 
 
-def test_compose_uses_the_chosen_links_and_says_so(vault_cfg, asked):
+# --- the scope of improve and expand (spec 2.1) ------------------------------
+
+def test_linked_reads_every_linked_link_in_the_ideas_order(vault_cfg, asked):
     a = stored(vault_cfg, full_link(1, "WireGuard", "Una vpn."))
     b = stored(vault_cfg, full_link(2, "Tailscale", "Otra vpn."))
-    text, _, _ = acts.compose(vault_cfg, idea(related=[a, b]), "expand", "", "2026-10-14",
-                              use=[a])
-    assert "Una vpn." in asked[0] and "Otra vpn." not in asked[0]
-    assert text == "*Con 1 link: WireGuard.*\n\n- Modo offline"
+    text, _, _ = acts.compose(vault_cfg, idea(related=[b, a]), "expand", "", "2026-10-14",
+                              scope="vinculados")
+    assert asked[0].index("Otra vpn.") < asked[0].index("Una vpn.")
+    assert text == "*Con 2 links: Tailscale · WireGuard.*\n\n- Modo offline"
 
 
-def test_compose_without_use_is_as_before(vault_cfg, asked):
+def test_linked_is_the_default(vault_cfg, asked):
     a = stored(vault_cfg, full_link(1, "WireGuard", "Una vpn."))
-    text, _, _ = acts.compose(vault_cfg, idea(related=[a]), "expand", "", "2026-10-14")
+    acts.compose(vault_cfg, idea(related=[a]), "expand", "", "2026-10-14")
+    assert "Una vpn." in asked[0]
+
+
+@pytest.mark.parametrize("scope", ["", "cualquiera", "VINCULADOS", "todo"])
+def test_an_unknown_scope_is_linked(vault_cfg, asked, scope):
+    a = stored(vault_cfg, full_link(1, "WireGuard", "Una vpn."))
+    stored(vault_cfg, full_link(2, "Rutina de gimnasio", "Rutina para el gimnasio."))
+    acts.compose(vault_cfg, idea(related=[a]), "expand", "", "2026-10-14", scope=scope)
+    assert "Una vpn." in asked[0]
+    assert "Rutina para el gimnasio." not in asked[0]
+
+
+def test_linked_with_none_left_in_the_library_reads_no_links(vault_cfg, asked):
+    text, _, _ = acts.compose(vault_cfg, idea(related=["2026-01-01-borrado"]), "expand", "",
+                              "2026-10-14", scope="vinculados")
+    assert "### " not in asked[0]
+    assert text == "- Modo offline"
+
+
+def test_only_my_text_reads_no_links_even_when_there_are(vault_cfg, asked):
+    a = stored(vault_cfg, full_link(1, "WireGuard", "Una vpn."))
+    text, _, _ = acts.compose(vault_cfg, idea(related=[a]), "expand", "", "2026-10-14",
+                              scope="nada")
     assert "Una vpn." not in asked[0]
-    assert not text.startswith("*Con")
+    assert text == "- Modo offline"
+
+
+def test_the_whole_library_reads_the_six_closest_with_something_in_common(vault_cfg, asked):
+    for n in range(1, 9):
+        stored(vault_cfg, full_link(n, f"Rutina de gimnasio {n}", "Rutina para el gimnasio."))
+    stored(vault_cfg, Note(id="000000000099", url="https://e.com/99", title="Pan casero",
+                           category="Cocina", tags=[], type="article", source="e.com",
+                           saved="2026-09-01", summary="Masa madre."))
+    text, _, _ = acts.compose(vault_cfg, idea(), "expand", "", "2026-10-14", scope="todos")
+    assert asked[0].count("### ") == 6
+    assert "Masa madre." not in asked[0]
+    assert text.startswith("*Con 6 links:")
+
+
+def test_the_whole_library_includes_the_linked_ones(vault_cfg, asked):
+    a = stored(vault_cfg, full_link(1, "Rutina de gimnasio", "Rutina para el gimnasio."))
+    acts.compose(vault_cfg, idea(related=[a]), "expand", "", "2026-10-14", scope="todos")
+    assert "Rutina para el gimnasio." in asked[0]
+
+
+def test_already_out_there_ignores_the_scope(cfg, engine):
+    from oknowledge.vault import write_note as put_link
+    put_link(cfg, link(1, "Rutina de gimnasio", summary="Rutina para el gimnasio.")[1], "es")
+    engine.reply = json.dumps({"verdict": "new", "matches": []})
+    acts.compose(cfg, idea(), "exists", "", "2026-10-12", scope="todos")
+    assert "Rutina para el gimnasio." not in engine.calls[0][1]
+
+
+# --- what may help, without a model ------------------------------------------
+
+def test_a_tag_in_common_is_something_in_common():
+    note = idea(tags=["vpn"])
+    path, other = link(1, "Algo", summary="nada que ver", tags=["vpn"])
+    assert acts.in_common(note, other)
+    assert not acts.in_common(idea(tags=["otra"]), other)
+
+
+def test_may_serve_keeps_six_with_something_in_common_and_drops_the_linked():
+    entries = [link(n, f"Rutina {n}", summary="gimnasio") for n in range(1, 9)]
+    entries.append(link(9, "Recetas", summary="pan"))
+    note = idea(related=[entries[0][0].stem])
+    served = acts.may_serve(note, entries)
+    assert len(served) == 6
+    assert entries[0] not in served
+    assert all(n.title != "Recetas" for _, n in served)
+
+
+def test_may_serve_with_nothing_in_common_is_empty():
+    assert acts.may_serve(idea(), [link(1, "Recetas", summary="pan casero")]) == []

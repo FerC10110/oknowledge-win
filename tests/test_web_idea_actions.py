@@ -39,9 +39,9 @@ def ran(monkeypatch):
     calls = []
     outcome = {"problem": None}
 
-    def run(cfg, idea, action, category="", trace=None, use=()):
+    def run(cfg, idea, action, category="", trace=None, scope="vinculados"):
         calls.append((idea, action, category))
-        outcome["use"] = list(use)
+        outcome["scope"] = scope
         return outcome["problem"]
 
     monkeypatch.setattr("oknowledge.web.app.run_idea_action", run)
@@ -76,12 +76,12 @@ def test_a_button_queues_its_action_and_says_it_is_thinking(cfg, ran):
     assert ran[0] == [(note.id, "improve", "")]
 
 
-def test_links_carries_the_category(cfg, ran):
+def test_the_category_does_nothing_any_more(cfg, ran):
     a_link(cfg)
     note = put(cfg)
     TestClient(create_app(cfg)).post(f"/item/{note.id}/actions/links",
                                      data={"category": "Redes"})
-    assert ran[0] == [(note.id, "links", "Redes")]
+    assert ran[0] == [(note.id, "links", "")]
 
 
 def test_an_unknown_action_is_404(cfg, ran):
@@ -357,21 +357,78 @@ def test_the_links_search_is_labelled_and_its_button_says_search(cfg):
     assert button.rstrip().endswith(">Search")
 
 
-def test_the_ticked_links_go_with_improve(cfg, ran):
-    note = put(cfg, related=["a", "b"])
-    TestClient(create_app(cfg)).post(f"/item/{note.id}/actions/improve",
-                                     data={"with_links": "1", "use": ["a", "b"]})
-    assert ran[1]["use"] == ["a", "b"]
+# --- the scope (spec 2.1) ------------------------------------------------------
+
+@pytest.mark.parametrize("sent,used", [({}, "vinculados"), ({"alcance": "todos"}, "todos"),
+                                        ({"alcance": "nada"}, "nada"),
+                                        ({"alcance": "x"}, "vinculados")])
+def test_the_scope_goes_to_the_action(cfg, ran, sent, used):
+    note = put(cfg)
+    TestClient(create_app(cfg)).post(f"/item/{note.id}/actions/improve", data=sent)
+    assert ran[1]["scope"] == used
 
 
-def test_without_the_general_box_no_link_goes(cfg, ran):
-    note = put(cfg, related=["a"])
-    TestClient(create_app(cfg)).post(f"/item/{note.id}/actions/expand", data={"use": ["a"]})
-    assert ran[1]["use"] == []
-
-
-def test_exists_and_links_ignore_the_boxes(cfg, ran):
-    note = put(cfg, related=["a"])
-    TestClient(create_app(cfg)).post(f"/item/{note.id}/actions/links",
+def test_the_old_link_boxes_do_nothing(cfg, ran):
+    note = put(cfg)
+    TestClient(create_app(cfg)).post(f"/item/{note.id}/actions/expand",
                                      data={"with_links": "1", "use": ["a"]})
-    assert ran[1]["use"] == []
+    assert ran[1]["scope"] == "vinculados"
+
+
+def test_a_script_is_told_in_json(cfg, ran):
+    note = put(cfg)
+    answer = TestClient(create_app(cfg)).post(f"/item/{note.id}/actions/improve",
+                                              headers={"Accept": "application/json"})
+    assert answer.json()["ok"] is True
+
+
+def test_exists_without_a_searcher_is_a_409_for_a_script(tmp_path, ran):
+    cfg = make(tmp_path, chain=("ollama",))
+    note = put(cfg)
+    answer = TestClient(create_app(cfg)).post(f"/item/{note.id}/actions/exists",
+                                              headers={"Accept": "application/json"})
+    assert answer.status_code == 409
+
+
+# --- what is running (spec 2.2) --------------------------------------------------
+
+def test_the_state_with_nothing_running(cfg):
+    note = put(cfg)
+    answer = TestClient(create_app(cfg)).get(f"/item/{note.id}/actions/state")
+    assert answer.json() == {"running": [], "failed": [], "title": "VPN propia"}
+
+
+def test_the_state_while_an_action_runs_and_after_one_failed(cfg):
+    note = put(cfg)
+    app = create_app(cfg)
+    app.state.working.start(note.id, "improve")
+    app.state.working.start(note.id, "expand")
+    app.state.working.finish(note.id, "expand", "the model did not answer")
+    assert TestClient(app).get(f"/item/{note.id}/actions/state").json() == {
+        "running": ["improve"], "failed": ["expand"], "title": "VPN propia"}
+
+
+def test_the_state_of_an_idea_that_is_gone_is_a_404(cfg):
+    answer = TestClient(create_app(cfg)).get("/item/nope/actions/state")
+    assert answer.status_code == 404
+    assert answer.json()["ok"] is False and answer.json()["running"] == []
+
+
+def test_naming_an_idea_is_watched_like_an_action(cfg, monkeypatch):
+    seen = []
+    monkeypatch.setattr("oknowledge.web.app.complete_idea",
+                        lambda cfg, idea, trace=None: seen.append(idea) or True)
+    app = create_app(cfg)
+    client = TestClient(app)
+    client.post("/ideas/guardar", data={"text": "Una idea."})
+    assert len(seen) == 1
+    assert app.state.working.of(seen[0]) == (set(), {})       # finished, and well
+
+
+def test_a_naming_that_fails_is_remembered(cfg, monkeypatch):
+    monkeypatch.setattr("oknowledge.web.app.complete_idea",
+                        lambda cfg, idea, trace=None: False)
+    note = put(cfg)
+    app = create_app(cfg)
+    TestClient(app).post(f"/item/{note.id}/describe")
+    assert set(app.state.working.of(note.id)[1]) == {"complete"}

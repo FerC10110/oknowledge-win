@@ -40,6 +40,7 @@ from ..ai.providers import PROVIDERS
 from ..ai.providers import find as find_provider
 from ..config import CONFIG_PATH, CONTENT_MODES, ENGINE_NAMES, MENTION_MODES, Config
 from ..config import save as save_config
+from ..idea_actions import SCOPES
 from ..ideas import IdeaFull, add_related, drop_related, new_idea
 from ..i18n import LANGUAGES, NATIVE_NAMES, translator
 from ..marks import clean_mark, rank_marks
@@ -1154,7 +1155,7 @@ def create_app(cfg: Config) -> FastAPI:
         return answer(request, item_url(link_id), notice=result.notice)
 
     @app.post("/item/{link_id}/describe")
-    def rewrite_card(background: BackgroundTasks, link_id: str):
+    def rewrite_card(request: Request, background: BackgroundTasks, link_id: str):
         """Ask the model again: a card's summary in your language,
         or an idea's name, tags, summary and points.
 
@@ -1164,15 +1165,15 @@ def create_app(cfg: Config) -> FastAPI:
         """
         ideas.refresh()
         if ideas.by_id(link_id) is not None:
-            background.add_task(complete_idea, current["cfg"], link_id,
-                                trace=progress.note)
-            return see_other(item_url(link_id), notice="completing")
+            if working.start(link_id, "complete"):
+                background.add_task(complete, current["cfg"], link_id)
+            return answer(request, item_url(link_id), "completing")
         shelf.refresh()
         if shelf.by_id(link_id) is None:
             raise HTTPException(status_code=404, detail="no such card")
         if rewriting.start(link_id, "describe"):
             background.add_task(rewrite, current["cfg"], link_id)
-        return see_other(item_url(link_id), notice="rewriting")
+        return answer(request, item_url(link_id), "rewriting")
 
     @app.post("/item/{link_id}/mine/state")
     def set_state(request: Request, link_id: str, state: str = Form("")):
@@ -1463,47 +1464,64 @@ def create_app(cfg: Config) -> FastAPI:
         for card in claimed:
             rewrite(live, card)
 
-    def act(live: Config, idea: str, action: str, category: str,
-            use: list[str]) -> None:
+    def act(live: Config, idea: str, action: str, scope: str) -> None:
         """The background half of an action: run it, then say how it ended."""
         problem: str | None = "it stopped before it could say why"
         try:
-            problem = run_idea_action(live, idea, action, category,
-                                      trace=progress.note, use=use)
+            problem = run_idea_action(live, idea, action, "", trace=progress.note,
+                                      scope=scope)
         except Exception as error:        # a background task has nowhere to raise to
             problem = str(error) or type(error).__name__
         finally:
             working.finish(idea, action, problem)
 
-    @app.post("/item/{link_id}/actions/{action}")
-    def ask_about_idea(background: BackgroundTasks, link_id: str, action: str,
-                       category: str = Form(""), with_links: str = Form(""),
-                       use: list[str] = Form([])):
-        """One of the four actions on an idea, behind the page.
+    def complete(live: Config, idea: str) -> None:
+        """The background half of naming an idea: its title, tags, summary and
+        points. Watched under "complete" like an action, so the screen can
+        wait for the title (spec 2.2)."""
+        problem: str | None = "it stopped before it could say why"
+        try:
+            problem = (None if complete_idea(live, idea, trace=progress.note)
+                       else "the model did not answer")
+        except Exception as error:        # a background task has nowhere to raise to
+            problem = str(error) or type(error).__name__
+        finally:
+            working.finish(idea, "complete", problem)
 
-        Already out there? needs an engine that searches; when the chain has
-        none it is refused here, before anything is queued, and the page
-        already shows the button off with the reason.
+    @app.post("/item/{link_id}/actions/{action}")
+    def ask_about_idea(request: Request, background: BackgroundTasks, link_id: str,
+                       action: str, alcance: str = Form("")):
+        """One of the actions on an idea, behind the page.
+
+        `alcance` says which links improve and expand read (spec 2.1); the
+        old `category`, `with_links` and `use` are not read any more. Already
+        out there? needs an engine that searches, and ignores the scope.
         """
         if action not in ACTIONS:
             raise HTTPException(status_code=404, detail="no such action")
         ideas.refresh()
         if ideas.by_id(link_id) is None:
-            return see_other("/ideas", notice="no-such-idea")
-        library.refresh()
-        if category not in library.categories():
-            # Only a name the library has: this one is written into the
-            # note, and a newline in it would be a heading of its own.
-            category = ""
+            return answer(request, "/ideas", "no-such-idea")
         live = current["cfg"]
         if action == "exists" and not can_search(live):
-            return see_other(item_url(link_id), notice="cannot-search")
-        # Only improve and expand read the idea's links, and only when the
-        # general box went with the form: unticked, it is not sent at all.
-        chosen = use if with_links and action in ("improve", "expand") else []
+            return answer(request, item_url(link_id), "cannot-search")
+        scope = alcance if alcance in SCOPES else "vinculados"
         if working.start(link_id, action):
-            background.add_task(act, live, link_id, action, category, chosen)
-        return see_other(item_url(link_id), notice="thinking")
+            background.add_task(act, live, link_id, action, scope)
+        return answer(request, item_url(link_id), "thinking")
+
+    @app.get("/item/{link_id}/actions/state")
+    def idea_state(link_id: str):
+        """What is running on an idea and what last failed, for its screen to
+        wait on (spec 2.2). In memory: a restart forgets it, as before."""
+        ideas.refresh()
+        note = ideas.by_id(link_id)
+        if note is None:
+            return JSONResponse({"ok": False, "running": [], "failed": [], "title": ""},
+                                status_code=404)
+        running, failed = working.of(link_id)
+        return JSONResponse({"running": sorted(running), "failed": sorted(failed),
+                             "title": note.title})
 
     @app.get("/categories", response_class=HTMLResponse)
     def category_page(request: Request):
@@ -2025,7 +2043,8 @@ def create_app(cfg: Config) -> FastAPI:
         except (OSError, ProtectedNote) as error:
             log.warning("the idea could not be written: %s", error)
             return see_other("/ideas", notice="write-failed")
-        background.add_task(complete_idea, live, note.id, trace=progress.note)
+        if working.start(note.id, "complete"):
+            background.add_task(complete, live, note.id)
         return see_other(item_url(note.id), notice=notice)
 
     @app.post("/add")

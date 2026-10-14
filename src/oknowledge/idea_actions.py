@@ -31,6 +31,14 @@ MAX_LINK_SUMMARY = 600
 MAX_LINK_POINTS = 6
 MAX_LINK_POINT = 200
 
+SCOPES = ("vinculados", "todos", "nada")
+"""Which links improve and expand read (spec 2.1): the idea's own, the
+library's closest, or none. The first is the default and what any other
+value means."""
+
+MAX_SCOPED = 6
+"""Links read from the whole library, and links offered beside an idea."""
+
 VERDICTS = {
     "es": {"exists": "Ya existe.", "similar": "Hay parecidas.",
            "new": "No encontré nada igual."},
@@ -181,20 +189,46 @@ def _bag(text: str) -> set[str]:
 
 
 def candidates(note: Note, entries: list[tuple[Path, Note]],
-               category: str) -> list[tuple[Path, Note]]:
+               category: str, keep_linked: bool = False) -> list[tuple[Path, Note]]:
     """The links offered to the model: in the category (any, if none), not
-    already linked to the idea, most words in common with it first, newest
-    first among equals."""
+    already linked to the idea unless `keep_linked`, most words in common
+    with it first, newest first among equals."""
     mine = _bag(" ".join([note.title, note.my_note, " ".join(note.tags)]))
     pool = [(path, link) for path, link in reversed(entries)
             if (not category or link.category == category)
-            and path.stem not in note.related]
+            and (keep_linked or path.stem not in note.related)]
 
     def shared(pair):
         link = pair[1]
         return len(mine & _bag(" ".join([link.title, link.summary, " ".join(link.tags)])))
 
     return sorted(pool, key=shared, reverse=True)[:MAX_CANDIDATES]
+
+
+def in_common(note: Note, link: Note) -> bool:
+    """A word of four letters or more, or a tag, that the two share."""
+    mine = _bag(" ".join([note.title, note.my_note, " ".join(note.tags)]))
+    theirs = _bag(" ".join([link.title, link.summary, " ".join(link.tags)]))
+    return bool(mine & theirs) or bool(set(note.tags) & set(link.tags))
+
+
+def may_serve(note: Note, entries: list[tuple[Path, Note]], keep_linked: bool = False,
+              limit: int = MAX_SCOPED) -> list[tuple[Path, Note]]:
+    """The links closest to the idea that have something in common with it,
+    ranked by candidates(), without asking anybody (spec 2, PUEDEN SERVIR)."""
+    return [pair for pair in candidates(note, entries, "", keep_linked)
+            if in_common(note, pair[1])][:limit]
+
+
+def scoped_links(cfg: Config, note: Note, scope: str) -> list[Note]:
+    """The links improve and expand read under this scope. An unknown scope
+    is the linked links; linked links that are all gone are no links."""
+    if scope == "nada":
+        return []
+    if scope == "todos":
+        return [link for _, link in may_serve(note, all_entries(cfg, cfg.links),
+                                              keep_linked=True)]
+    return chosen_links(cfg, note, note.related)
 
 
 def candidate_lines(pool: list[tuple[Path, Note]]) -> str:
@@ -274,31 +308,31 @@ def used_line(links: list[Note], language: str) -> str:
 # --- one action, start to end ----------------------------------------------------
 
 def compose(cfg: Config, note: Note, action: str, category: str,
-            day: str, use: Iterable[str] = ()) -> tuple[str, str, str]:
+            day: str, scope: str = "vinculados") -> tuple[str, str, str]:
     """The section `action` writes for this idea: (markdown, engine, model).
 
     Raises ai.AllEnginesFailed when no engine gave a usable answer. Engine
-    and model are empty when nobody had to be asked. `use` are the stems of
-    the idea's links that improve and expand may read.
+    and model are empty when nobody had to be asked. `scope` says which links
+    improve and expand read (SCOPES).
     """
     if action not in ACTIONS:
         raise ValueError(f"no such action: {action!r}")
     language = cfg.language
     if action == "links":
-        scope = category or _words(language)["all"]
+        label = category or _words(language)["all"]
         pool = candidates(note, all_entries(cfg, cfg.links), category)
         if not pool:
-            return no_candidates(scope, language), "", ""
+            return no_candidates(label, language), "", ""
         allowed = {link.id: path.stem for path, link in pool}
         prompt = render_action_prompt("links", note, language, candidate_lines(pool))
         return ai.ask_with_chain(cfg, prompt, lambda reply: links_section(
-            extract_json(reply), allowed, scope, language))
+            extract_json(reply), allowed, label, language))
     prompt = render_action_prompt(action, note, language)
     if action == "exists":
         found, engine, model = ai.search_with_chain(
             cfg, prompt, lambda reply: exists_found(extract_json(reply)))
         return exists_section(found, language, day, model or engine), engine, model
-    picked = chosen_links(cfg, note, use)
+    picked = scoped_links(cfg, note, scope)
     if picked:
         prompt = render_action_prompt(action, note, language, links=links_block(picked))
     parse = improve_section if action == "improve" else expand_section

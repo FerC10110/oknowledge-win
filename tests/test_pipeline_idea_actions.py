@@ -186,11 +186,11 @@ def test_a_lock_busy_for_a_moment_does_not_throw_the_answer_away(cfg, engine, mo
     assert now(cfg, note)[1].actions == {"expand": "- Modo offline"}
 
 
-def test_the_chosen_links_reach_the_model(cfg, engine):
+def test_the_linked_links_reach_the_model(cfg, engine):
     stem = write_note(cfg, Note(id="l00000000001", url="https://wg.com", title="WireGuard",
                                 category="Redes", tags=[], type="article", source="wg.com",
                                 saved="2026-10-10", summary="Una vpn."), "es").stem
     note, _ = put(cfg, related=[stem])
-    assert run_idea_action(cfg, note.id, "expand", use=[stem]) is None
+    assert run_idea_action(cfg, note.id, "expand", scope="vinculados") is None
     assert "Una vpn." in engine.prompts[0]
     assert now(cfg, note)[1].actions["expand"].startswith("*Con 1 link: WireGuard.*")
