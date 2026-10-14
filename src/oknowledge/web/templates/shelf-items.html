@@ -1,0 +1,35 @@
+{# One note in the library column, as a card or a row: the same markup, the
+   class on the <ul> decides (handoff §2). The whole item selects the note;
+   leaving for the original is the panel's job. #}
+{% macro item(note, view, current, busy) -%}
+<li class="item{% if note.id == current %} on{% endif %}" id="card-{{ note.id }}"
+    {%- if note.id in busy %} data-working="{{ note.id }}"{% endif %}>
+  <a class="hit" href="{{ view.url(sel=note.id) }}" data-sel="{{ note.id }}">
+    <span class="thumb" style="background: {{ note.category|tint }}">
+      {% if note.cover %}<img src="/cover/{{ note.id|slug }}" alt="" loading="lazy">{% endif %}
+      {% if note.source %}<span class="domain mono">{{ note.source }}</span>{% endif %}
+      {% if note.mark %}<span class="flag{% if note.mark == '⭐' %} fav{% endif %}">{{ '★' if note.mark == '⭐' else note.mark }}</span>{% endif %}
+    </span>
+    <span class="text">
+      <span class="title" dir="auto">{{ note.title }}</span>
+      <span class="sub"><i class="dot" style="background: {{ note.category|dot }}"></i>
+        {%- if note.id in busy %}<em class="busy">{{ t('Analysing…') }}</em>
+        {%- else %}{{ note.category or t('No category') }} · {{ note.saved|short_date(t) }}{% endif %}</span>
+    </span>
+    <span class="date mono">{{ note.saved|short_date(t) }}</span>
+  </a>
+</li>
+{%- endmacro %}
+
+{% macro pending(id, url, view, current) -%}
+<li class="item pending{% if id == current %} on{% endif %}" id="card-{{ id }}" data-working="{{ id }}">
+  <a class="hit" href="{{ view.url(sel=id) }}" data-sel="{{ id }}">
+    <span class="thumb" style="background: #24252b"></span>
+    <span class="text">
+      <span class="title" dir="auto">{{ url }}</span>
+      <span class="sub"><i class="dot" style="background: #6d6f78"></i><em class="busy">{{ t('Analysing…') }}</em></span>
+    </span>
+    <span class="date mono"></span>
+  </a>
+</li>
+{%- endmacro %}

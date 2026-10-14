@@ -1,4 +1,4 @@
-"""Marks on the web: the picker, the route that writes one, the nav, /marked."""
+"""Marks on the web: the picker, the route that writes one, the sidebar group."""
 
 import re
 from urllib.parse import quote
@@ -55,12 +55,20 @@ def mark_of(cfg, link_id):
     raise AssertionError("gone")
 
 
-def nav(body):
-    return re.search(r"<nav[^>]*>.*?</nav>", body, re.S).group(0)
+def marks_group(body):
+    return re.search(r'<nav class="group" aria-label="Marks">.*?</nav>', body, re.S).group(0)
 
 
-def test_no_marks_nothing_in_the_nav(client):
-    assert "/marked" not in nav(client.get("/").text)
+def test_no_marks_only_pinned_in_the_sidebar(client):
+    group = marks_group(client.get("/").text)
+    assert group.count('class="filter') == 1
+    assert "📌" in group and '<b class="count mono">0</b>' in group
+
+
+def test_a_mark_in_use_is_listed_in_the_sidebar(client):
+    client.post(f"/item/{LINK}/mark", data={"mark": "🔥", "back": "/"})
+    group = marks_group(client.get("/").text)
+    assert "🔥" in group and "mark=%F0%9F%94%A5" in group
 
 
 @pytest.mark.parametrize("link_id", [LINK, CARD, IDEA])
@@ -116,36 +124,18 @@ def test_the_bad_mark_notice_is_translated():
     assert NOTICES["bad-mark"] in STRINGS["es"]
 
 
-def test_marked_shows_the_three_shelves(client):
-    for link_id in (LINK, CARD, IDEA):
-        client.post(f"/item/{link_id}/mark", data={"mark": "⭐", "back": "/"})
-    body = client.get("/marked", params={"mark": "⭐"}).text
-    assert body.index("Gimnasio") < body.index("The Terminator") < body.index("WireGuard")
-
-
-def test_marked_leaves_out_the_other_marks(client):
+def test_a_mark_leaves_out_the_other_marks(client):
     client.post(f"/item/{LINK}/mark", data={"mark": "🔥", "back": "/"})
-    client.post(f"/item/{CARD}/mark", data={"mark": "⭐", "back": "/"})
-    body = client.get("/marked", params={"mark": "⭐"}).text
-    assert "The Terminator" in body and "WireGuard" not in body
+    assert f'id="card-{LINK}"' not in client.get("/", params={"mark": "⭐"}).text
+    assert f'id="card-{LINK}"' in client.get("/", params={"mark": "🔥"}).text
 
 
-@pytest.mark.parametrize("mark", ["", "🦄"])
-def test_a_mark_nobody_uses_is_an_empty_page(client, mark):
-    answer = client.get("/marked", params={"mark": mark})
-    assert answer.status_code == 200 and "card-" not in answer.text
+def test_a_mark_nobody_uses_is_an_empty_list(client):
+    answer = client.get("/", params={"mark": "🦄"})
+    assert answer.status_code == 200 and 'id="card-' not in answer.text
 
 
-def test_marked_pages_like_the_library(client, cfg, monkeypatch):
-    monkeypatch.setattr("oknowledge.web.app.PER_PAGE", 1)
-    for link_id in (LINK, CARD, IDEA):
-        client.post(f"/item/{link_id}/mark", data={"mark": "⭐", "back": "/"})
-    body = client.get("/marked", params={"mark": "⭐", "page": "2"}).text
-    assert "The Terminator" in body and "WireGuard" not in body
-    assert "page=3" in body
-
-
-@pytest.mark.parametrize("path, link_id", [("/", LINK), ("/ocio", CARD), ("/ideas", IDEA),
+@pytest.mark.parametrize("path, link_id", [("/ocio", CARD), ("/ideas", IDEA),
                                            (f"/item/{LINK}", LINK)])
 def test_every_card_and_note_page_has_the_picker(client, path, link_id):
     body = client.get(path).text
@@ -153,23 +143,18 @@ def test_every_card_and_note_page_has_the_picker(client, path, link_id):
     assert body.count('value="⭐"') >= 1
 
 
-@pytest.mark.parametrize("path", ["/", "/ocio", "/ideas"])
+@pytest.mark.parametrize("path", ["/ocio", "/ideas"])
 def test_each_card_has_an_anchor_to_come_back_to(client, path):
     assert re.search(r'<li class="card[^"]*" id="card-[0-9a-f]{12}"', client.get(path).text)
 
 
-def test_the_picker_sends_you_back_where_you_were(client):
-    body = client.get("/?category=Redes").text
-    assert 'name="back" value="/?category=Redes"' in body
-
-
 def test_tapping_the_mark_you_have_takes_it_off(client):
     client.post(f"/item/{LINK}/mark", data={"mark": "⭐", "back": "/"})
-    body = client.get("/").text
+    body = client.get(f"/item/{LINK}").text
     assert re.search(r'name="mark" value=""[^>]*aria-pressed="true"[^>]*>⭐', body)
 
 
 def test_the_picker_is_not_inside_the_popup_link(client):
-    body = client.get("/").text
+    body = client.get("/ocio").text
     for block in re.findall(r'<a class="body".*?</a>', body, re.S):
         assert "/mark" not in block

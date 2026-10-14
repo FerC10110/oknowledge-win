@@ -1312,22 +1312,6 @@ def test_adding_a_collection_to_several_notes_writes_them_all(setup):
     assert find_note(cfg, "b2")[1].collections == ["Casa nueva"]
 
 
-def test_the_form_the_library_draws_is_what_the_route_reads(setup):
-    """Posted field by field out of the rendered HTML: a hidden input dropped
-    from the template has to break a test, not a user's afternoon."""
-    cfg, client = setup
-    body = client.get("/?pick=1&category=Cocina").text
-    action = re.search(r'<form id="pick"[^>]*action="([^"]+)"', body).group(1)
-    fields = dict(re.findall(r'<input type="hidden" name="(\w+)" value="([^"]*)"', body))
-    ids = re.findall(r'<input type="checkbox" form="pick" name="id" value="([^"]+)"', body)
-
-    assert ids == ["b2"]                       # only the notes the filter shows
-    client.post(action, data={**fields, "name": "Casa", "id": ids})
-
-    assert find_note(cfg, "b2")[1].collections == ["Casa"]
-    assert find_note(cfg, "a1")[1].collections == []
-
-
 def test_a_collection_name_that_cleans_to_nothing_is_refused(setup, tmp_path):
     _, client = setup
     before = snapshot(tmp_path)
@@ -1434,24 +1418,6 @@ def test_the_button_says_which_collection_to_leave(setup):
                 data={"id": ["a1"], "leave": "Casa", "name": "Trabajo"})
 
     assert find_note(cfg, "a1")[1].collections == ["Trabajo"]
-
-
-def test_the_remove_button_the_page_draws_takes_the_card_out(setup):
-    cfg, client = setup
-    client.post("/collections/add", data={"name": "Casa", "id": ["a1"]})
-    body = client.get("/?pick=1&collection=Casa&when=2026-10").text
-    button = re.search(r'formaction="([^"]+)" formnovalidate\s+name="leave" value="([^"]+)"',
-                       body)
-    fields = dict(re.findall(r'<input type="hidden" name="(\w+)" value="([^"]*)"', body))
-
-    answer = client.post(button.group(1), follow_redirects=False,
-                         data={**fields, "leave": button.group(2), "id": ["a1"]})
-
-    assert find_note(cfg, "a1")[1].collections == []
-    # Back to the listing it was pressed on -- the collection AND the month --
-    # which the form has to carry, both of them.
-    where = answer.headers["location"]
-    assert "collection=Casa" in where and "when=2026-10" in where
 
 
 def test_one_note_gets_a_sentence_and_two_get_a_count(setup):

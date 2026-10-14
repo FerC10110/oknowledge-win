@@ -54,3 +54,85 @@ body { background: #141519; }
   .app, .app.legacy { display: block; height: auto; }
   .sidebar { border-right: 0; border-bottom: 1px solid var(--b-div); }
 }
+
+/* --- the library ------------------------------------------------------- */
+.app.home { grid-template-columns: 216px minmax(0, 1fr) 480px; overflow: hidden; }
+.center { display: flex; flex-direction: column; min-height: 0; min-width: 0;
+  border-right: 1px solid var(--b-div); }
+.unified { display: flex; align-items: center; gap: 8px; padding: 16px 20px;
+  border-bottom: 1px solid var(--b-div); position: relative; }
+.unified input[type=text] { flex: 1; height: 42px; padding: 0 14px; background: var(--s3);
+  border: 1px solid var(--b-input); border-radius: 10px; color: var(--t1); font: inherit;
+  font-size: 14px; }
+.unified input[type=text]:focus { outline: none; border-color: var(--b-sel); }
+.default-submit { position: absolute; width: 1px; height: 1px; opacity: 0;
+  pointer-events: none; border: 0; padding: 0; }
+.unified .hint { position: absolute; right: 30px; font-size: 11px; color: var(--t7);
+  border: 1px solid var(--b-input); border-radius: 4px; padding: 0 5px; }
+.unified .save { display: none; align-items: center; gap: 8px; }
+.unified.saving .save { display: flex; }
+.unified.saving .hint { display: none; }
+.seg { display: inline-flex; background: var(--s3); border-radius: 8px; padding: 3px; gap: 2px; }
+.seg a, .seg label span { display: block; padding: 3px 9px; border-radius: 6px; font-size: 12.5px;
+  color: var(--t5); text-decoration: none; cursor: pointer; }
+.seg a.on, .seg input:checked + span { background: var(--s7); color: var(--t1); }
+.seg input { position: absolute; opacity: 0; pointer-events: none; }
+.btn { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px;
+  border-radius: 8px; border: 1px solid var(--b-input); background: var(--s3);
+  color: var(--t1); font: inherit; font-size: 13px; cursor: pointer; text-decoration: none;
+  white-space: nowrap; }
+.btn:hover { background: var(--s5); color: var(--t1); }
+.btn.primary { background: var(--t1); color: #141519; border-color: var(--t1); font-weight: 500; }
+.btn.primary:hover { background: #fff; color: #141519; }
+
+.list { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.list-head { display: flex; justify-content: space-between; align-items: center;
+  padding: 14px 20px 8px; font-size: 13px; color: var(--t5); }
+.list-head b { font-weight: 400; }
+.list-body { flex: 1; overflow-y: auto; min-height: 0; padding: 4px 20px 80px; }
+.items { list-style: none; margin: 0; padding: 0; line-height: 1.35; }
+.items .item { padding: 0; }          /* style.css gives the note page's .item a top gap */
+.items .hit { color: inherit; text-decoration: none; display: block; }
+
+.tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px;
+  grid-auto-rows: max-content; }
+.tiles .item { background: var(--s2); border: 1px solid var(--b-card); border-radius: 10px;
+  overflow: hidden; }
+.tiles .item.on { border-color: var(--b-sel); }
+.tiles .thumb { position: relative; display: block; height: 92px; }
+.tiles .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.tiles .domain { position: absolute; left: 8px; bottom: 8px; font-size: 11px;
+  background: #141519cc; color: var(--t2); padding: 2px 6px; border-radius: 5px; }
+.tiles .flag { position: absolute; right: 8px; top: 6px; font-size: 13px; }
+.flag.fav { color: var(--fav); }
+.tiles .text { display: block; padding: 10px 12px 12px; }
+.tiles .title { font-size: 13.5px; font-weight: 500; line-height: 1.35; color: var(--t1);
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.items .sub { display: flex; align-items: center; gap: 6px; margin-top: 6px;
+  font-size: 11.5px; color: var(--t6); }
+.items .busy { color: var(--acc); font-style: normal; }
+.tiles .date { display: none; }
+
+.rows .item { border-radius: 8px; }
+.rows .item.on, .rows .item:hover { background: var(--s5); }
+.rows .hit { display: grid; grid-template-columns: 8px minmax(0, 1fr) auto; gap: 12px;
+  align-items: center; padding: 10px; }
+.rows .thumb { display: none; }
+.rows .text { grid-column: 2; }
+.rows .title { display: block; font-size: 14px; font-weight: 500; color: var(--t1);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rows .sub { font-size: 12px; margin-top: 2px; }
+.rows .date { font-size: 12px; color: var(--t6); }
+/* The row's dot sits in its own first column (handoff §2, screenshot 02),
+   though in the markup it is the card's, inside the subtitle. */
+.rows .hit { position: relative; }
+.rows .sub .dot { position: absolute; left: 10px; top: 50%; margin-top: -3.5px; }
+
+.more { display: block; text-align: center; margin: 16px 0; color: var(--t5); font-size: 13px; }
+.empty-state { margin: 18vh auto 0; max-width: 26rem; text-align: center; color: var(--t5);
+  font-size: 13.5px; }
+.empty-title { color: var(--t1); font-size: 16px; font-weight: 500; }
+
+.detail { display: flex; flex-direction: column; min-height: 0; }
+.detail-empty { margin: auto; color: var(--t6); font-size: 13.5px; }
+.center > .quiet { margin: 10px 20px 0; font-size: 12.5px; color: var(--t6); }

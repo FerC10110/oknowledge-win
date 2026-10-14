@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}{% if view.searching %}{{ view.q }} - {% endif %}oknowledge{% endblock %}
+{% block app_class %}home{% endblock %}
+{% block scripts %}<script src="/static/shell.js" defer></script>{% endblock %}
+{% block layout %}
+<section class="center" aria-label="{{ t('Library') }}">
+  {# GET by default, so Enter searches without JavaScript; the hidden first
+     button is the form's default one. Save posts the same field to /add. #}
+  <form class="unified{% if saving %} saving{% endif %}" id="unified" action="/" method="get" role="search">
+    <button type="submit" class="default-submit" tabindex="-1" aria-hidden="true"></button>
+    <input type="text" name="q" id="field-q" value="{{ view.q }}" autocomplete="off"
+           inputmode="search" aria-label="{{ t('Search or paste a link to save it') }}"
+           placeholder="{{ t('Search or paste a link to save it') }}">
+    {% if view.vista == 'lista' %}<input type="hidden" name="vista" value="lista">{% endif %}
+    <span class="save">
+      <span class="seg">
+        <label><input type="radio" name="content" value="full"{% if default_content == 'full' %} checked{% endif %}><span>{{ t('Full') }}</span></label>
+        <label><input type="radio" name="content" value="summary"{% if default_content == 'summary' %} checked{% endif %}><span>{{ t('Summary') }}</span></label>
+      </span>
+      <button type="submit" class="btn primary" formmethod="post" formaction="/add" id="save-link">{{ t('Save') }} ↵</button>
+    </span>
+    <kbd class="hint mono">/</kbd>
+  </form>
+  {% if unreadable %}
+    <p class="quiet" title="{{ links_dir }}">{% if unreadable == 1 %}{{ t('1 note could not be read and is not shown') }}{% else %}{{ t('%1 notes could not be read and are not shown', unreadable) }}{% endif %}</p>
+  {% endif %}
+  <div class="list" id="list">{% include "list.html" %}</div>
+</section>
+<section class="detail" id="panel" aria-label="{{ t('Detail') }}">
+  {% if panel %}{% include "panel.html" %}{% else %}<p class="detail-empty">{{ t('Choose a link to read it here.') }}</p>{% endif %}
+</section>
+{% endblock %}

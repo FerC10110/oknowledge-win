@@ -60,27 +60,22 @@ def test_the_library_filters_by_tag(client):
 
 
 def test_search_looks_inside_the_summary(client):
-    body = client.get("/search?q=protocolos").text
+    body = client.get("/?q=protocolos").text
     assert "WireGuard" in body
     assert "Masa madre" not in body
 
 
 def test_search_looks_inside_the_saved_content(client):
-    body = client.get("/search?q=kernel").text
+    body = client.get("/?q=kernel").text
     assert "WireGuard" in body
 
 
-def test_search_shows_the_fragment_where_it_matched(client):
-    body = client.get("/search?q=kernel").text
-    assert "kernel hace la diferencia" in body
-
-
 def test_search_ignores_case_and_accents(client):
-    assert "Masa madre" in client.get("/search?q=COMO").text
+    assert "Masa madre" in client.get("/?q=COMO").text
 
 
 def test_search_with_no_hits_says_so(client):
-    assert "No results" in client.get("/search?q=zzzz").text
+    assert "Nothing matches “zzzz”" in client.get("/?q=zzzz").text
 
 
 def test_an_item_page_shows_the_summary_the_points_and_the_link(client):
@@ -375,7 +370,7 @@ def xss_client(tmp_path):
     return TestClient(create_app(cfg))
 
 
-@pytest.mark.parametrize("url", ["/", "/?category=%3Cb%3ECat%3C/b%3E", "/search?q=body",
+@pytest.mark.parametrize("url", ["/", "/?category=%3Cb%3ECat%3C/b%3E", "/?q=body",
                                  "/item/x1"])
 def test_note_content_is_escaped_on_every_page(tmp_path, url):
     body = xss_client(tmp_path).get(url).text
@@ -393,15 +388,9 @@ def test_the_item_page_escapes_title_summary_and_points(tmp_path):
 
 
 def test_the_search_query_is_escaped_where_it_is_reflected(client):
-    body = client.get("/search", params={"q": '"><script>alert(9)</script>'}).text
+    body = client.get("/", params={"q": '"><script>alert(9)</script>'}).text
     assert "<script>alert(9)" not in body
     assert "&#34;&gt;&lt;script&gt;alert(9)&lt;/script&gt;" in body
-
-
-def test_the_search_snippet_is_escaped(tmp_path):
-    body = xss_client(tmp_path).get("/search?q=body text").text
-    assert "<script>alert(3)" not in body
-    assert "&lt;script&gt;alert(3)&lt;/script&gt;" in body
 
 
 def test_no_template_marks_note_content_safe():
@@ -566,77 +555,7 @@ def test_a_rejected_mention_url_is_still_shown_as_text(tmp_path, bad):
         assert f'href="{bad}"' not in page, path
 
 
-# --- the tag row, which grows without end ------------------------------------
-
-@pytest.fixture
-def many_tags(tmp_path):
-    """Thirty tags, each on a different number of notes, the way a library of a
-    thousand links ends up: the row of them grows longer than the screen."""
-    vault = tmp_path / "vault"
-    (vault / "oknowledge" / "links").mkdir(parents=True)
-    cfg = Config(vault=vault)
-    for n in range(30):
-        # Tag n goes on (30 - n) notes, so t00 is the most used and t29 the
-        # least: the order is known and nothing ties.
-        for copy in range(30 - n):
-            write_note(cfg, note(f"n{n}x{copy}", f"Nota {n}-{copy}", "Redes",
-                                 [f"t{n:02d}"], "Un resumen."), "es")
-    rebuild_indexes(cfg, "es")
-    return TestClient(create_app(cfg))
-
-
-def tag_chips(body):
-    """(the tags shown at once, the tags behind the disclosure)."""
-    head, _, tail = body.partition('<details class="more-tags"')
-    found = lambda part: re.findall(r'class="chip small[^"]*">#([^<]+)</a>', part)
-    return found(head), found(tail)
-
-
-def test_only_the_most_used_tags_are_shown_at_once(many_tags):
-    """A row of ninety-five chips pushes the cards themselves off the screen,
-    and the answer to "what did I save" should not be below the fold.
-
-    The twelve is written out rather than taken from TAGS_SHOWN: a test that
-    builds what it expects out of the number it is checking agrees with any
-    number at all, and this one is a judgement about a screen.
-    """
-    shown, _ = tag_chips(many_tags.get("/").text)
-
-    assert len(shown) == 12
-    assert shown == [f"t{n:02d}" for n in range(12)]      # most used first
-
-
-def test_the_rest_of_the_tags_are_one_click_away_and_not_gone(many_tags):
-    """Dropping them would make a tag on four notes unreachable from the page
-    whose whole job is finding things."""
-    shown, hidden = tag_chips(many_tags.get("/").text)
-
-    assert hidden == [f"t{n:02d}" for n in range(12, 30)]
-    assert sorted(shown + hidden) == sorted(f"t{n:02d}" for n in range(30))
-
-
-def test_the_tag_being_filtered_by_is_shown_however_rare_it_is(many_tags):
-    """Otherwise the page gives no sign of what it is filtered by: the one chip
-    that would say so is behind the fold."""
-    body = many_tags.get("/?tag=t29").text
-    shown, hidden = tag_chips(body)
-
-    assert "t29" in shown
-    assert "t29" not in hidden        # twice on a page is one of them wrong
-    assert 'class="chip small on">#t29</a>' in body
-
-
-def test_pulling_a_rare_tag_forward_does_not_push_a_common_one_out(many_tags):
-    """The row is already the length it was; the filtered tag is one more."""
-    shown, _ = tag_chips(many_tags.get("/?tag=t29").text)
-
-    assert shown == [f"t{n:02d}" for n in range(12)] + ["t29"]
-
-
-def test_a_short_tag_row_gets_no_more_at_all(client):
-    """Two tags behind a disclosure is a disclosure that hides nothing."""
-    assert '<details class="more-tags"' not in client.get("/").text
-
+# --- the category a tag belongs to ------------------------------------------
 
 def test_a_tag_belongs_to_the_category_it_is_used_in_most(tmp_path):
     """Half the tags are used under two categories. Each chip is one chip, so
@@ -667,61 +586,6 @@ def test_a_tag_used_evenly_lands_in_the_same_group_every_time(tmp_path):
     library.refresh()
 
     assert library.tag_home()["python"] == "Alfa"      # by name, not by luck
-
-
-def grouped_fixture(tmp_path):
-    """Three categories, each with its own tags, plus counts that put them in
-    a known order when everything is flattened by use."""
-    vault = tmp_path / "vault"
-    (vault / "oknowledge" / "links").mkdir(parents=True)
-    cfg = Config(vault=vault)
-    plan = {"Redes": [("vpn", 5), ("dns", 3), ("ssh", 1)],
-            "Cocina": [("pan", 4), ("masa", 2)],
-            "Audio": [("mpv", 6), ("flac", 1)]}
-    n = 0
-    for category, tags in plan.items():
-        for tag, count in tags:
-            for _ in range(count):
-                n += 1
-                write_note(cfg, note(f"n{n}", f"Nota {n}", category, [tag], "x"), "es")
-    rebuild_indexes(cfg, "es")
-    return TestClient(create_app(cfg))
-
-
-def test_the_visible_row_keeps_tags_of_a_category_next_to_each_other(tmp_path):
-    """Pegadas, not titled: a title per group turns a one-line row into eight
-    lines, which is the thing that was just fixed."""
-    client = grouped_fixture(tmp_path)
-
-    shown, _ = tag_chips(client.get("/").text)
-
-    # mpv(6) leads Audio, vpn(5) leads Redes, pan(4) leads Cocina.
-    assert shown == ["mpv", "flac", "vpn", "dns", "ssh", "pan", "masa"]
-
-
-def test_the_hidden_half_is_grouped_under_the_category_names(tmp_path):
-    """There is room in a disclosure for the titles there is no room for in
-    the row, and eighty chips without them are a wall again."""
-    client = grouped_fixture(tmp_path)
-    body = client.get("/").text
-
-    assert '<p class="group">Redes</p>' not in body      # nothing hidden yet
-    assert '<details class="more-tags"' not in body
-
-
-def test_a_long_tag_list_is_grouped_by_name_inside_the_disclosure(many_tags):
-    body = many_tags.get("/").text
-
-    assert '<details class="more-tags"' in body
-    assert '<p class="group">' in body
-
-
-def test_the_disclosure_counts_tags_and_not_groups(many_tags):
-    """The groups inside it are a way of reading the list, not the list: a
-    drawer that says "1 more tags" over eighteen chips is lying about them."""
-    body = many_tags.get("/").text
-
-    assert "18 more tags" in body
 
 
 # --- colecciones -------------------------------------------------------------
@@ -795,14 +659,16 @@ def test_the_collections_come_back_in_the_same_order_every_time(tmp_path):
     assert list(found) == ["Casa", "Mudanza", "Zapatos"]
 
 
-def test_a_library_with_no_collections_draws_no_row_for_them(client):
-    """An empty row is still a row: the gap under it is paid by everyone who
-    never uses this."""
-    assert 'class="chips mine"' not in client.get("/").text
+def test_a_library_with_no_collections_draws_no_group_for_them(client):
+    """An empty group is still a group: the gap under it is paid by everyone
+    who never uses this."""
+    assert 'aria-label="Collections"' not in client.get("/").text
 
 
-def test_the_row_is_there_as_soon_as_there_is_one(collected):
-    assert 'class="chips mine"' in collected.get("/").text
+def test_the_group_is_there_as_soon_as_there_is_one(collected):
+    group = re.search(r'<nav class="group" aria-label="Collections">.*?</nav>',
+                      collected.get("/").text, re.S).group(0)
+    assert "Casa nueva" in group and "Leer después" in group
 
 
 # --- la línea de tiempo ------------------------------------------------------
@@ -877,93 +743,3 @@ def test_a_period_and_a_collection_are_asked_together(dated):
     assert [n.id for n in found] == ["a1"]
 
 
-def strip(body):
-    """(what the strip links, what it draws dimmed and unclickable)."""
-    nav = re.search(r'<nav class="timeline".*?</nav>', body, re.S)
-    if nav is None:
-        return None, None
-    live = re.findall(r'<a href="([^"]*)"[^>]*>\s*([^<]+?)\s*<b>(\d+)</b>', nav.group(0))
-    return live, re.findall(r'<span class="[^"]*off">([^<]+)</span>', nav.group(0))
-
-
-def test_the_strip_counts_what_the_other_filters_left(dated):
-    """With a project chosen it answers "which years does this live in", so
-    the numbers are of that project and not of the library."""
-    live, _ = strip(dated.get("/?collection=Casa").text)
-
-    assert [(name, n) for _, name, n in live] == [("All", "2"), ("2021", "2")]
-
-
-def test_a_year_with_nothing_of_what_you_are_looking_at_is_still_drawn(dated):
-    """Where a project is not is as much of an answer as where it is, and a
-    strip that changes shape every click is one you cannot read."""
-    _, off = strip(dated.get("/?collection=Casa").text)
-
-    assert off == ["2026", "2019", "Undated"]
-
-
-def test_the_whole_library_fills_the_strip(dated):
-    live, off = strip(dated.get("/").text)
-
-    assert [(name, n) for _, name, n in live] == [
-        ("All", "6"), ("2026", "1"), ("2021", "3"), ("2019", "1"), ("Undated", "1")]
-    assert off == []
-
-
-def test_only_the_year_you_are_in_opens_its_months(dated):
-    live, _ = strip(dated.get("/?when=2021").text)
-
-    assert [name for _, name, _ in live] == ["All", "2026", "2021", "Nov", "Mar",
-                                             "2019", "Undated"]
-
-
-def test_no_year_is_open_until_one_is_chosen(dated):
-    live, _ = strip(dated.get("/").text)
-
-    assert "Nov" not in [name for _, name, _ in live]
-
-
-def test_a_month_opens_its_own_year(dated):
-    live, _ = strip(dated.get("/?when=2021-11").text)
-
-    assert "Mar" in [name for _, name, _ in live]      # the year is still open
-    assert 'class="month on"' in dated.get("/?when=2021-11").text
-
-
-def test_travelling_in_time_keeps_what_you_were_looking_at(dated):
-    """The two axes cross, they do not compete: choosing a year must not undo
-    the project you chose first."""
-    live, _ = strip(dated.get("/?collection=Casa").text)
-
-    assert all("collection=Casa" in href for href, _, _ in live)
-
-
-def test_the_chips_keep_the_period(dated):
-    body = dated.get("/?when=2021").text
-    chips = re.findall(r'<a href="(/\?(?:category|tag|collection)=[^"]*)"', body)
-
-    assert chips and all("when=2021" in href for href in chips)
-
-
-def test_the_tags_behind_the_disclosure_keep_it_too(many_tags):
-    """Eighteen of the thirty are down there, and they are chips like the
-    others: clicking one must not cost the year."""
-    body = many_tags.get("/?when=2026").text
-    hidden = body.partition('<details class="more-tags"')[2]
-    chips = re.findall(r'<a href="(/\?tag=[^"]*)"', hidden)
-
-    assert len(chips) == 18
-    assert all("when=2026" in href for href in chips)
-
-
-def test_the_way_out_of_a_period_keeps_what_you_were_looking_at(dated):
-    live, _ = strip(dated.get("/?collection=Casa&when=2021").text)
-    out = live[0][0]
-
-    assert out == "/?collection=Casa"
-
-
-def test_the_search_results_have_no_strip_of_time(dated):
-    """They are ordered by how well they match, and a strip of time beside a
-    list that is not in time order lies about the order it is in."""
-    assert strip(dated.get("/search?q=resumen").text) == (None, None)

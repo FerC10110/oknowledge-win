@@ -62,8 +62,10 @@ from ..whatsapp import BadExport, parse as parse_export
 from .batch import Batch
 from .batch import run as run_batch
 from .import_file import BadUpload, drop, stage, staged, text_of
-from .library_view import MONTHS, dot, paragraphs, short_date, tint
-from .index import PER_PAGE, Library, read_full, tally, terms
+from .library_view import (
+    CHUNK, View, choose, dot, is_url, paragraphs, short_date, side_groups, tint,
+)
+from .index import Library, read_full, terms
 from .markup import blocks, split_suggestions
 from .working import Working
 
@@ -187,11 +189,6 @@ NOTICES = {
 # a logo guessed wrong is worse than no logo.
 ENGINE_ICONS = ("opencode", "ollama", "api")
 
-# How many tag chips the library shows before the rest go behind a disclosure.
-# A thousand notes make hundreds of tags, and a row of them pushes the cards --
-# the thing the page is for -- off the bottom of the screen.
-TAGS_SHOWN = 12
-
 # How long the running batch page waits before coming back. A link is tens of
 # seconds of model call, so this is about a bar that moves, not a live one, and
 # every reload is a queue listing.
@@ -290,14 +287,6 @@ def is_web_url(url: str) -> bool:
     refusing to link it must not mean hiding it, because a link is never lost.
     """
     return str(url).lower().startswith(("http://", "https://"))
-
-
-def page_number(raw: str, pages: int) -> int:
-    try:
-        number = int(raw)
-    except ValueError:
-        return 1
-    return min(max(number, 1), max(pages, 1))
 
 
 def count(request: Request, key: str) -> int:
@@ -474,42 +463,6 @@ def see_other(path: str, **params) -> RedirectResponse:
     return RedirectResponse(path + join + query, status_code=303)
 
 
-def _clustered(tags: dict[str, int], home: dict[str, str]) -> list[tuple[str, int]]:
-    """The same tags, reordered so the ones about the same thing are adjacent.
-
-    Clusters lead with their most used tag and are ordered by it, so the row
-    still opens with the tag the library uses most and nothing jumps about
-    between page loads. No titles: a title per cluster turns a one-line row
-    into one line per category, which is what the shortened row was for.
-    """
-    order: dict[str, list[tuple[str, int]]] = {}
-    for tag, count in tags.items():                 # already most-used first
-        order.setdefault(home.get(tag, ""), []).append((tag, count))
-    return [pair for group in order.values() for pair in group]
-
-
-def tag_chips(tags: dict[str, int], home: dict[str, str], active: str | None
-              ) -> tuple[list[tuple[str, int]], dict[str, list[tuple[str, int]]]]:
-    """(the tags to show at once, the rest grouped under their category).
-
-    They arrive most-used first and there is no natural end to them. The one
-    being filtered by is always in the first group, whatever its rank: it is
-    the only chip that says what the page is filtered by, and a filter that
-    hides its own name leaves no way back out of it.
-
-    What is hidden gets the titles the row has no room for -- eighty chips in
-    a drawer, in one run, are the wall this was meant to undo.
-    """
-    first = dict(list(tags.items())[:TAGS_SHOWN])
-    if active in tags and active not in first:
-        first[active] = tags[active]
-    rest: dict[str, list[tuple[str, int]]] = {}
-    for tag, count in tags.items():
-        if tag not in first:
-            rest.setdefault(home.get(tag, ""), []).append((tag, count))
-    return _clustered(first, home), rest
-
-
 IDEA_SEARCH_LIMIT = 12
 """Results beside an idea: enough to choose from, few enough to fit beside it."""
 
@@ -580,19 +533,6 @@ def return_url(back: str, category: str, tag: str, collection: str,
         params["page"] = number
     rest = urlencode(params)
     return path + ("?" + rest if rest else "")
-
-
-def when_urls(axis: dict, periods) -> dict[str, str]:
-    """Every link the strip can draw, built here rather than in the template.
-
-    Each one keeps the category, tag and collection that are already chosen:
-    time is the other axis, and travelling along it must not undo the "what".
-    The empty key is the way back out of a period, which keeps them too.
-    """
-    def url(value: str) -> str:
-        query = urlencode({**axis, **({"when": value} if value else {})})
-        return "/" + ("?" + query if query else "")
-    return {value: url(value) for value in ["", *periods]}
 
 
 def batch_size(raw: str, saved: int) -> int:
@@ -796,14 +736,6 @@ def create_app(cfg: Config) -> FastAPI:
                      "picking": False, **context},
         )
 
-    def pager(path: str, params: dict, number: int, pages: int) -> dict:
-        def url(n: int) -> str:
-            query = urlencode({**params, **({"page": n} if n > 1 else {})})
-            return path + ("?" + query if query else "")
-        return {"page": number, "pages": pages,
-                "prev_url": url(number - 1) if number > 1 else None,
-                "next_url": url(number + 1) if number < pages else None}
-
     @app.exception_handler(StarletteHTTPException)
     async def not_found(request: Request, exc: StarletteHTTPException):
         path = request.url.path
@@ -811,67 +743,67 @@ def create_app(cfg: Config) -> FastAPI:
             return page(request, "notfound.html", status_code=404)
         return await http_exception_handler(request, exc)
 
+    def analyzing() -> dict[str, str]:
+        """{id: url} of the links being analysed right now. Task 6."""
+        return {}
+
+    def listing(view: View, working: dict[str, str]) -> dict:
+        notes = choose(library, view)
+        known = {n.id for n in library.notes}
+        # Only on the unfiltered list: a link being read has no category,
+        # tag or mark yet, so no filter could hold it.
+        pending = [] if view.filtered else [(i, u) for i, u in working.items() if i not in known]
+        ids = [i for i, _ in pending] + [n.id for n in notes]
+        current = view.sel if view.sel in ids else (ids[0] if ids else "")
+        return {"view": view, "notes": notes[:view.hasta], "pending": pending,
+                "busy": set(working), "total": len(notes) + len(pending),
+                "more": len(notes) > view.hasta, "chunk": CHUNK,
+                "current": current, "saving": is_url(view.q)}
+
+    def panel_context(link_id: str, view: View, working: dict[str, str]) -> dict | None:
+        """Task 5 fills this in; until then the panel shows the title."""
+        entry = library.entry(link_id)
+        if entry is None:
+            return None
+        return {"note": entry.note}
+
     @app.get("/", response_class=HTMLResponse)
-    def home(request: Request, category: str | None = None, tag: str | None = None,
-             collection: str | None = None, when: str | None = None,
-             pick: str | None = None):
+    def home(request: Request):
         library.refresh()
-        # Twice on purpose: the strip counts what the OTHER filters left, so
-        # that choosing a year does not empty the strip that chose it.
-        axis = {k: v for k, v in (("category", category), ("tag", tag),
-                                  ("collection", collection)) if v}
-        dated = library.filter(category=category, tag=tag, collection=collection)
-        notes = (library.filter(**{k: v for k, v in axis.items()}, when=when)
-                 if when else dated)
-        pages = -(-len(notes) // PER_PAGE)
-        number = page_number(request.query_params.get("page", "1"), pages)
-        params = {**axis, **({"when": when} if when else {})}
-        shown = notes[(number - 1) * PER_PAGE:number * PER_PAGE]
-        first, rest = tag_chips(library.tags(), library.tag_home(), tag)
-        # Where the two selection links go: the same listing, on the same
-        # page, with the mode turned on or off. Built here because the
-        # template has no business assembling query strings.
-        here = {**params, **({"page": str(number)} if number > 1 else {})}
-        months = [m for m in library.months() if when and m.startswith(when[:4])]
-        return page(request, "library.html", notes=shown, category=category, tag=tag,
-                    collection=collection, picking=pick is not None,
-                    pick_url="/?" + urlencode({**here, "pick": "1"}),
-                    cancel_url="/" + ("?" + urlencode(here) if here else ""),
-                    place=here, tags=first, tag_groups=rest,
-                    hidden_tags=sum(map(len, rest.values())),
-                    filtered=bool(category or tag or collection or when),
-                    when=when, years=list(library.years()), months=months,
-                    counted=tally(dated), dated=len(dated),
-                    month_names={m: MONTHS[int(m[5:7]) - 1] for m in months},
-                    when_urls=when_urls(axis, [*library.years(), *months]),
-                    **pager("/", params, number, pages))
+        view = View.from_query(request.query_params)
+        working = analyzing()
+        shown = listing(view, working)
+        panel = panel_context(shown["current"], view, working) if shown["current"] else None
+        return page(request, "home.html", section="links", toast=True,
+                    groups=side_groups(library.notes, library.categories(),
+                                       library.collections(), current["cfg"].marks),
+                    default_content=current["cfg"].default_content,
+                    panel=panel is not None, **shown, **(panel or {}))
 
-    @app.get("/search", response_class=HTMLResponse)
-    def search(request: Request, q: str = ""):
+    @app.get("/lista", response_class=HTMLResponse)
+    def list_column(request: Request, desde: str = ""):
         library.refresh()
-        if not terms(q):
-            return RedirectResponse("/", status_code=303)
-        _, total = library.search(q, page=1, per_page=1)
-        pages = -(-total // PER_PAGE)
-        number = page_number(request.query_params.get("page", "1"), pages)
-        found, _ = library.search(q, page=number)
-        return page(request, "library.html", notes=None, hits=found, category=None,
-                    tag=None, query=q, **pager("/search", {"q": q}, number, pages))
+        view = View.from_query(request.query_params)
+        shown = listing(view, analyzing())
+        if not desde:
+            return page(request, "list.html", **shown)
+        try:
+            start = max(0, int(desde))
+        except ValueError:
+            start = 0
+        notes = choose(library, view)
+        end = start + CHUNK
+        return page(request, "list-more.html", **{**shown, "notes": notes[start:end],
+                    "more": len(notes) > end, "next_desde": end,
+                    "next_hasta": end + CHUNK})
 
-    @app.get("/marked", response_class=HTMLResponse)
-    def marked(request: Request, mark: str = ""):
-        """Everything with one mark, whichever shelf it sits on. Newest
-        first, the way every listing here is."""
-        found = []
-        for shelves in (library, shelf, ideas):
-            shelves.refresh()
-            found += [n for n in shelves.notes if mark and n.mark == mark]
-        found.sort(key=lambda n: n.saved, reverse=True)
-        pages = -(-len(found) // PER_PAGE)
-        number = page_number(request.query_params.get("page", "1"), pages)
-        shown = found[(number - 1) * PER_PAGE:number * PER_PAGE]
-        return page(request, "marked.html", notes=shown, active_mark=mark or None,
-                    **pager("/marked", {"mark": mark}, number, pages))
+    @app.get("/search")
+    def search(q: str = ""):
+        return see_other("/", q=" ".join(q.split()))
+
+    @app.get("/marked")
+    def marked(mark: str = ""):
+        return see_other("/", mark=mark)
 
     def anywhere(link_id: str):
         """(entry, the shelf it is on), looking in the links first.
@@ -1987,13 +1919,17 @@ def create_app(cfg: Config) -> FastAPI:
 
     @app.post("/add")
     def add_pasted(background: BackgroundTasks, url: str = Form(""),
-                   content: str = Form("")):
+                   content: str = Form(""), q: str = Form("")):
         """Take a pasted link, answer at once, read the page afterwards.
 
         What this route decides is only what the page says back. The pipeline
         never overwrites a note it did not just make, so a library index that
         is a second out of date here costs a message and never a note.
+
+        The unified field on the library sends its text as `q`; the older
+        paste box sent `url`.
         """
+        url = url or q
         # Before pasted_link(), because "película:Terminator" is not a link
         # and never will be: asked afterwards, every card request would come
         # back as "that is not a link".

@@ -1,0 +1,34 @@
+{% import "shelf-items.html" as shelf with context %}
+<div class="list-head">
+  <span>{{ view.label(t) }} · <b class="mono">{{ total }}</b></span>
+  <nav class="seg" aria-label="{{ t('Layout') }}">
+    <a href="{{ view.url(vista='lista') }}" data-view="lista"
+       class="{% if view.vista == 'lista' %}on{% endif %}">{{ t('List') }}</a>
+    <a href="{{ view.url(vista='tarjetas') }}" data-view="tarjetas"
+       class="{% if view.vista == 'tarjetas' %}on{% endif %}">{{ t('Cards') }}</a>
+  </nav>
+</div>
+<div class="list-body" id="list-body">
+  {% if notes or pending %}
+    <ul class="items {{ 'rows' if view.vista == 'lista' else 'tiles' }}" id="items" data-current="{{ current }}">
+      {% for id, url in pending %}{{ shelf.pending(id, url, view, current) }}{% endfor %}
+      {% for note in notes %}{{ shelf.item(note, view, current, busy) }}{% endfor %}
+    </ul>
+    {% if more %}<a class="more" href="{{ view.url(hasta=view.hasta + chunk) }}" data-more="{{ view.url('/lista', desde=view.hasta) }}">{{ t('Show more') }}</a>{% endif %}
+  {% elif view.searching %}
+    <div class="empty-state">
+      <p class="empty-title">{{ t('Nothing matches “%1”', view.q) }}</p>
+      <p>{{ t('Try another word or a tag. If it is a new link, paste it whole with https:// to save it.') }}</p>
+      <a class="btn" href="/">{{ t('See everything') }}</a>
+    </div>
+  {% elif view.filtered %}
+    <div class="empty-state">
+      <p class="empty-title">{{ t('There is nothing in %1', view.label(t)) }}</p>
+      <p>{{ t('Mark a link from its panel, or move it here from the category chip.') }}</p>
+      <a class="btn" href="/">{{ t('See everything') }}</a>
+    </div>
+  {% else %}
+    <div class="empty-state"><p class="empty-title">{{ t('Nothing saved yet') }}</p>
+      <p>{{ t('Paste a link in the box above to save it.') }}</p></div>
+  {% endif %}
+</div>

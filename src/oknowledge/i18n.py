@@ -29,6 +29,24 @@ STRINGS = {
         "Collections": "Colecciones",
         "Favorites": "Favoritos",
         "Pinned": "Fijados",
+        "Results": "Resultados",
+        "Search or paste a link to save it": "Buscá o pegá un link para guardarlo",
+        "Layout": "Vista",
+        "List": "Lista",
+        "Cards": "Tarjetas",
+        "Detail": "Detalle",
+        "Choose a link to read it here.": "Elegí un link para leerlo acá.",
+        "Analysing…": "Analizando…",
+        "No category": "Sin categoría",
+        "Show more": "Mostrar más",
+        "See everything": "Ver todo",
+        "Nothing matches “%1”": "Nada coincide con “%1”",
+        "Try another word or a tag. If it is a new link, paste it whole with https:// to save it.":
+            "Probá con otra palabra o una etiqueta. Si es un link nuevo, pegalo completo con https:// para guardarlo.",
+        "There is nothing in %1": "No hay nada en %1",
+        "Mark a link from its panel, or move it here from the category chip.":
+            "Marcá un link desde su panel, o movelo acá desde el chip de categoría.",
+        "Paste a link in the box above to save it.": "Pegá un link en la caja de arriba para guardarlo.",
         "Search": "Buscar",
         "Categories": "Categorías",
         "Settings": "Ajustes",
@@ -62,13 +80,9 @@ STRINGS = {
             "1 nota no se pudo leer y no se muestra",
         "%1 notes could not be read and are not shown":
             "%1 notas no se pudieron leer y no se muestran",
-        "Nothing in this category": "No hay nada en esta categoría",
         "Nothing matches that filter": "No hay nada con ese filtro",
         "Not found": "No encontrado",
         "That link is not in your library.": "Ese link no está en tu biblioteca.",
-        "Previous": "Anterior",
-        "Next": "Siguiente",
-        "Page %1 of %2": "Página %1 de %2",
         "The vault could not be read": "No se pudo leer el vault",
         "Check that the folder exists, is mounted and is readable.":
             "Revisá que la carpeta exista, esté montada y se pueda leer.",
@@ -222,10 +236,8 @@ STRINGS = {
         "Analyse the links that are waiting": "Analizar los links que esperan",
         "Waiting to be analysed: %1": "Esperando an\u00e1lisis: %1",
         "Analyse 1 link": "Analizar 1 link",
-        "%1 more tags": "%1 etiquetas m\u00e1s",
 
         # On a card whose note was saved but never analysed.
-        "Analyse it": "Analizarlo",
         "It could not be analysed. Try again.":
             "No se pudo analizar. Prob\u00e1 de nuevo.",
         "Analyse %1 links": "Analizar %1 links",
@@ -287,12 +299,9 @@ STRINGS = {
         "Sep": "sep", "Oct": "oct", "Nov": "nov", "Dec": "dic",
 
         # Las colecciones: lo \u00fanico de una nota que escribe el usuario.
-        "Select": "Seleccionar",
-        "Cancel": "Cancelar",
         "Add to a collection": "Agregar a una colecci\u00f3n",
         "Collection": "Colecci\u00f3n",
         "Add": "Agregar",
-        "Take out of %1": "Sacar de %1",
         "Leave the collection %1": "Sacar de la colecci\u00f3n %1",
         "That name cannot be used as a collection: it has to be "
         "something other than spaces, dots and slashes.":

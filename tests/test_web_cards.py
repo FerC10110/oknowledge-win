@@ -43,11 +43,7 @@ def client(tmp_path):
     return build(tmp_path, note("a1"))[1]
 
 
-# --- the favicon on the card -------------------------------------------------
-
-
-def test_a_card_asks_for_its_site_icon(client):
-    assert 'src="/icon/github.com"' in client.get("/").text
+# --- the site on the card ----------------------------------------------------
 
 
 def test_a_card_shows_the_site_it_came_from(client):
@@ -64,24 +60,6 @@ def test_a_note_with_no_source_asks_for_no_icon(tmp_path):
 
 
 # --- where each part of the card goes ----------------------------------------
-
-
-def test_the_card_body_links_the_note_so_it_works_without_javascript(client):
-    assert 'href="/item/a1"' in client.get("/").text
-
-
-def test_the_card_carries_the_popup_hook(client):
-    """Without this attribute the script has nothing to find and the card
-    just navigates -- correct, but not what was asked for."""
-    assert 'data-popup="/embed/a1"' in client.get("/").text
-
-
-def test_the_title_links_the_original_site_in_a_new_tab(client):
-    body = client.get("/").text
-
-    assert 'href="https://github.com/x"' in body
-    assert 'target="_blank"' in body
-    assert "noreferrer" in body
 
 
 @pytest.mark.parametrize("url", [
@@ -105,13 +83,6 @@ def test_a_url_that_is_not_a_web_address_is_never_linked(tmp_path, url):
     # anything else at all in here came out of the note.
     import re
     assert "<script" not in re.sub(r'<script src="/static/[a-z]+\.js"( defer)?>', "", body)
-
-
-def test_a_hand_edited_url_is_still_shown_even_when_it_is_not_a_link(tmp_path):
-    """Refusing to link it must not mean hiding it: a link is never lost."""
-    _, client = build(tmp_path, note("a1", url="ftp://old.example.com/x"))
-
-    assert "ftp://old.example.com/x" in client.get("/").text
 
 
 # --- the fragment the dialog loads -------------------------------------------
@@ -153,10 +124,6 @@ def test_the_fragment_of_a_hand_edited_url_does_not_link_it(tmp_path):
 # --- the script that turns the link into a dialog ----------------------------
 
 
-def test_the_library_loads_the_popup_script(client):
-    assert "/static/popup.js" in client.get("/").text
-
-
 def test_the_popup_script_is_served(client):
     answer = client.get("/static/popup.js")
 
@@ -167,58 +134,11 @@ def test_the_popup_script_is_served(client):
 # --- the one view that takes the whole screen --------------------------------
 
 
-def test_the_library_goes_full_width(client):
-    assert 'class="wide"' in client.get("/").text
-
-
 @pytest.mark.parametrize("path", ["/item/a1", "/settings", "/categories",
                                   "/search?q=shell"])
 def test_everything_that_is_read_rather_than_scanned_keeps_its_measure(client, path):
     """A line of text 2000 pixels wide is unreadable; a grid of cards is not."""
     assert 'class="wide"' not in client.get(path).text
-
-
-# --- the whole summary, scrolled inside a card that does not grow -----------
-
-LONG = ("ani-py es una CLI independiente en Python para buscar, elegir, "
-        "reproducir y descargar anime desde la terminal. " * 12)
-
-
-def summary_of(client):
-    card = client.get("/").text.split('class="sum"')[1].split("</p>")[0]
-    return card.split('dir="auto">')[1].strip()
-
-
-def test_a_card_sends_the_whole_summary(tmp_path):
-    """The card is a fixed size and the text is complete: the box scrolls.
-
-    Nothing is cut server-side, so there is no … and no limit -- what the
-    card cannot show at once is reached with the wheel.
-    """
-    _, client = build(tmp_path, note("a1", summary=LONG))
-
-    shown = summary_of(client)
-
-    assert shown == LONG.strip()
-    assert "…" not in shown
-
-
-def test_a_summary_of_several_paragraphs_arrives_whole(tmp_path):
-    """Only the first line used to be shown, which was the clamp's doing."""
-    _, client = build(tmp_path, note(
-        "a1", summary="Primer parrafo.\n\nSegundo parrafo.\n\nTercero."))
-
-    shown = summary_of(client)
-
-    assert "Primer parrafo." in shown
-    assert "Segundo parrafo." in shown
-    assert "Tercero." in shown
-
-
-def test_a_short_summary_is_left_exactly_as_it_is(tmp_path):
-    _, client = build(tmp_path, note("a1", summary="Un shell para Hyprland."))
-
-    assert summary_of(client) == "Un shell para Hyprland."
 
 
 # --- and the scrolling itself, which lives in the stylesheet ----------------
@@ -356,19 +276,19 @@ def test_joining_a_collection_is_not_drawn_as_saving(client):
 def test_a_note_nobody_analysed_draws_no_engine_icon(client):
     """1182 of 1184 notes are in that state. An icon meaning "I don't know",
     repeated a thousand times, is noise and not information."""
-    assert "icon-engine" not in client.get("/").text
+    assert "icon-engine" not in client.get("/item/a1").text
 
 
 def test_the_card_draws_the_engine_that_analysed_it(tmp_path):
     _, client = build(tmp_path, note("a1", engine="opencode",
                                      model="opencode/ling-3.1-flash-free"))
 
-    assert "icon-engine opencode" in client.get("/").text
+    assert "icon-engine opencode" in client.get("/item/a1").text
 
 
 def test_the_model_is_named_where_the_mouse_finds_it(tmp_path):
     _, client = build(tmp_path, note("a1", engine="ollama", model="qwen2.5:7b"))
-    body = client.get("/").text
+    body = client.get("/item/a1").text
 
     assert 'title="ollama · qwen2.5:7b"' in body
     assert 'aria-label="ollama · qwen2.5:7b"' in body
@@ -379,13 +299,13 @@ def test_an_engine_with_no_model_names_only_itself(tmp_path):
     separator is worse than no separator."""
     _, client = build(tmp_path, note("a1", engine="opencode"))
 
-    assert 'title="opencode"' in client.get("/").text
+    assert 'title="opencode"' in client.get("/item/a1").text
 
 
 def test_an_engine_nobody_has_an_icon_for_draws_nothing(tmp_path):
     """`engine: pepe` typed by hand must not reach a template as a file name."""
     _, client = build(tmp_path, note("a1", engine="../../etc/passwd", model="m"))
-    body = client.get("/").text
+    body = client.get("/item/a1").text
 
     assert "icon-engine" not in body
     assert "passwd" not in body
@@ -394,7 +314,7 @@ def test_an_engine_nobody_has_an_icon_for_draws_nothing(tmp_path):
 def test_the_engine_icon_follows_the_theme(tmp_path):
     """The lesson of the floppy disk: a fixed colour breaks in the other theme."""
     _, client = build(tmp_path, note("a1", engine="api", model="gpt-5"))
-    body = client.get("/").text
+    body = client.get("/item/a1").text
     drawn = body[body.index("icon-engine"):body.index("</svg>")]
 
     assert "currentColor" in drawn

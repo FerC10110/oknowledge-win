@@ -37,7 +37,12 @@ def app_with(tmp_path, *notes):
 
 
 def hits(client, q):
-    return client.get("/search", params={"q": q}).text
+    return client.get("/", params={"q": q}).text
+
+
+def card(id):
+    """How a note appears in the library column."""
+    return f'id="card-{id}"'
 
 
 # --- 1: folding keeps every script findable ------------------------------------------
@@ -52,13 +57,13 @@ def hits(client, q):
 ])
 def test_search_finds_notes_by_their_own_words(tmp_path, title, query):
     _, client = app_with(tmp_path, note("n1", title))
-    assert "/item/n1" in hits(client, query)
+    assert card("n1") in hits(client, query)
 
 
 def test_japanese_voicing_marks_are_part_of_the_letter(tmp_path):
     assert fold("が") != fold("か")
     _, client = app_with(tmp_path, note("n1", "が"))
-    assert "/item/n1" not in hits(client, "か")
+    assert card("n1") not in hits(client, "か")
 
 
 def test_folding_does_not_conflate_other_scripts():
@@ -80,31 +85,30 @@ def test_fold_map_points_every_folded_char_home():
         assert text[home].casefold()[:1] == char or char == " " or char.isascii()
 
 
-# --- 2: the snippet contains the match ------------------------------------------------
+# --- 2: the body and the summary are searched ------------------------------------------
 
 
-def test_the_snippet_contains_the_match_after_spanish_punctuation(tmp_path):
+def test_the_body_is_searched_after_spanish_punctuation(tmp_path):
     body = "¿Qué? ¡Sí! — “hola” " * 40 + "la palabra buscada aparece aquí " + "x " * 100
     _, client = app_with(tmp_path, note("n1", "Titulo", body=body))
-    text = hits(client, "buscada")
-    assert "palabra buscada aparece" in text
+    assert card("n1") in hits(client, "buscada")
 
 
-def test_the_snippet_contains_the_match_after_cjk(tmp_path):
+def test_the_body_is_searched_after_cjk(tmp_path):
     body = "日本語の文章です。" * 40 + " needle here"
     _, client = app_with(tmp_path, note("n1", "T", body=body))
-    assert "needle here" in hits(client, "needle")
+    assert card("n1") in hits(client, "needle")
 
 
-def test_the_snippet_contains_the_match_after_letters_that_fold_to_two(tmp_path):
+def test_the_body_is_searched_after_letters_that_fold_to_two(tmp_path):
     body = "Straße æsop cœur " * 30 + "la aguja buscada " + "y " * 100
     _, client = app_with(tmp_path, note("n1", "T", body=body))
-    assert "aguja buscada" in hits(client, "aguja")
+    assert card("n1") in hits(client, "aguja")
 
 
-def test_the_snippet_keeps_the_original_accents(tmp_path):
+def test_an_accented_summary_is_found_without_its_accents(tmp_path):
     _, client = app_with(tmp_path, note("n1", "T", summary="Sobre la canción de Peña."))
-    assert "canción" in hits(client, "cancion")
+    assert card("n1") in hits(client, "cancion")
 
 
 # --- 3: terms, not one literal phrase -------------------------------------------------
@@ -117,23 +121,24 @@ def test_every_term_must_match_across_fields(tmp_path):
         note("n2", "WireGuard solo", summary="Nada."),
     )
     text = hits(client, "wireguard redes")
-    assert "/item/n1" in text and "/item/n2" not in text
+    assert card("n1") in text and card("n2") not in text
 
 
 def test_a_hash_prefix_matches_the_tag_as_displayed(tmp_path):
     _, client = app_with(tmp_path, note("n1", "Uno", tags=["vpn"]), note("n2", "Dos"))
     text = hits(client, "#vpn")
-    assert "/item/n1" in text and "/item/n2" not in text
+    assert card("n1") in text and card("n2") not in text
 
 
 def test_a_phrase_split_by_a_line_break_still_matches(tmp_path):
     _, client = app_with(tmp_path, note("n1", "Uno", body="the quick\nbrown fox"))
-    assert "/item/n1" in hits(client, "quick brown")
+    assert card("n1") in hits(client, "quick brown")
 
 
 def test_a_term_that_is_nowhere_means_no_hit(tmp_path):
     _, client = app_with(tmp_path, note("n1", "Uno"))
-    assert "No results" in hits(client, "uno zzzz")
+    text = hits(client, "uno zzzz")
+    assert card("n1") not in text and "Nothing matches" in text
 
 
 # --- 4: source, author and url are searchable -----------------------------------------
@@ -144,7 +149,7 @@ def test_source_author_and_url_are_searchable(tmp_path, query):
     _, client = app_with(tmp_path, note(
         "n1", "Un titulo", source="nytimes.com", author="Jane Doe",
         url="https://example.org/zebra-article"))
-    assert "/item/n1" in hits(client, query)
+    assert card("n1") in hits(client, query)
 
 
 # --- 5: a vanished vault is an error --------------------------------------------------
@@ -225,27 +230,11 @@ def test_touching_one_file_reparses_only_that_file(tmp_path, monkeypatch):
     assert parsed == [target.name]
 
 
-def test_results_are_paginated_at_100(tmp_path):
-    cfg = make_cfg(tmp_path)
-    for i in range(105):
-        write_note(cfg, note(f"n{i:03}", f"Titulo {i:03}", saved="2026-01-01"), "es")
-    client = TestClient(create_app(cfg))
-    first = client.get("/").text
-    assert first.count('class="card') == 100
-    assert 'rel="next"' in first and 'rel="prev"' not in first
-    second = client.get("/?page=2").text
-    assert second.count('class="card') == 5
-    assert 'rel="prev"' in second and 'rel="next"' not in second
-    found = client.get("/search?q=titulo").text
-    assert found.count("<h2") == 100 and 'rel="next"' in found
-    assert "page=2" in found and "q=titulo" in found
-    assert client.get("/search?q=titulo&page=2").text.count("<h2") == 5
-
-
-def test_a_bad_page_number_is_page_one(tmp_path):
+def test_a_bad_length_is_the_first_chunk(tmp_path):
     _, client = app_with(tmp_path, note("n1", "Uno"))
     for bad in ("abc", "0", "-3", "99999"):
-        assert client.get("/", params={"page": bad}).status_code == 200
+        answer = client.get("/", params={"hasta": bad})
+        assert answer.status_code == 200 and card("n1") in answer.text
 
 
 def test_hits_are_ranked_title_then_summary_then_source_then_body(tmp_path):
@@ -257,7 +246,7 @@ def test_hits_are_ranked_title_then_summary_then_source_then_body(tmp_path):
         note("tit", "Gizmo", saved="2020-01-01"),
     )
     text = hits(client, "gizmo")
-    order = [text.index(f"/item/{i}") for i in ("tit", "sum", "src", "body")]
+    order = [text.index(card(i)) for i in ("tit", "sum", "src", "body")]
     assert order == sorted(order)
 
 
@@ -265,8 +254,8 @@ def test_equal_rank_breaks_ties_by_date_then_file_time(tmp_path):
     cfg = make_cfg(tmp_path)
     for n, day in (("old", "2026-01-01"), ("new", "2026-02-01")):
         write_note(cfg, note(n, f"gizmo {n}", saved=day), "es")
-    text = TestClient(create_app(cfg)).get("/search?q=gizmo").text
-    assert text.index("/item/new") < text.index("/item/old")
+    text = TestClient(create_app(cfg)).get("/?q=gizmo").text
+    assert text.index(card("new")) < text.index(card("old"))
 
 
 def test_same_day_notes_show_the_most_recently_saved_first(tmp_path):
@@ -342,14 +331,14 @@ def test_an_unknown_item_is_an_html_404(tmp_path):
 def test_a_blank_query_shows_the_library_not_no_results(tmp_path):
     _, client = app_with(tmp_path, note("n1", "Uno"))
     for q in ("", "   ", "#"):
-        response = client.get("/search", params={"q": q}, follow_redirects=True)
-        assert "No results" not in response.text and "Uno" in response.text
+        response = client.get("/", params={"q": q})
+        assert "Nothing matches" not in response.text and card("n1") in response.text
 
 
 def test_an_empty_category_says_so(tmp_path):
     _, client = app_with(tmp_path, note("n1", "Uno", category="Redes"))
     text = client.get("/?category=Gone").text
-    assert "Nothing in this category" in text
+    assert "There is nothing in Gone" in text
     assert "Nothing saved yet" not in text
 
 
@@ -358,14 +347,6 @@ def test_pages_have_their_own_titles(tmp_path):
     assert "<title>oknowledge</title>" in client.get("/").text
     assert "<title>Mi &lt;titulo&gt; - oknowledge</title>" in client.get("/item/n1").text
     assert "<title>zz - oknowledge</title>" in client.get("/search?q=zz").text
-
-
-def test_cards_show_plain_text_not_markdown(tmp_path):
-    _, client = app_with(tmp_path, note(
-        "n1", "Uno", summary="## **Bold** and [a link](http://x.y) with `code`"))
-    card = client.get("/").text.split('class="sum"')[1].split("</p>")[0]
-    assert "Bold and a link with code" in card
-    assert "**" not in card and "](" not in card and "`" not in card
 
 
 def cover_for(tmp_path, filename, data=b"DATA"):
@@ -393,24 +374,21 @@ def test_the_cover_route_refuses_anything_that_is_not_a_known_image(tmp_path, na
 def inside(markup: str, opening: str, closing: str) -> str:
     """What one element holds, so a test can ask whether `dir` governs it.
 
-    The library card wraps its title in a link to the original site, so the
-    title is no longer the first thing after the heading tag -- but it is
-    still inside the heading that carries dir="auto", which is what decides
-    the direction, descendants included.
+    What carries dir="auto" decides the direction of everything inside it,
+    descendants included.
     """
     start = markup.index(opening) + len(opening)
     return markup[start:markup.index(closing, start)]
 
 
-def test_titles_summaries_and_snippets_are_direction_neutral(tmp_path):
+def test_titles_and_summaries_are_direction_neutral(tmp_path):
     _, client = app_with(tmp_path, note("n1", "שלום", summary="مرحبا"))
     home = client.get("/").text
-    assert "שלום" in inside(home, '<h2 dir="auto">', "</h2>")
-    assert '<p class="sum" dir="auto">' in home
+    assert "שלום" in inside(home, '<span class="title" dir="auto">', "</span>")
     item = client.get("/item/n1").text
     assert '<h1 dir="auto">שלום' in item and '<div class="summary" dir="auto">' in item
     found = hits(client, "שלום")
-    assert '<h2 dir="auto">שלום' in found and '<p class="snippet" dir="auto">' in found
+    assert '<span class="title" dir="auto">שלום' in found
 
 
 def test_ids_are_url_encoded_in_links(tmp_path):
@@ -419,8 +397,8 @@ def test_ids_are_url_encoded_in_links(tmp_path):
     path.write_text(path.read_text(encoding="utf-8").replace(
         "status:", "cover: ../attachments/x.png\nstatus:", 1), encoding="utf-8")
     text = client.get("/").text
-    assert "/item/a%20b%3Fc%23d" in text and "/cover/a%20b%3Fc%23d" in text
-    assert "/item/a b" not in text
+    assert "sel=a+b%3Fc%23d" in text and "/cover/a%20b%3Fc%23d" in text
+    assert "sel=a b" not in text
 
 
 # --- 8: what a video mentioned is searchable ------------------------------------------
@@ -440,7 +418,7 @@ def test_a_mention_name_is_searchable(tmp_path):
     _, client = app_with(tmp_path, video(
         "v1", "Un video", [Mention(name="OpenCode", url="https://opencode.ai")]))
 
-    assert "/item/v1" in hits(client, "opencode")
+    assert card("v1") in hits(client, "opencode")
 
 
 def test_a_mention_is_found_though_the_transcript_said_the_name_differently(tmp_path):
@@ -450,14 +428,14 @@ def test_a_mention_is_found_though_the_transcript_said_the_name_differently(tmp_
         "v1", "Un video", [Mention(name="OpenCode", url="https://opencode.ai")],
         body="y despues probamos open code un rato"))
 
-    assert "/item/v1" in hits(client, "opencode")
+    assert card("v1") in hits(client, "opencode")
 
 
 def test_a_domain_the_video_really_named_is_searchable(tmp_path):
     _, client = app_with(tmp_path, video(
         "v1", "Un video", [Mention(name="OpenCode", url="https://opencode.ai")]))
 
-    assert "/item/v1" in hits(client, "opencode.ai")
+    assert card("v1") in hits(client, "opencode.ai")
 
 
 def test_a_search_link_does_not_make_its_search_engine_searchable(tmp_path):
@@ -467,8 +445,8 @@ def test_a_search_link_does_not_make_its_search_engine_searchable(tmp_path):
     _, client = app_with(tmp_path, video(
         "v1", "Un video", [Mention(name="Gizmo", url=search_url("Gizmo"))]))
 
-    assert "/item/v1" in hits(client, "gizmo")
-    assert "/item/v1" not in hits(client, "duckduckgo")
+    assert card("v1") in hits(client, "gizmo")
+    assert card("v1") not in hits(client, "duckduckgo")
 
 
 def test_a_note_about_the_term_outranks_a_video_that_only_mentioned_it(tmp_path):
@@ -480,7 +458,7 @@ def test_a_note_about_the_term_outranks_a_video_that_only_mentioned_it(tmp_path)
     )
     text = hits(client, "gizmo")
 
-    assert text.index("/item/n1") < text.index("/item/v1")
+    assert text.index(card("n1")) < text.index(card("v1"))
 
 
 def test_a_mention_outranks_the_same_word_buried_in_a_transcript(tmp_path):
@@ -492,14 +470,6 @@ def test_a_mention_outranks_the_same_word_buried_in_a_transcript(tmp_path):
     )
     text = hits(client, "gizmo")
 
-    assert text.index("/item/v1") < text.index("/item/n1")
+    assert text.index(card("v1")) < text.index(card("n1"))
 
 
-def test_a_hit_on_a_mention_says_so_in_its_snippet(tmp_path):
-    """Falling through to the summary leaves the user guessing why the video
-    came back at all."""
-    _, client = app_with(tmp_path, video(
-        "v1", "Un video", [Mention(name="Gizmo", url="https://gizmo.dev")],
-        summary="Un resumen que no dice nada de eso."))
-
-    assert "Gizmo" in hits(client, "gizmo")

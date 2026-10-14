@@ -6,8 +6,6 @@ the page draws how far it got. Nothing here makes a real model call: the
 worker that would is replaced, and what is tested is the route around it.
 """
 
-import re
-
 import pytest
 from fastapi.testclient import TestClient
 
@@ -349,7 +347,7 @@ def test_a_notice_added_to_a_path_that_already_has_a_query_is_a_second_field():
     assert answer.headers["location"] == "/?category=Redes&notice=queued"
 
 
-# --- The button on a card -----------------------------------------------------
+# --- Where reprocessing sends you back ---------------------------------------
 
 @pytest.fixture
 def cards(tmp_path):
@@ -374,33 +372,6 @@ def cards(tmp_path):
         q.set_status(link, status)
     rebuild_indexes(cfg, "es")
     return cfg, TestClient(create_app(cfg))
-
-
-def test_an_unanalysed_card_offers_to_analyse_it_from_the_library(cards):
-    """The whole ask: not having to open the note to start its analysis."""
-    cfg, client = cards
-
-    body = client.get("/").text
-
-    assert 'action="/item/waiting/reprocess"' in body
-
-
-def test_an_analysed_card_offers_nothing(cards):
-    """Re-analysing a finished note overwrites a summary the user may have
-    written. That has a confirmation, on the note's own page."""
-    cfg, client = cards
-
-    body = client.get("/").text
-
-    assert 'action="/item/done/reprocess"' not in body
-
-
-def test_the_card_button_does_not_stop_to_ask(cards):
-    """There is nothing to lose: a partial note has no analysis in it yet.
-    data-ask is what makes the note page's version stop and ask."""
-    cfg, client = cards
-
-    assert "data-ask" not in client.get("/").text
 
 
 def test_the_card_button_comes_back_to_the_view_it_was_clicked_on(cards, monkeypatch):
@@ -445,103 +416,7 @@ def test_a_hand_made_return_cannot_leave_this_app(cards, monkeypatch, sent, expe
     assert answer.headers["location"] == expected
 
 
-def test_the_card_s_own_button_is_the_one_that_comes_back(cards, monkeypatch):
-    """Posted with exactly the fields the card renders, not with fields chosen
-    here: a card that forgets to say where it was lands the user on the note
-    page, which is the trip this button exists to avoid."""
-    import re
-
-    monkeypatch.setattr(module, "reanalyze", lambda cfg, url, engine, **kw: None)
-    cfg, client = cards
-
-    body = client.get("/?category=Redes").text
-    form_html = re.search(r'<form action="([^"]+)"[^>]*class="redo"[^>]*>(.*?)</form>',
-                          body, re.S)
-    assert form_html, "the card rendered no button to press"
-    fields = dict(re.findall(r'name="([^"]+)" value="([^"]*)"', form_html.group(2)))
-
-    answer = client.post(form_html.group(1), data=fields, follow_redirects=False)
-
-    assert answer.headers["location"] == "/?category=Redes&notice=queued"
-
-
-def test_the_card_in_a_collection_comes_back_to_that_collection(cards, monkeypatch):
-    """A collection is a listing like any other, and the whole point of this
-    button is not losing the place you pressed it from."""
-    import re
-
-    monkeypatch.setattr(module, "reanalyze", lambda cfg, url, engine, **kw: None)
-    cfg, client = cards
-    client.post("/collections/add", data={"name": "Casa", "id": ["waiting"]})
-
-    body = client.get("/?collection=Casa").text
-    form_html = re.search(r'<form action="([^"]+)"[^>]*class="redo"[^>]*>(.*?)</form>',
-                          body, re.S)
-    assert form_html, "the card rendered no button to press"
-    fields = dict(re.findall(r'name="([^"]+)" value="([^"]*)"', form_html.group(2)))
-
-    answer = client.post(form_html.group(1), data=fields, follow_redirects=False)
-
-    assert answer.headers["location"] == "/?collection=Casa&notice=queued"
-
-
-def test_the_card_in_a_period_comes_back_to_that_period(cards, monkeypatch):
-    """Time is a listing like any other, and losing your place is the thing
-    this button exists not to do."""
-    import re
-
-    monkeypatch.setattr(module, "reanalyze", lambda cfg, url, engine, **kw: None)
-    cfg, client = cards
-
-    body = client.get("/?when=2026-10").text
-    form_html = re.search(r'<form action="([^"]+)"[^>]*class="redo"[^>]*>(.*?)</form>',
-                          body, re.S)
-    assert form_html, "the card rendered no button to press"
-    fields = dict(re.findall(r'name="([^"]+)" value="([^"]*)"', form_html.group(2)))
-
-    answer = client.post(form_html.group(1), data=fields, follow_redirects=False)
-
-    assert answer.headers["location"] == "/?when=2026-10&notice=queued"
-
-
-# --- The same button in the search results, and in the nav --------------------
-
-def test_a_search_hit_for_an_unanalysed_note_offers_to_analyse_it(cards):
-    """Searching is how a link is found again, so it is also where the user
-    notices the note was never analysed."""
-    cfg, client = cards
-
-    body = client.get("/search?q=Twaiting").text
-
-    assert 'action="/item/waiting/reprocess"' in body
-
-
-def test_a_search_hit_for_an_analysed_note_offers_nothing(cards):
-    cfg, client = cards
-
-    body = client.get("/search?q=Tdone").text
-
-    assert 'action="/item/done/reprocess"' not in body
-
-
-def test_the_hit_s_own_button_comes_back_to_the_same_search(cards, monkeypatch):
-    """Posted with the fields the page renders: landing on the library, or on
-    the note, loses the search the user had to type."""
-    import re
-
-    monkeypatch.setattr(module, "reanalyze", lambda cfg, url, engine, **kw: None)
-    cfg, client = cards
-
-    body = client.get("/search?q=Twaiting").text
-    form_html = re.search(r'<form action="([^"]+)"[^>]*class="redo"[^>]*>(.*?)</form>',
-                          body, re.S)
-    assert form_html, "the hit rendered no button to press"
-    fields = dict(re.findall(r'name="([^"]+)" value="([^"]*)"', form_html.group(2)))
-
-    answer = client.post(form_html.group(1), data=fields, follow_redirects=False)
-
-    assert answer.headers["location"] == "/search?q=Twaiting&notice=queued"
-
+# --- A search to come back to, and the nav ------------------------------------
 
 def test_a_search_with_nothing_to_search_for_is_not_a_destination(cards, monkeypatch):
     """/search with no terms redirects to the library, so sending the user
@@ -553,37 +428,6 @@ def test_a_search_with_nothing_to_search_for_is_not_a_destination(cards, monkeyp
                          data={"back": "search", "q": "  "}, follow_redirects=False)
 
     assert answer.headers["location"] == "/item/waiting?notice=queued"
-
-
-@pytest.mark.parametrize("path", ["/", "/search?q=Twaiting"])
-def test_the_button_is_a_drawn_glyph_with_a_name_for_what_cannot_see_it(cards, path):
-    """It was an emoji and it rendered as nothing: the page's font has no such
-    character, and whether the browser reaches an emoji font for it is a
-    fontconfig fallback nobody here controls. A path needs no font.
-
-    The words stay in title and aria-label: a button whose whole content is a
-    picture has no accessible name, and nobody is born knowing what it means.
-    """
-    cfg, client = cards
-
-    body = client.get(path).text
-
-    assert '<svg class="icon"' in body
-    assert "currentColor" in body          # the colour of the text, in either theme
-    assert 'aria-label="Analyse it"' in body
-    assert 'title="Analyse it"' in body
-
-
-def test_the_button_s_glyph_is_not_a_character_a_font_has_to_have(cards):
-    """The defect this replaced, pinned: an emoji in the markup is a glyph the
-    page is hoping some font on the machine will draw."""
-    cfg, client = cards
-
-    body = client.get("/").text
-    # Except in the mark picker, where an emoji is what the user chose.
-    body = re.sub(r'<details class="mark">.*?</details>', "", body, flags=re.S)
-
-    assert not [ch for ch in body if ord(ch) > 0xFFFF]
 
 
 @pytest.mark.parametrize("path", ["/", "/settings", "/categories", "/retry"])
@@ -680,24 +524,6 @@ def test_the_click_marks_the_link_pending_before_it_answers(cards, monkeypatch):
     client.post("/item/waiting/reprocess", follow_redirects=False)
 
     assert seen["status"] == "pending"
-
-
-def test_the_card_carries_what_the_script_needs_to_poll(cards):
-    """The id is in the form's action and nowhere else a script can read it
-    without parsing a URL."""
-    cfg, client = cards
-
-    body = client.get("/").text
-
-    assert 'data-link="waiting"' in body
-
-
-def test_the_library_loads_the_script_that_keeps_the_page_still(cards):
-    cfg, client = cards
-
-    body = client.get("/").text
-
-    assert "/static/redo.js" in body
 
 
 def test_the_script_s_click_gets_no_page_back(cards, monkeypatch):
