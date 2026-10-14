@@ -47,11 +47,50 @@ def page_of(cfg, idea, **params):
 def test_the_linked_links_are_cards_in_the_aside(cfg):
     stem = a_link(cfg, 1, "WireGuard")
     text = page_of(cfg, an_idea(cfg, related=[stem]))
-    aside = text[text.index('<aside class="idea-links"'):text.index("</aside>")]
+    aside = text[text.index('<aside class="idea-links'):text.index("</aside>")]
     assert 'class="card"' in aside and "WireGuard" in aside
     assert f'name="use" value="{stem}" form="act-think" checked' in aside
     assert '/related/drop' in aside
-    assert aside.index("WireGuard") < aside.index('id="field-find"')
+
+
+def aside_of(text):
+    return text[text.index('<aside class="idea-links'):text.index("</aside>")]
+
+
+def test_the_aside_is_a_panel_with_two_tabs_search_first(cfg):
+    stem = a_link(cfg, 1, "WireGuard")
+    aside = aside_of(page_of(cfg, an_idea(cfg, related=[stem])))
+    assert 'class="idea-links panel"' in aside
+    assert '<input type="radio" name="idea-tab" id="tab-find" class="tab-switch" checked>' in aside
+    assert '<input type="radio" name="idea-tab" id="tab-linked" class="tab-switch">' in aside
+    assert '<label for="tab-find">Search</label>' in aside
+    assert '<label for="tab-linked">Linked (1/16)</label>' in aside
+
+
+def test_the_search_pane_holds_the_box_and_the_results(cfg):
+    a_link(cfg, 1, "WireGuard")
+    aside = aside_of(page_of(cfg, an_idea(cfg), q="wire"))
+    pane = aside[aside.index('class="tab-pane pane-find"'):aside.index('class="tab-pane pane-linked"')]
+    assert pane.index('id="field-find"') < pane.index('id="idea-found"')
+    assert 'action="/item/l00000000001/ideas"' in pane
+
+
+def test_the_linked_pane_holds_the_cards(cfg):
+    stem = a_link(cfg, 1, "WireGuard")
+    aside = aside_of(page_of(cfg, an_idea(cfg, related=[stem])))
+    pane = aside[aside.index('class="tab-pane pane-linked"'):]
+    assert "WireGuard" in pane and f'name="use" value="{stem}"' in pane
+
+
+def test_the_tabs_switch_without_javascript():
+    for selector in ("#tab-linked:checked ~ .pane-linked", "#tab-linked:checked ~ .pane-find"):
+        assert css_rule(selector), selector
+
+
+def test_the_panel_stays_in_view_and_scrolls_inside():
+    panel = " ".join(css_rule(".item.has-aside > .mine.idea > .idea-links"))
+    assert "position: sticky" in panel and "height: calc(100vh - 2rem)" in panel
+    assert any("overflow-y: auto" in rule for rule in css_rule(".idea-links .tab-pane"))
 
 
 def test_the_general_box_only_with_links(cfg):
@@ -106,7 +145,7 @@ def test_the_idea_keeps_the_spacing_of_its_section():
     """display: contents drops .mine's gap and top margin; the grid gives them back."""
     assert any("margin-top: 0.8rem" in rule
                for rule in css_rule(".item.has-aside > .mine.idea > * + *"))
-    assert any("margin-top: 2rem" in rule for rule in css_rule(".item.has-aside > .mine.idea > form.field"))
+    assert any("margin-top: 1.25rem" in rule for rule in css_rule(".item.has-aside > .mine.idea > form.field"))
 
 
 def test_below_two_columns_the_idea_keeps_the_reading_width():

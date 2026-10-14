@@ -706,7 +706,7 @@ select:focus-visible, textarea:focus-visible, .chip:focus-visible {
 /* What .mine's gap and top margin did, now that the section lends its
    children out: grid items keep their margins, and none of them collapse. */
 .item.has-aside > .mine.idea > * + * { margin-top: 0.8rem; }
-.item.has-aside > .mine.idea > form.field { margin-top: 2rem; }
+.item.has-aside > .mine.idea > form.field { margin-top: 1.25rem; }
 /* body.wide lifts main's limit at every width; until there are two columns
    the idea reads at the usual width. */
 body.wide .item.has-aside { max-width: var(--measure); margin: 0 auto; }
@@ -729,6 +729,28 @@ ul.grid.idea-cards { grid-template-columns: minmax(0, 1fr); gap: 0.75rem; margin
 .card.unused { opacity: 0.6; }
 .idea-find { display: flex; flex-direction: column; gap: 0.3rem; margin-bottom: 0.75rem; }
 .idea-find input { width: 100%; }
+/* The panel: set apart from the idea by its own ground and border, two tabs
+   on top and one list under them that scrolls inside it, never the page. */
+.idea-links.panel { display: flex; flex-direction: column; min-height: 0;
+  background: color-mix(in srgb, var(--line) 30%, var(--bg));
+  border: 1px solid var(--line); border-radius: 14px; padding: 0.75rem; }
+.tab-switch { position: absolute; opacity: 0; width: 1px; height: 1px; pointer-events: none; }
+.idea-links .tabs { display: flex; gap: 0.25rem; flex: none; margin-bottom: 0.75rem;
+  border-bottom: 1px solid var(--line); }
+.idea-links .tabs label { padding: 0.4rem 0.8rem; cursor: pointer; color: var(--dim);
+  border-bottom: 2px solid transparent; margin-bottom: -1px; font-size: 0.9rem; }
+#tab-find:checked ~ .tabs label[for="tab-find"],
+#tab-linked:checked ~ .tabs label[for="tab-linked"] { color: var(--fg); border-bottom-color: var(--accent); }
+#tab-find:focus-visible ~ .tabs label[for="tab-find"],
+#tab-linked:focus-visible ~ .tabs label[for="tab-linked"] { outline: 2px solid var(--focus); outline-offset: 2px; }
+.idea-links .tab-pane { display: flex; flex-direction: column; flex: 1; min-height: 0;
+  overflow-y: auto; overscroll-behavior: contain; max-height: 70vh; }
+.idea-links .pane-find .idea-find { position: sticky; top: 0; z-index: 1; padding-bottom: 0.5rem;
+  margin-bottom: 0.25rem; background: color-mix(in srgb, var(--line) 30%, var(--bg)); }
+#tab-linked:checked ~ .pane-find { display: none; }
+.idea-links .tab-pane.pane-linked { display: none; }
+#tab-linked:checked ~ .pane-linked { display: flex; }
+.idea-links ul.grid.idea-cards { margin-bottom: 0; }
 @media (min-width: 60rem) {
   body.wide main { max-width: calc(var(--measure) + 26rem); }
   body.wide .item.has-aside { max-width: none; }
@@ -736,7 +758,8 @@ ul.grid.idea-cards { grid-template-columns: minmax(0, 1fr); gap: 0.75rem; margin
     align-items: start; }
   .item.has-aside > *, .item.has-aside > .mine.idea > * { grid-column: 1; }
   .item.has-aside > .mine.idea > .idea-links { grid-column: 2; grid-row: 1 / span 40; order: 0;
-    position: sticky; top: 1rem; max-height: calc(100vh - 2rem); overflow: auto; }
+    position: sticky; top: 1rem; height: calc(100vh - 2rem); margin-top: 0; }
+  .idea-links .tab-pane { max-height: none; }
   .item.has-aside .idea-actions, .item.has-aside .idea-meta,
   .item.has-aside > .actions { order: 0; }
 }

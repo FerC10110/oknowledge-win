@@ -34,6 +34,18 @@ que pueden servir a mi idea", y se listan en "Links de esta idea". Lo que falta:
 
 ## 1. La página de la idea en dos columnas
 
+> **Cambio del 2026-10-14, después de usarla:** "tengo que hacer mucho scroll y
+> no se ven divididas las secciones [...] el buscador a la derecha y las
+> tarjetas que van apareciendo de forma vertical [...] justo debajo del
+> buscador". El aside pasa a ser un **panel** con fondo y borde propios, fijo
+> en pantalla (`position: sticky`, alto de la ventana), con dos **pestañas**:
+> *Buscar* (abierta al entrar: el campo y debajo los resultados) y
+> *Vinculados (N/16)* (las tarjetas con Usar y ×). La lista de cada pestaña
+> scrollea dentro del panel. Las pestañas son radios y CSS: andan sin
+> JavaScript, y las casillas de la pestaña oculta igual viajan con el
+> formulario. En el celular el panel va después de los botones, con la lista
+> limitada al 70 % del alto. Lo que sigue describe la primera versión.
+
 En pantallas anchas (más de 60rem) la página de una idea usa todo el ancho
 (`body.wide`) y una grilla de dos columnas:
 

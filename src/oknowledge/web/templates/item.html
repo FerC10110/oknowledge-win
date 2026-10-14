@@ -164,47 +164,58 @@
            links is for either button. Each button names its own action. #}
         <form id="act-think" action="/item/{{ note.id|slug }}/actions/improve" method="post"></form>
         {# Beside the idea on a wide screen, between its buttons and what they
-           wrote on a phone: the links it is built from, then the way to add more. #}
-        <aside class="idea-links" aria-labelledby="idea-links-title">
-          <h2 id="idea-links-title">{{ t('Links for this idea') }}
-            <span class="meta">{{ related|length }}/{{ max_related }}</span></h2>
-          {% if related %}
-            <ul class="grid idea-cards">
-              {% for stem, found in related %}
-                {% if found %}
-                  {% call link_card(found) %}
-                    <label class="use"><input type="checkbox" name="use" value="{{ stem }}" form="act-think" checked> {{ t('Use') }}</label>
-                    <form action="/item/{{ note.id|slug }}/related/drop" method="post">
-                      <button type="submit" name="stem" value="{{ stem }}"
-                              title="{{ t('Remove from the idea') }}"
-                              aria-label="{{ t('Remove from the idea') }}">×</button>
-                    </form>
-                  {% endcall %}
-                {% else %}
-                  <li class="card gone">
-                    <div class="pad">
-                      <h2 title="{{ t('This note is not in your library any more') }}">{{ stem }}</h2>
-                      <div class="card-tools">
-                        <form action="/item/{{ note.id|slug }}/related/drop" method="post">
-                          <button type="submit" name="stem" value="{{ stem }}"
-                                  title="{{ t('Remove from the idea') }}"
-                                  aria-label="{{ t('Remove from the idea') }}">×</button>
-                        </form>
+           wrote on a phone: a panel that stays in view, with the search and
+           the idea's own links as two tabs over one list that scrolls inside
+           it. The tabs are radio buttons and CSS, so they work without
+           JavaScript; the boxes in the hidden tab still go with the form. #}
+        <aside class="idea-links panel" aria-label="{{ t('Links for this idea') }}">
+          <input type="radio" name="idea-tab" id="tab-find" class="tab-switch" checked>
+          <input type="radio" name="idea-tab" id="tab-linked" class="tab-switch">
+          <div class="tabs">
+            <label for="tab-find">{{ t('Search') }}</label>
+            <label for="tab-linked">{{ t('Linked') }} ({{ related|length }}/{{ max_related }})</label>
+          </div>
+          <div class="tab-pane pane-find">
+            <form method="get" action="/item/{{ note.id|slug }}" class="idea-find" role="search">
+              <label for="field-find">{{ t('Search your links') }}</label>
+              <input id="field-find" type="search" name="q" value="{{ q }}" autocomplete="off"
+                     data-results="/item/{{ note.id|slug }}/buscar-links">
+            </form>
+            <div id="idea-found" aria-live="polite">{% include "idea-link-results.html" %}</div>
+          </div>
+          <div class="tab-pane pane-linked">
+            {% if related %}
+              <ul class="grid idea-cards">
+                {% for stem, found in related %}
+                  {% if found %}
+                    {% call link_card(found) %}
+                      <label class="use"><input type="checkbox" name="use" value="{{ stem }}" form="act-think" checked> {{ t('Use') }}</label>
+                      <form action="/item/{{ note.id|slug }}/related/drop" method="post">
+                        <button type="submit" name="stem" value="{{ stem }}"
+                                title="{{ t('Remove from the idea') }}"
+                                aria-label="{{ t('Remove from the idea') }}">×</button>
+                      </form>
+                    {% endcall %}
+                  {% else %}
+                    <li class="card gone">
+                      <div class="pad">
+                        <h2 title="{{ t('This note is not in your library any more') }}">{{ stem }}</h2>
+                        <div class="card-tools">
+                          <form action="/item/{{ note.id|slug }}/related/drop" method="post">
+                            <button type="submit" name="stem" value="{{ stem }}"
+                                    title="{{ t('Remove from the idea') }}"
+                                    aria-label="{{ t('Remove from the idea') }}">×</button>
+                          </form>
+                        </div>
                       </div>
-                    </div>
-                  </li>
-                {% endif %}
-              {% endfor %}
-            </ul>
-          {% else %}
-            <p class="meta">{{ t('None yet') }}</p>
-          {% endif %}
-          <form method="get" action="/item/{{ note.id|slug }}" class="idea-find" role="search">
-            <label for="field-find">{{ t('Search your links') }}</label>
-            <input id="field-find" type="search" name="q" value="{{ q }}" autocomplete="off"
-                   data-results="/item/{{ note.id|slug }}/buscar-links">
-          </form>
-          <div id="idea-found" aria-live="polite">{% include "idea-link-results.html" %}</div>
+                    </li>
+                  {% endif %}
+                {% endfor %}
+              </ul>
+            {% else %}
+              <p class="meta">{{ t('None yet') }}</p>
+            {% endif %}
+          </div>
         </aside>
         {# What the actions wrote. Each has its own section in the idea's
            note, beside your text and never over it. #}

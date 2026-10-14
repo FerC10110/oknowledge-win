@@ -131,6 +131,7 @@ STRINGS = {
         "already linked": "ya relacionado",
         "Nothing matches": "Nada coincide",
         "None yet": "Ninguno todavía",
+        "Linked": "Vinculados",
         "Search your links": "Buscar en tus links",
         "Use the linked links": "Usar los links vinculados",
         "Use": "Usar",
