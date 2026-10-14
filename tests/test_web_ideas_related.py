@@ -73,14 +73,14 @@ def related_of(cfg, note):
 def test_a_link_s_page_offers_your_live_ideas(cfg, client, link):
     idea = put(cfg, 1, title="VPN propia")
     put(cfg, 2, title="Descartada", state="dropped")
-    page = client.get(f"/item/{LINK}").text
+    page = client.get(f"/panel/{LINK}").text
     assert f'action="/item/{LINK}/ideas"' in page
-    assert f'<option value="{idea.id}">VPN propia</option>' in page
+    assert f'<button name="idea" value="{idea.id}">VPN propia</button>' in page
     assert "Descartada" not in page
 
 
 def test_no_ideas_no_picker(client, link):
-    assert f'/item/{LINK}/ideas"' not in client.get(f"/item/{LINK}").text
+    assert f'/item/{LINK}/ideas"' not in client.get(f"/panel/{LINK}").text
 
 
 def test_neither_a_card_nor_an_idea_offers_the_picker(cfg, client, card):

@@ -272,20 +272,6 @@
       {# A label over each one, visible and not only in an aria attribute:
          three bare boxes in a column say nothing about which is which, and
          the one holding eight tags was the width of a word. #}
-      {# Three of these are a link's and not a card's or an idea's: a card's category is
-         its kind, a re-analysis would go back to a page it never had (its
-         own button rewrites the summary instead), and a collection groups
-         links. A button that answers 404 is worse than no button. #}
-      {% if link %}
-      <form action="/item/{{ note.id|slug }}/category" method="post" class="field">
-        <label for="field-category">{{ t('Move to category') }}</label>
-        <span class="row">
-          <input id="field-category" name="category" value="{{ note.category }}" list="known">
-          <button type="submit" title="{{ t('Save') }}"
-                  aria-label="{{ t('Save') }}">{% include "icon-save.html" %}</button>
-        </span>
-      </form>
-      {% endif %}
       <form action="/item/{{ note.id|slug }}/tags" method="post" class="field">
         <label for="field-tags">{{ t('Edit tags') }}</label>
         <span class="row">
@@ -294,48 +280,6 @@
                   aria-label="{{ t('Save') }}">{% include "icon-save.html" %}</button>
         </span>
       </form>
-      {% if link %}
-      <form action="/item/{{ note.id|slug }}/collections" method="post" class="field">
-        <label for="field-collection">{{ t('Add to a collection') }}</label>
-        <span class="row">
-          <input id="field-collection" name="add" list="known-collections"
-                 autocomplete="off">
-          <datalist id="known-collections">
-            {% for name, count in collections.items() %}<option value="{{ name }}">{% endfor %}
-          </datalist>
-          {# A word and not the disk: joining a collection is not saving this
-             field, and two actions that differ should not look the same. #}
-          <button type="submit">{{ t('Add') }}</button>
-        </span>
-      </form>
-      {% if idea_choices %}
-      {# Your ideas, the dropped ones left out: the relation is noticed while
-         reading the link, so this is where it is made. #}
-      <form action="/item/{{ note.id|slug }}/ideas" method="post" class="field">
-        <label for="field-idea">{{ t('Add to an idea') }}</label>
-        <span class="row">
-          <select id="field-idea" name="idea">
-            {% for id, title in idea_choices %}<option value="{{ id }}">{{ title or t('Untitled idea') }}</option>{% endfor %}
-          </select>
-          <button type="submit">{{ t('Add') }}</button>
-        </span>
-      </form>
-      {% endif %}
-      <form action="/item/{{ note.id|slug }}/reprocess" method="post" class="row"
-            data-ask="{{ t('Re-run the analysis? The title, summary, points, category, tags and mentions are replaced by the new answer.') }}">
-        {# It asks because it is the one action here with no undo: a finished
-           analysis writes a whole new note over this one. Delete is asked
-           too, and that one at least leaves a copy in trash/. #}
-        <select name="engine" aria-label="{{ t('Reprocess') }}">
-          <option value="">—</option>
-          <option value="opencode">opencode</option>
-          <option value="ollama">ollama</option>
-          <option value="api">api</option>
-        </select>
-        <button type="submit"
-                onclick="return confirm(this.form.dataset.ask)">{{ t('Reprocess') }}</button>
-      </form>
-      {% endif %}
       <form action="/item/{{ note.id|slug }}/delete" method="post" class="row"
             data-ask="{{ t('Move this note to the trash folder?') }}">
         {# The question is read from the attribute, so no quoting of a
@@ -345,8 +289,5 @@
                 onclick="return confirm(this.form.dataset.ask)">{{ t('Delete') }}</button>
       </form>
     </div>
-    <datalist id="known">
-      {% for name in categories %}<option value="{{ name }}">{% endfor %}
-    </datalist>
   </article>
 {% endblock %}

@@ -345,7 +345,6 @@ def test_an_empty_category_says_so(tmp_path):
 def test_pages_have_their_own_titles(tmp_path):
     _, client = app_with(tmp_path, note("n1", "Mi <titulo>"))
     assert "<title>oknowledge</title>" in client.get("/").text
-    assert "<title>Mi &lt;titulo&gt; - oknowledge</title>" in client.get("/item/n1").text
     assert "<title>zz - oknowledge</title>" in client.get("/search?q=zz").text
 
 
@@ -385,8 +384,8 @@ def test_titles_and_summaries_are_direction_neutral(tmp_path):
     _, client = app_with(tmp_path, note("n1", "שלום", summary="مرحبا"))
     home = client.get("/").text
     assert "שלום" in inside(home, '<span class="title" dir="auto">', "</span>")
-    item = client.get("/item/n1").text
-    assert '<h1 dir="auto">שלום' in item and '<div class="summary" dir="auto">' in item
+    item = client.get("/panel/n1").text
+    assert '<h1 dir="auto">שלום' in item and '<p class="body" dir="auto">مرحبا' in item
     found = hits(client, "שלום")
     assert '<span class="title" dir="auto">שלום' in found
 

@@ -1,1 +1,127 @@
-<div class="detail-scroll"><h1 dir="auto">{{ note.title }}</h1></div>
+<div class="detail-scroll" data-panel="{{ panel_id }}">
+{% if note is none %}
+  <h1 dir="auto">{{ pending_url }}</h1>
+  <p class="reading-ai">{{ t('The AI is reading the link…') }}</p>
+  <div class="skeleton"><i></i><i></i><i></i></div>
+{% else %}
+  <div class="meta-row">
+    <details class="menu chip-menu">
+      <summary class="chip"><i class="dot" style="background: {{ note.category|dot }}"></i>{{ note.category or t('No category') }} ▾</summary>
+      <div class="menu-list">
+        <form method="post" action="/item/{{ note.id|slug }}/category" data-inline>
+          {% for name in categories %}
+            <button name="category" value="{{ name }}" class="{% if name == note.category %}on{% endif %}"><i class="dot" style="background: {{ name|dot }}"></i>{{ name }}</button>
+          {% endfor %}
+        </form>
+        <form method="post" action="/item/{{ note.id|slug }}/category" data-inline class="menu-new">
+          <input name="category" required autocomplete="off" aria-label="{{ t('New category') }}" placeholder="{{ t('New category') }}">
+        </form>
+      </div>
+    </details>
+    <span class="where mono">{{ note.source }} · {{ note.saved|short_date(t) }}</span>
+    {% if note.status != 'ok' %}<span class="warn">{{ t('Incomplete') }}</span>{% endif %}
+    {% include "engine-badge.html" %}
+  </div>
+  <h1 dir="auto">{{ note.title }}</h1>
+  {% if reading %}
+    <p class="reading-ai">{{ t('The AI is reading the link…') }}</p>
+    <div class="skeleton"><i></i><i></i><i></i></div>
+  {% else %}
+    <p class="reading mono">{{ t('%1 min read of the summary', minutes) }}</p>
+    {% for para in note.summary|paragraphs %}<p class="body" dir="auto">{{ para }}</p>{% endfor %}
+    {% if note.points %}
+      <section class="points">
+        <p class="label">{{ t('IN THREE LINES') }}</p>
+        <ul>{% for point in note.points %}<li dir="auto">{{ point }}</li>{% endfor %}</ul>
+      </section>
+    {% endif %}
+    {% if note.mentions %}
+      <h2>{{ t('Mentions') }}</h2>
+      <ul class="mentions">
+        {% for m in note.mentions %}
+          <li>
+            {# The URL comes from the note body, which is hand-editable: only
+               http(s) is linked, anything else is shown as text. #}
+            {% if m.url is web_url %}<a href="{{ m.url }}" target="_blank" rel="noreferrer">{{ m.name }}</a>
+            {# Not linked, not hidden either: the URL beside the name, as text,
+               so the user can see what it is and repair it. #}
+            {% else %}<span>{{ m.name }}</span> <span class="mention-url">{{ m.url }}</span>{% endif %}
+            {% if m.url is search_link %}<span class="mention-search">{{ t('search') }}</span>{% endif %}
+            <form action="/item/{{ note.id|slug }}/mentions/delete" method="post" data-inline>
+              <input type="hidden" name="name" value="{{ m.name }}">
+              <button type="submit" aria-label="{{ t('Remove') }}">×</button>
+            </form>
+          </li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+    {% if note.body %}
+      <details>
+        <summary>{{ t('Original content') }}</summary>
+        <pre>{{ note.body }}</pre>
+      </details>
+    {% endif %}
+  {% endif %}
+  {% if note.collections %}
+    <div class="chips">
+      {% for name in note.collections %}
+        <form method="post" action="/item/{{ note.id|slug }}/collections" data-inline class="chip">
+          <span>{{ name }}</span><button name="drop" value="{{ name }}" aria-label="{{ t('Leave the collection %1', name) }}" title="{{ t('Leave the collection %1', name) }}">✕</button>
+        </form>
+      {% endfor %}
+    </div>
+  {% endif %}
+  <div class="chips tags">
+    {% for tag in note.tags %}
+      <form method="post" action="/item/{{ note.id|slug }}/tags" data-inline class="chip">
+        <a href="/?tag={{ tag|urlencode }}" data-nav>#{{ tag }}</a>
+        <input type="hidden" name="tags" value="{{ note.tags|reject('equalto', tag)|join(' ') }}">
+        <button aria-label="{{ t('Remove the tag %1', tag) }}" title="{{ t('Remove the tag %1', tag) }}">✕</button>
+      </form>
+    {% endfor %}
+    <form method="post" action="/item/{{ note.id|slug }}/tags" data-inline class="tag-new">
+      <input type="hidden" name="tags" value="{{ note.tags|join(' ') }}">
+      <input name="add" autocomplete="off" aria-label="{{ t('+ tag') }}" placeholder="{{ t('+ tag') }}">
+    </form>
+  </div>
+{% endif %}
+</div>
+{% if note is not none %}
+<div class="detail-bar">
+  {% if note.url is web_url %}<a class="btn primary" href="{{ note.url }}" target="_blank" rel="noreferrer">{{ t('Open original') }} ↵</a>{% endif %}
+  {% if idea_choices %}
+    <details class="menu up">
+      <summary class="btn">{{ t('To an idea') }} ▾</summary>
+      <form class="menu-list" method="post" action="/item/{{ note.id|slug }}/ideas" data-inline>
+        {% for id, title in idea_choices %}<button name="idea" value="{{ id }}">{{ title or t('Untitled idea') }}</button>{% endfor %}
+      </form>
+    </details>
+  {% endif %}
+  <form method="post" action="/item/{{ note.id|slug }}/mark" data-inline class="push">
+    <input type="hidden" name="back" value="{{ back }}">
+    <button name="mark" value="{{ '' if note.mark == '⭐' else '⭐' }}" class="btn icon star{% if note.mark == '⭐' %} on{% endif %}"
+            aria-pressed="{{ 'true' if note.mark == '⭐' else 'false' }}" aria-label="{{ t('Favorite') }}" title="{{ t('Favorite') }}">★</button>
+  </form>
+  <details class="menu up more">
+    <summary class="btn icon" aria-label="{{ t('More') }}" title="{{ t('More') }}">⋯</summary>
+    <div class="menu-list">
+      <form method="post" action="/item/{{ note.id|slug }}/mark" data-inline class="marks">
+        <input type="hidden" name="back" value="{{ back }}">
+        {% for mark in marks if mark != '⭐' %}<button name="mark" value="{{ mark }}" class="{% if note.mark == mark %}on{% endif %}" title="{{ mark }}">{{ mark }}</button>{% endfor %}
+        <button name="mark" value="" class="no-mark">{{ t('No mark') }}</button>
+      </form>
+      <form method="post" action="/item/{{ note.id|slug }}/collections" data-inline class="menu-new">
+        <input name="add" list="known-collections" required autocomplete="off" aria-label="{{ t('Add to a collection') }}" placeholder="{{ t('Add to a collection') }}">
+        <datalist id="known-collections">{% for name in collections %}<option value="{{ name }}">{% endfor %}</datalist>
+      </form>
+      <form method="post" action="/item/{{ note.id|slug }}/reprocess"
+            data-ask="{{ t('Re-run the analysis? The title, summary, points, category, tags and mentions are replaced by the new answer.') }}">
+        <button onclick="return confirm(this.form.dataset.ask)">{{ t('Reprocess with AI') }}</button>
+      </form>
+      <form method="post" action="/item/{{ note.id|slug }}/delete" data-ask="{{ t('Move this note to the trash folder?') }}">
+        <button class="danger" onclick="return confirm(this.form.dataset.ask)">{{ t('Delete') }}</button>
+      </form>
+    </div>
+  </details>
+</div>
+{% endif %}

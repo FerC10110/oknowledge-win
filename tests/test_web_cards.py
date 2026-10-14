@@ -208,12 +208,12 @@ def test_the_popup_shows_it_too(with_cover):
 
 
 def test_the_cover_is_above_the_text_and_below_the_title(with_cover):
-    body = with_cover.get("/item/a1").text
+    body = with_cover.get("/embed/a1").text
     assert body.index("<h1") < body.index('src="/cover/a1"') < body.index('class="summary"')
 
 
 def test_a_note_with_no_cover_draws_no_frame(with_cover):
-    for path in ("/item/b2", "/embed/b2"):
+    for path in ("/panel/b2", "/embed/b2"):
         assert "/cover/" not in with_cover.get(path).text
 
 
@@ -225,49 +225,15 @@ def test_the_picture_the_note_points_at_is_really_served(with_cover):
 
 # --- what the note page lets you change --------------------------------------
 
-def test_every_field_says_what_it_is_above_itself(client):
-    """Three bare boxes in a column said nothing about which was which. An
-    aria-label is not an answer: it is not on the screen."""
-    body = client.get("/item/a1").text
-    labelled = dict(re.findall(r'<label for="(field-\w+)">([^<]+)</label>', body))
-
-    assert labelled == {"field-category": "Move to category",
-                        "field-tags": "Edit tags",
-                        "field-collection": "Add to a collection"}
-    for field in labelled:
-        assert f'id="{field}"' in body          # the label points at something
-
-
-def test_saving_is_a_drawn_disk_with_a_name_for_what_cannot_see_it(client):
-    """A disk instead of the word, as asked. Drawn and not typed, for the same
-    reason the re-analyse arrow is: 💾 is a glyph the page would be hoping
-    some font on the machine draws, and on this one the other emoji did not.
-
-    The word stays in title and aria-label: a button whose whole content is a
-    picture has no accessible name.
-    """
-    body = client.get("/item/a1").text
-    saves = re.findall(r'<button type="submit" title="Save"\s+aria-label="Save">'
-                       r'\s*<svg class="icon"', body)
-
-    assert len(saves) == 2                      # the category and the tags
-    assert "Save</button>" not in body          # and nowhere is it still a word
-    # The colour of the text around it, so it reads in either theme and
-    # nothing here depends on telling two fixed colours apart.
-    assert body.count("currentColor") >= 2 and "#" not in re.search(
-        r"<svg class=\"icon\".*?</svg>", body, re.S).group(0)
-    # The mark picker is the one place emoji are the point: the user picks
-    # one, and what it looks like is theirs to judge.
-    actions = re.sub(r'<details class="mark">.*?</details>', "", body, flags=re.S)
-    assert not [ch for ch in actions if ord(ch) > 0xFFFF]
-
-
 def test_joining_a_collection_is_not_drawn_as_saving(client):
     """Two actions that differ should not look the same: that button does not
     save the box beside it, it files the note somewhere."""
-    body = client.get("/item/a1").text
+    body = client.get("/panel/a1").text
+    more = re.search(r'<details class="menu up more">.*?</details>', body, re.S).group(0)
+    join = re.search(r'<form[^>]*action="/item/a1/collections".*?</form>', more, re.S).group(0)
 
-    assert "<button type=\"submit\">Add</button>" in body
+    assert 'name="add"' in join
+    assert "<svg" not in join and "💾" not in join
 
 
 # --- which engine analysed the note ------------------------------------------
@@ -276,19 +242,19 @@ def test_joining_a_collection_is_not_drawn_as_saving(client):
 def test_a_note_nobody_analysed_draws_no_engine_icon(client):
     """1182 of 1184 notes are in that state. An icon meaning "I don't know",
     repeated a thousand times, is noise and not information."""
-    assert "icon-engine" not in client.get("/item/a1").text
+    assert "icon-engine" not in client.get("/panel/a1").text
 
 
 def test_the_card_draws_the_engine_that_analysed_it(tmp_path):
     _, client = build(tmp_path, note("a1", engine="opencode",
                                      model="opencode/ling-3.1-flash-free"))
 
-    assert "icon-engine opencode" in client.get("/item/a1").text
+    assert "icon-engine opencode" in client.get("/panel/a1").text
 
 
 def test_the_model_is_named_where_the_mouse_finds_it(tmp_path):
     _, client = build(tmp_path, note("a1", engine="ollama", model="qwen2.5:7b"))
-    body = client.get("/item/a1").text
+    body = client.get("/panel/a1").text
 
     assert 'title="ollama · qwen2.5:7b"' in body
     assert 'aria-label="ollama · qwen2.5:7b"' in body
@@ -299,13 +265,13 @@ def test_an_engine_with_no_model_names_only_itself(tmp_path):
     separator is worse than no separator."""
     _, client = build(tmp_path, note("a1", engine="opencode"))
 
-    assert 'title="opencode"' in client.get("/item/a1").text
+    assert 'title="opencode"' in client.get("/panel/a1").text
 
 
 def test_an_engine_nobody_has_an_icon_for_draws_nothing(tmp_path):
     """`engine: pepe` typed by hand must not reach a template as a file name."""
     _, client = build(tmp_path, note("a1", engine="../../etc/passwd", model="m"))
-    body = client.get("/item/a1").text
+    body = client.get("/panel/a1").text
 
     assert "icon-engine" not in body
     assert "passwd" not in body
@@ -314,7 +280,7 @@ def test_an_engine_nobody_has_an_icon_for_draws_nothing(tmp_path):
 def test_the_engine_icon_follows_the_theme(tmp_path):
     """The lesson of the floppy disk: a fixed colour breaks in the other theme."""
     _, client = build(tmp_path, note("a1", engine="api", model="gpt-5"))
-    body = client.get("/item/a1").text
+    body = client.get("/panel/a1").text
     drawn = body[body.index("icon-engine"):body.index("</svg>")]
 
     assert "currentColor" in drawn
@@ -324,4 +290,4 @@ def test_the_engine_icon_follows_the_theme(tmp_path):
 def test_the_note_page_names_the_engine_too(tmp_path):
     _, client = build(tmp_path, note("a1", engine="opencode", model="m"))
 
-    assert "icon-engine" in client.get("/item/a1").text
+    assert "icon-engine" in client.get("/panel/a1").text

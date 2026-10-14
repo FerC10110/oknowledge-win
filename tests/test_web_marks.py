@@ -156,8 +156,8 @@ def test_the_picker_sends_you_back_where_you_were(client):
 
 def test_tapping_the_mark_you_have_takes_it_off(client):
     client.post(f"/item/{LINK}/mark", data={"mark": "⭐", "back": "/"})
-    body = client.get(f"/item/{LINK}").text
-    assert re.search(r'name="mark" value=""[^>]*aria-pressed="true"[^>]*>⭐', body)
+    body = client.get(f"/panel/{LINK}").text
+    assert re.search(r'name="mark" value=""[^>]*aria-pressed="true"[^>]*>★', body)
 
 
 def test_the_picker_is_not_inside_the_popup_link(client):

@@ -515,8 +515,9 @@ def test_every_confirmation_in_the_note_page_still_has_its_translation():
     """In i18n the key IS the English text, so changing the reprocess warning
     changes the key. The Spanish entry has to move with it, or a Spanish
     interface shows an English warning about what it is going to overwrite."""
-    template = (Path(web.__file__).parent / "templates" / "item.html").read_text(
-        encoding="utf-8")
+    # The note page of a card or an idea, and the panel of a link.
+    template = "".join((Path(web.__file__).parent / "templates" / name).read_text(
+        encoding="utf-8") for name in ("item.html", "panel.html"))
 
     asked = re.findall(r"data-ask=\"\{\{ t\('(.+?)'\) \}\}\"", template)
 

@@ -63,7 +63,8 @@ from .batch import Batch
 from .batch import run as run_batch
 from .import_file import BadUpload, drop, stage, staged, text_of
 from .library_view import (
-    CHUNK, View, choose, dot, paragraphs, saves, short_date, side_groups, tint,
+    CHUNK, View, choose, dot, paragraphs, reading_minutes, saves, short_date,
+    side_groups, tint,
 )
 from .index import Library, read_full, terms
 from .markup import blocks, split_suggestions
@@ -764,11 +765,21 @@ def create_app(cfg: Config) -> FastAPI:
                 "chosen": notes}
 
     def panel_context(link_id: str, view: View, working: dict[str, str]) -> dict | None:
-        """Task 5 fills this in; until then the panel shows the title."""
+        """What the panel of one link shows, or None when there is no such
+        link -- neither a note nor one being analysed right now."""
         entry = library.entry(link_id)
         if entry is None:
-            return None
-        return {"note": entry.note}
+            url = working.get(link_id)
+            return None if url is None else {"note": None, "panel_id": link_id,
+                                             "pending_url": url, "reading": True}
+        note = read_full(entry)
+        ideas.refresh()
+        return {"note": note, "panel_id": link_id, "reading": link_id in working,
+                "minutes": reading_minutes(note.summary),
+                # Your ideas, the dropped ones left out: the relation is
+                # noticed while reading the link, so this is where it is made.
+                "idea_choices": [(n.id, n.title) for n in ideas.notes if n.state != "dropped"],
+                "back": view.url(sel=link_id)}
 
     @app.get("/", response_class=HTMLResponse)
     def home(request: Request):
@@ -783,6 +794,16 @@ def create_app(cfg: Config) -> FastAPI:
                     default_content=current["cfg"].default_content,
                     save_prefixes=" ".join(sorted(cards.PREFIXES)),
                     panel=panel is not None, **shown, **(panel or {}))
+
+    @app.get("/panel/{link_id}", response_class=HTMLResponse)
+    def detail(request: Request, link_id: str):
+        """The right column alone, for the list to swap in without a reload."""
+        library.refresh()
+        view = View.from_query(request.query_params)
+        found = panel_context(link_id, view, analyzing())
+        if found is None:
+            raise HTTPException(status_code=404, detail="no such link")
+        return page(request, "panel.html", **found)
 
     @app.get("/lista", response_class=HTMLResponse)
     def list_column(request: Request, desde: str = ""):
@@ -861,6 +882,11 @@ def create_app(cfg: Config) -> FastAPI:
         entry, where = anywhere(link_id)
         if entry is None:
             raise HTTPException(status_code=404, detail="no such link")
+        if where.name == "links":
+            # One screen for the library now: the note opens in its panel.
+            params = request.query_params
+            return see_other("/", sel=link_id, notice=params.get("notice"),
+                             n=params.get("n"), m=params.get("m"))
         # The index holds list views without bodies; this note is read fresh.
         note = read_full(entry)
         extra = {}
@@ -891,13 +917,9 @@ def create_app(cfg: Config) -> FastAPI:
             running, failed = rewriting.of(link_id)
             extra.update(rewriting="describe" in running,
                          rewrite_failed=failed.get("describe", ""))
-        elif where.name == "links":
-            ideas.refresh()
-            extra["idea_choices"] = [(n.id, n.title) for n in ideas.notes
-                                     if n.state != "dropped"]
         return page(request, "item.html", note=note,
                     card=where.name == "ocio", idea=where.name == "ideas",
-                    link=where.name == "links", section=where.name,
+                    section=where.name,
                     words=STATE_WORDS.get(entry.note.type, STATE_WORDS["movie"]),
                     STATES=states_for(entry.note.type), **extra)
 
@@ -1044,11 +1066,14 @@ def create_app(cfg: Config) -> FastAPI:
         return see_other(item_url(link_id), notice=result.notice)
 
     @app.post("/item/{link_id}/tags")
-    def retag(link_id: str, tags: str = Form("")):
+    def retag(link_id: str, tags: str = Form(""), add: str = Form("")):
         # A card's tags are the catalog's genres, and correcting them by
         # hand is part of the design: the model never writes over them.
         shelves, which = held_by(link_id)
-        wanted = [word for word in tags.replace(",", " ").split() if word]
+        # `add` is the panel's "+ tag" box: its words go after the ones
+        # the note has, and a word typed twice is kept once.
+        wanted = list(dict.fromkeys(
+            word for word in (tags + " " + add).replace(",", " ").split() if word))
         result = edit(link_id, lambda cfg, language: update_note(
             cfg, link_id, language, shelf=which, tags=wanted),
             "saved", "indexes-stale", shelves=shelves)
