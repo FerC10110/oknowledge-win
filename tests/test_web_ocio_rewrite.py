@@ -69,7 +69,7 @@ def client(cfg):
 def test_a_failed_rewrite_shows_its_reason_on_the_card_page(client, model):
     model[0][T2] = "every engine failed: opencode: 429"
     client.post(f"/item/{T2}/describe")
-    page = client.get(f"/item/{T2}").text
+    page = client.get(f"/panel/{T2}").text
     assert "Last time it failed: every engine failed: opencode: 429" in page
 
 
@@ -78,7 +78,7 @@ def test_a_rewrite_that_works_clears_the_failure(client, model):
     client.post(f"/item/{T2}/describe")
     model[0][T2] = None
     client.post(f"/item/{T2}/describe")
-    assert "Last time it failed" not in client.get(f"/item/{T2}").text
+    assert "Last time it failed" not in client.get(f"/panel/{T2}").text
     assert "could not be rewritten" not in client.get("/ocio").text
 
 
@@ -88,7 +88,7 @@ def test_a_running_rewrite_says_so_and_is_not_asked_twice(cfg, model):
     client = TestClient(app)
     client.post(f"/item/{T2}/describe")
     assert model[1] == []
-    assert "rewriting…" in client.get(f"/item/{T2}").text
+    assert "Rewriting…" in client.get(f"/panel/{T2}").text
     assert f'data-working="{T2}"' in client.get("/ocio").text
 
 
@@ -113,6 +113,6 @@ def test_one_failure_does_not_stop_the_rest(client, model):
     model[0][T2] = "boom"
     client.post("/ocio/reescribir")
     assert sorted(model[1]) == [T2, VINLAND]
-    assert "Last time it failed: boom" in client.get(f"/item/{T2}").text
+    assert "Last time it failed: boom" in client.get(f"/panel/{T2}").text
 
 

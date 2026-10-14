@@ -141,7 +141,9 @@ def idea_filters(notes, view: IdeaView) -> list[dict]:
 KIND_HUES = {"movie": 300, "series": 200, "anime": 20, "book": 60}
 """Each kind's hue for the poster with no cover (Ocio.dc.html)."""
 KIND_NAMES = {"movie": "Movies", "series": "Series", "anime": "Anime", "book": "Books"}
-KIND_ONE = {"movie": "Movie", "series": "Series", "anime": "Anime", "book": "Book"}
+# One card's kind. "TV series" and not "Series": English says one series and
+# two series alike, so that key would translate the singular as the plural.
+KIND_ONE = {"movie": "Movie", "series": "TV series", "anime": "Anime", "book": "Book"}
 _WATCH = {"pending": "To watch", "doing": "Watching", "done": "Watched"}
 _READ = {"pending": "To read", "doing": "Reading", "done": "Read"}
 CARD_WORDS = {"movie": _WATCH, "series": _WATCH, "anime": _WATCH, "book": _READ}

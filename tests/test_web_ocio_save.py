@@ -163,12 +163,12 @@ def test_the_second_save_does_not_wipe_your_score(client, fake_catalog, cfg):
 
 
 def test_the_card_opens_at_its_own_page(client, fake_catalog):
-    """El 303 de arriba apunta a /item/{id}, y esa página busca en la
-    biblioteca de links: sin esto, guardar una ficha termina en un 404."""
+    """El 303 de arriba apunta a /item/{id}, que manda la ficha a su panel
+    en Ocio: sin esto, guardar una ficha termina en un 404."""
     fake_catalog(card=terminator_card())
     answer = client.post("/ocio/guardar", data=SAVE)
     assert answer.status_code == 200
-    assert "The Terminator" in answer.text
+    assert f'data-panel="{link_id(IMDB_URL)}"' in answer.text
 
 
 def test_the_poster_is_served_from_the_shelf_too(client, fake_catalog, cfg):

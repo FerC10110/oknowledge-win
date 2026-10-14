@@ -750,6 +750,7 @@ def update_note(cfg: Config, link_id: str, language: str,
                 state: str | None = None, score: str | int | None = None,
                 my_note: str | None = None,
                 mark: str | None = None,
+                kind: str | None = None,
                 shelf: Shelf | None = None) -> Path | None:
     """Change one of our notes' classification and rebuild the indexes.
 
@@ -776,6 +777,8 @@ def update_note(cfg: Config, link_id: str, language: str,
     path, note = found
     if category is not None:
         note.category = _checked_category(category)
+    if kind is not None:
+        note.type = kind
     if tags is not None:
         note.tags = normalize_tags(tags)
     if mentions is not None:

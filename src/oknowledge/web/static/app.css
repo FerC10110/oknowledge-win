@@ -363,3 +363,52 @@ a.more { display: block; text-align: center; margin: 16px 0; color: var(--t5); f
 .list-head .unrewritten em { font-style: normal; color: var(--acc); padding-right: 6px; }
 .list-head .sort > summary { height: auto; padding: 4px 10px; font-size: 12.5px; }
 .list-head .sort .menu-list { right: 0; left: auto; min-width: 170px; }
+
+/* A card in Ocio's panel (spec §3). */
+.card-top { display: flex; align-items: center; gap: 12px; padding: 16px 24px;
+  border-bottom: 1px solid var(--b-div); }
+.card-top details.more { margin-left: auto; }
+.stars.big button { font-size: 19px; }
+.stars.big svg { width: 19px; height: 19px; }
+.submenu > summary { list-style: none; padding: 8px 10px; border-radius: 6px; cursor: pointer;
+  font-size: 13px; color: var(--t2); }
+.submenu > summary:hover { background: var(--s5); }
+.submenu form { display: flex; flex-direction: column; padding-left: 10px; }
+.detail-scroll.card { padding: 22px 24px; gap: 18px; }
+/* style.css still styles the old library's .card tiles (a fixed 21rem box
+   with a border, its tags clipped to one line). This .card is a column. */
+.detail-scroll.card { height: auto; background: none; border: 0; border-radius: 0;
+  transition: none; overflow-x: hidden; }
+.detail-scroll.card .body { display: block; overflow: visible; }
+.detail-scroll.card .tags { max-height: none; overflow: visible; }
+.detail-scroll.card .tags span { color: inherit; font-size: inherit; margin: 0; }
+.card-head { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 16px; }
+.card-head .art { display: block; aspect-ratio: 2 / 3; border-radius: 8px; overflow: hidden; }
+.card-head .art img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.card-facts { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.card-facts .kind-line { margin: 0; font-size: 12px; color: var(--t5); }
+.card-facts h1 { font-size: 24px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.2; }
+.card-facts .facts { margin: 0; }
+.card-facts .facts .chip { background: var(--s4); color: var(--t2); font-size: 12.5px; cursor: default; }
+.card-facts .btn.primary { margin-top: 4px; height: auto; padding: 7px 12px; font-size: 13px; }
+/* Ocio.dc.html: one row, the words and a small button beside them. */
+.unrewritten-box { background: var(--s2); border-radius: 10px; padding: 10px 12px;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font-size: 13px; color: var(--t2); }
+.unrewritten-box > p:first-child { flex: 1; }
+.unrewritten-box form { margin: 0; }
+.unrewritten-box .btn.primary { height: auto; padding: 5px 10px; border-radius: 7px; font-weight: 400;
+  background: var(--s7); border-color: var(--s7); color: var(--t1); }
+.unrewritten-box .failed { flex-basis: 100%; }
+.unrewritten-box p, .detail .working { margin: 0; }
+.detail .working { color: var(--acc); font-size: 13px; }
+.detail .failed { margin: 0; color: var(--danger); font-size: 13px; }
+.about, .your-note { display: flex; flex-direction: column; gap: 6px; }
+.about .label, .your-note .label { margin: 0; font-size: 11px; letter-spacing: .08em; color: var(--t6); }
+.about .body { margin: 0; font-size: 15px; line-height: 1.6; color: var(--t2); }
+.about .body + .body { margin-top: 4px; }
+.your-note .label { display: flex; justify-content: space-between; }
+.your-note .save-state { letter-spacing: 0; }
+.your-note form { display: flex; flex-direction: column; gap: 8px; margin: 0; }
+.your-note textarea { resize: vertical; min-height: 96px; background: var(--s2);
+  border: 1px solid var(--b-input); border-radius: 10px; padding: 12px 14px; color: var(--t1);
+  font: inherit; font-size: 14px; line-height: 1.55; outline: 0; }

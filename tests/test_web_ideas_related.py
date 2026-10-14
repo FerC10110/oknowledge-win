@@ -85,7 +85,9 @@ def test_no_ideas_no_picker(client, link):
 
 def test_neither_a_card_nor_an_idea_offers_the_picker(cfg, client, card):
     idea = put(cfg)
-    assert f'/item/{CARD}/ideas"' not in client.get(f"/item/{CARD}").text
+    card_panel = client.get(f"/panel/{CARD}")
+    assert card_panel.status_code == 200
+    assert f'/item/{CARD}/ideas"' not in card_panel.text
     assert f'/item/{idea.id}/ideas"' not in client.get(f"/item/{idea.id}").text
 
 

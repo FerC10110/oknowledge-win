@@ -504,9 +504,9 @@ def test_every_confirmation_in_the_note_page_still_has_its_translation():
     """In i18n the key IS the English text, so changing the reprocess warning
     changes the key. The Spanish entry has to move with it, or a Spanish
     interface shows an English warning about what it is going to overwrite."""
-    # The note page of a card or an idea, and the panel of a link.
+    # The panel of a card in Ocio, and the panel of a link.
     template = "".join((Path(web.__file__).parent / "templates" / name).read_text(
-        encoding="utf-8") for name in ("item.html", "panel.html"))
+        encoding="utf-8") for name in ("card-panel.html", "panel.html"))
 
     asked = re.findall(r"data-ask=\"\{\{ t\('(.+?)'\) \}\}\"", template)
 
@@ -524,7 +524,7 @@ def test_a_javascript_url_in_a_mention_is_text_not_a_live_link(tmp_path):
                          mentions=[Mention(name="Sneaky", url="javascript:alert(1)")]),
                "es")
     client = TestClient(create_app(cfg))
-    for path in ("/item/j1",):
+    for path in ("/item/j1", "/panel/j1"):
         page = client.get(path).text
         assert "Sneaky" in page, path
         assert 'href="javascript:' not in page, path
@@ -538,7 +538,7 @@ def test_a_rejected_mention_url_is_still_shown_as_text(tmp_path, bad):
     write_note(cfg, note("j1", "Uno", "Redes", [], "Resumen.", type="youtube",
                          mentions=[Mention(name="Foo", url=bad)]), "es")
     client = TestClient(create_app(cfg))
-    for path in ("/item/j1",):
+    for path in ("/item/j1", "/panel/j1"):
         page = client.get(path).text
         assert "Foo" in page, path
         assert bad in page.replace("&#39;", "'"), path

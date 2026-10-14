@@ -53,7 +53,7 @@ from ..models_cache import remember as remember_models
 from ..queue import Locked, Queue
 from ..trace import trace_run
 from ..urls import is_search_url, link_id, normalize
-from ..vault import ACTIONS, IDEA_STATES, MAX_RELATED, states_for
+from ..vault import ACTIONS, IDEA_STATES, MAX_RELATED
 from ..vault import (
     BadCategory, IndexesStale, ProtectedNote, clean_category, delete_note,
     find_note, note_path, rebuild_indexes, rename_category, update_note,
@@ -69,7 +69,8 @@ from .library_view import (
 )
 from .index import Library, read_full, terms
 from .markup import section_cards
-from .shelf_view import (AI_BUTTONS, CARD_DOTS, IDEA_DOTS, IDEA_WORDS, KIND_ONE, SECTION_NAMES,
+from .shelf_view import (AI_BUTTONS, CARD_DOTS, IDEA_DOTS, IDEA_WORDS, KIND_NAMES, KIND_ONE,
+                         SECTION_NAMES,
                          SORTS, TAB_OF, TABS, WORKING, CardView, IdeaView, card_filters,
                          catalog_name, choose_cards, choose_ideas, excerpt, idea_filters,
                          idea_url, poster_fill, scope_of, tab_of, words_for)
@@ -98,6 +99,7 @@ NOTICES = {
                     'characters, no dots at either end, no control characters, '
                     'and none of \\ / : * ? " < > |',
     "bad-mark": "That is not an emoji the mark can be.",
+    "bad-kind": "That is not a type a card can have.",
     "renamed-one": "1 note moved.",
     "renamed": "%1 notes moved.",
     "merged-one": "1 note merged into a category that was already there.",
@@ -372,21 +374,6 @@ def preview_of(scan, known: set[str]) -> dict:
     }
 
 
-IDEA_STATE_WORDS = {"pending": "seed", "doing": "under way",
-                    "done": "done", "dropped": "dropped"}
-"""An idea's four states, in its own words: an idea is not watched or read,
-it is had, worked on, made, or let go."""
-
-STATE_WORDS = {
-    # The design's table. A book is read, not watched, and four words per
-    # kind is cheaper than pretending one word fits both.
-    "movie": {"pending": "to watch", "doing": "watching", "done": "watched"},
-    "series": {"pending": "to watch", "doing": "watching", "done": "watched"},
-    "anime": {"pending": "to watch", "doing": "watching", "done": "watched"},
-    "book": {"pending": "to read", "doing": "reading", "done": "read"},
-    "idea": IDEA_STATE_WORDS,
-}
-
 # What each step of the activity page did, for a person. The pipeline's own
 # names (find, extract, analyze...) are its vocabulary, not the reader's.
 STEP_WORDS = {
@@ -440,7 +427,7 @@ def see_other(path: str, **params) -> RedirectResponse:
 GONE = "That is not there any more."
 """What a script is told when the note it was editing has gone."""
 
-FAILURES = {"bad-category": 400, "bad-mark": 400, "bad-collection": 400,
+FAILURES = {"bad-category": 400, "bad-mark": 400, "bad-kind": 400, "bad-collection": 400,
             "title-empty": 400, "busy": 409, "idea-full": 409,
             "cannot-search": 409, "no-such-idea": 404, "write-failed": 500}
 """The notices that mean nothing was written, and the status each is
@@ -825,6 +812,19 @@ def create_app(cfg: Config) -> FastAPI:
                 "idea_choices": [(n.id, n.title) for n in ideas.notes if n.state != "dropped"],
                 "back": view.url(sel=link_id)}
 
+    def card_context(card_id: str, view) -> dict | None:
+        """What a card's panel shows (spec §3), or None for no such card."""
+        shelf.refresh()
+        entry = shelf.entry(card_id)
+        if entry is None:
+            return None
+        note = read_full(entry)
+        running, failed = rewriting.of(card_id)
+        return {"note": note, "panel_id": card_id, "card": True,
+                "words": words_for(note.type), "rewriting": "describe" in running,
+                "rewrite_failed": failed.get("describe", ""), "back": view.url(sel=card_id),
+                "KIND_ONE": KIND_ONE, "KIND_NAMES": KIND_NAMES, "CARD_DOTS": CARD_DOTS}
+
     @app.get("/", response_class=HTMLResponse)
     def home(request: Request):
         library.refresh()
@@ -846,7 +846,10 @@ def create_app(cfg: Config) -> FastAPI:
         view = View.from_query(request.query_params)
         found = panel_context(link_id, view, analyzing())
         if found is None:
-            raise HTTPException(status_code=404, detail="no such link")
+            card = card_context(link_id, CardView.from_query(request.query_params))
+            if card is None:
+                raise HTTPException(status_code=404, detail="no such link")
+            return page(request, "card-panel.html", **card)
         return page(request, "panel.html", **found)
 
     @app.get("/lista", response_class=HTMLResponse)
@@ -919,7 +922,7 @@ def create_app(cfg: Config) -> FastAPI:
     def item(request: Request, link_id: str):
         library.refresh()
         if library.error is not None:
-            return page(request, "item.html")
+            return page(request, "notfound.html")
         entry, where = anywhere(link_id)
         if entry is None:
             raise HTTPException(status_code=404, detail="no such link")
@@ -932,18 +935,10 @@ def create_app(cfg: Config) -> FastAPI:
             params = request.query_params
             return see_other(idea_url(link_id), notice=params.get("notice"),
                              n=params.get("n"), m=params.get("m"))
-        # The index holds list views without bodies; this note is read fresh.
-        note = read_full(entry)
-        extra = {}
-        if where.name == "ocio":
-            running, failed = rewriting.of(link_id)
-            extra.update(rewriting="describe" in running,
-                         rewrite_failed=failed.get("describe", ""))
-        return page(request, "item.html", note=note,
-                    card=where.name == "ocio",
-                    section=where.name,
-                    words=STATE_WORDS.get(entry.note.type, STATE_WORDS["movie"]),
-                    STATES=states_for(entry.note.type), **extra)
+        # A card opens in Ocio's panel (spec §3).
+        params = request.query_params
+        return see_other("/ocio", sel=link_id, notice=params.get("notice"),
+                         n=params.get("n"), m=params.get("m"))
 
     @app.get("/cover/{link_id}")
     def cover(link_id: str):
@@ -1205,6 +1200,26 @@ def create_app(cfg: Config) -> FastAPI:
             raise HTTPException(status_code=404, detail="no such note")
         return to_card(result.notice)
 
+    @app.post("/item/{link_id}/kind")
+    def change_kind(request: Request, link_id: str, kind: str = Form("")):
+        """A card's type, and the category that goes with it, as when it was
+        made (spec §3, "Cambiar tipo"). A type nobody knows changes nothing."""
+        shelf.refresh()
+        if shelf.by_id(link_id) is None:
+            raise HTTPException(status_code=404, detail="no such card")
+        home = f"/ocio?sel={quote(link_id, safe='')}"
+        if kind not in cards.KINDS:
+            return answer(request, home, "bad-kind")
+
+        def retype(cfg, language):
+            names = cards.CATEGORIES.get(language, cards.CATEGORIES["en"])
+            return update_note(cfg, link_id, language, shelf=cfg.ocio, kind=kind,
+                               category=names[kind])
+        result = edit(link_id, retype, "saved", "indexes-stale", shelves=shelf)
+        if result.notice == MISSING:
+            raise HTTPException(status_code=404, detail="no such card")
+        return answer(request, home, result.notice)
+
     @app.post("/item/{link_id}/mentions/delete")
     def drop_mention(request: Request, link_id: str, name: str = Form("")):
         # No index names a mention, so update_note() does not rebuild them and
@@ -1216,7 +1231,7 @@ def create_app(cfg: Config) -> FastAPI:
         return answer(request, item_url(link_id), notice=result.notice)
 
     @app.post("/item/{link_id}/delete")
-    def remove(link_id: str):
+    def remove(request: Request, link_id: str):
         # Moves the file to <vault>/<folder>/trash/. The notice says so,
         # because "deleted" would be a lie and a worrying one. A card goes
         # to the same trash/ by the same route: the page draws the button
@@ -1231,9 +1246,9 @@ def create_app(cfg: Config) -> FastAPI:
         # whatever the indexes did: the item page would 404 on them now. A
         # refused delete leaves them on the note they still have.
         # An idea goes back to the ideas: the library would not show it.
-        home = "/ideas" if which.name == "ideas" else "/"
+        home = {"ideas": "/ideas", "ocio": "/ocio"}.get(which.name, "/")
         where = home if result.landed else item_url(link_id)
-        return see_other(where, notice=result.notice)
+        return answer(request, where, result.notice)
 
     @app.post("/item/{link_id}/reprocess")
     def reprocess(request: Request, background: BackgroundTasks, link_id: str,
@@ -1264,11 +1279,6 @@ def create_app(cfg: Config) -> FastAPI:
         # Three destinations and no fourth: the listing the card was on --
         # the library or the search results -- or else the note's own page,
         # which is where the button on that page sends you back to.
-        if request.headers.get("x-requested-with") == "redo":
-            # The card's own script asked, and it is staying on the page it is
-            # on: there is nothing to redirect it to and nothing to draw. A 204
-            # says exactly that, and leaves no browser behaviour to assume.
-            return Response(status_code=204)
         where = (return_url(back, category, tag, collection, when, q, page)
                  or item_url(link_id))
         return see_other(where, notice="queued")
@@ -1672,7 +1682,17 @@ def create_app(cfg: Config) -> FastAPI:
         a link just added whose entry does not exist yet. A `pending` entry
         nobody holds is owed work, not work: its run died, and calling it
         working would keep an open page's card spinning for ever.
+
+        A card is never in the queue: what works on it is a rewrite, and
+        that is what it speaks for.
         """
+        shelf.refresh()
+        if shelf.by_id(link_id) is not None:
+            running, failed = rewriting.of(link_id)
+            if "describe" in running:
+                return JSONResponse({"working": True, "status": "rewriting"})
+            return JSONResponse({"working": False,
+                                 "status": "failed" if failed.get("describe") else "ok"})
         q = Queue()
         try:
             entry = q.get(link_id)
@@ -1830,10 +1850,14 @@ def create_app(cfg: Config) -> FastAPI:
         than nothing: these arrive from a URL somebody can type."""
         view = CardView.from_query(request.query_params)
         shown = card_listing(view)
+        card = card_context(shown["current"], view) if shown["current"] else None
+        # One dict: both carry the kind tables, and a call cannot take a
+        # keyword twice.
         return page(request, "ocio-shelf.html", section="ocio", toast=True,
                     filters=card_filters(shelf.notes, view),
                     save_prefixes=" ".join(sorted(cards.PREFIXES)),
-                    unreadable_cards=shelf.unreadable, **shown)
+                    unreadable_cards=shelf.unreadable, panel=card is not None,
+                    **{**shown, **(card or {})})
 
     @app.get("/ocio/lista", response_class=HTMLResponse)
     def card_column(request: Request, desde: str = ""):

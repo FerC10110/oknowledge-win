@@ -134,20 +134,8 @@ def test_your_part_survives_what_the_model_writes(client, a_card_in_the_shelf, c
     assert back.summary == "Reescrita"
 
 
-def test_the_words_depend_on_what_it_is(client, a_book_in_the_shelf):
-    body = client.get(f"/item/{BOOK}").text
-    assert "to read" in body or "por leer" in body
-    assert "to watch" not in body and "por ver" not in body
-
-
-def test_a_film_is_watched_and_not_read(client, a_card_in_the_shelf):
-    body = client.get(f"/item/{CARD}").text
-    assert "to watch" in body or "por ver" in body
-    assert "to read" not in body and "por leer" not in body
-
-
 def test_a_link_has_no_stars(client, a_link_in_the_library):
-    body = client.get(f"/item/{LINK}").text
+    body = client.get(f"/panel/{LINK}").text
     assert 'action="/item/' in body          # sus propios botones siguen
     assert "/mine/score" not in body
 
@@ -187,14 +175,14 @@ def test_the_card_page_offers_nothing_that_answers_404(client, a_card_in_the_she
     reanaliza (no hay página que volver a leer: eso es reescribir el
     resumen) y no entra en una colección de links. Lo que no se puede
     hacer no se dibuja."""
-    body = client.get(f"/item/{CARD}").text
+    body = client.get(f"/panel/{CARD}").text
     assert f"/item/{CARD}/delete" in body and f"/item/{CARD}/tags" in body
     for path in ("category", "reprocess", "collections"):
         assert f"/item/{CARD}/{path}" not in body
 
 
 def test_a_link_still_offers_all_of_it(client, cfg, a_link_in_the_library):
-    body = client.get(f"/item/{LINK}").text
+    body = client.get(f"/panel/{LINK}").text
     for path in ("category", "reprocess", "collections", "tags", "delete"):
         assert f"/item/{LINK}/{path}" in body
 

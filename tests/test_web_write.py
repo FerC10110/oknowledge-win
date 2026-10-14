@@ -81,6 +81,8 @@ WRITE_ROUTES = [
     # Your mark on a note. A cross-site POST here would rewrite one of
     # your notes.
     ("/item/a1/mark", {"mark": "⭐"}),
+    # A card's type. A cross-site POST here would refile one of your cards.
+    ("/item/a1/kind", {"kind": "movie"}),
 ]
 
 

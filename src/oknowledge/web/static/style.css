@@ -47,15 +47,6 @@ main { max-width: var(--measure); margin: 0 auto; padding: 0 1rem 5rem; }
 .chip.small { font-size: 0.78rem; }
 .chip.on { border-color: var(--accent); color: var(--accent); }
 
-/* Collections: the user's own row. The chip holds a link and the small form
-   that leaves the collection, so it lays itself out. */
-.chips.mine .chip { display: inline-flex; align-items: center; gap: 0.4rem; }
-.chips.mine .chip a { color: inherit; text-decoration: none; }
-.chips.mine form { display: inline; }
-.chips.mine form button { border: 0; background: none; padding: 0; cursor: pointer;
-                          color: var(--dim); font: inherit; line-height: 1; }
-.chips.mine form button:hover { color: var(--fg); }
-
 /* The library is the one view that wants the whole screen: more cards at a
    glance is the point of it. Everything that is read rather than scanned --
    a note, the settings, the search hits -- keeps --measure. */
@@ -247,35 +238,6 @@ progress::-moz-progress-bar { background: var(--accent); }
 .batch-running .meta { margin-top: 0.6rem; }
 .batch-problem { margin-bottom: 1rem; }
 
-/* The glyph is the whole button, so it gets no border to compete with it: on a
-   card it sits under the summary, on a search hit it rides in the corner of the
-   row -- out of the way of a result the user is reading down. The emoji keeps
-   its own colours, which is why nothing here sets one. */
-.redo { margin: 0; }
-.redo button { background: none; border: 0; padding: 0.25rem; line-height: 0;
-               font-size: 1.25rem; color: var(--fg); border-radius: 8px; }
-.redo button:hover, .redo button:focus-visible { color: var(--fg); }
-.redo button:hover, .redo button:focus-visible { background: var(--line); }
-/* The glyph draws itself, so it needs no emoji font and no colour of its own. */
-.redo .icon { display: block; }
-
-/* While the link is being analysed. The spin is driven by what the server says
-   is still holding that link, not by a timer, so it stops when the work does. */
-@keyframes redo-spin { to { transform: rotate(1turn); } }
-.redo.working .icon { animation: redo-spin 1.1s linear infinite; }
-.redo.working button { cursor: default; }
-.redo button[disabled] { opacity: 1; }      /* it is busy, not unavailable */
-@media (prefers-reduced-motion: reduce) {
-  /* Asked for no motion: the same thing said by fading instead of turning. */
-  @keyframes redo-pulse { 50% { opacity: 0.25; } }
-  .redo.working .icon { animation: redo-pulse 1.4s ease-in-out infinite; }
-}
-.card .redo { margin-top: 0.4rem; }
-.hits li { position: relative; }
-.hits .redo { position: absolute; top: 0.9rem; right: 0; }
-/* Room for the button, so a long title never runs under it. */
-.hits a { padding-right: 2.2rem; }
-
 /* Who analysed the note, beside where it came from. Dimmer than the text it
    sits in: it answers a question you only sometimes ask, and a card that
    shouts its engine at you is a card about the wrong thing. */
@@ -349,22 +311,6 @@ form:has(input[name="chain"][value="api"]:not(:checked)) .api-only { display: no
        font-size: 0.7rem; color: var(--dim); white-space: nowrap; }
 .row select { max-width: 100%; }
 
-/* Your part of a card, above everything the model wrote. The state is
-   three buttons rather than a select: this is one click and a select is
-   three. The one in force is filled in, so the row says the state without
-   being read. */
-.mine { display: flex; flex-direction: column; gap: 0.8rem; margin: 2rem 0 0; }
-.mine .row { display: flex; gap: 0.4rem; flex-wrap: wrap; }
-.mine button.on { border-color: var(--accent); color: var(--accent); }
-.mine .stars button { padding: 0.2rem 0.4rem; font-size: 1.1rem; line-height: 1;
-                      border-color: transparent; background: none; color: var(--dim); }
-.mine .stars button:hover { border-color: var(--line); }
-.mine textarea { width: 100%; padding: 0.6rem 0.9rem; font: inherit;
-                 border: 1px solid var(--line); border-radius: 8px;
-                 background: var(--card); color: inherit; resize: vertical; }
-.mine label { display: block; margin-bottom: 0.3rem; color: var(--dim);
-              font-size: 0.85rem; }
-
 /* A card's own line of facts: the stars you gave it, the state it is in,
    and the mark that says the catalog's English is still what it says. The
    stars are one glyph each so they need no picture and no width. */
@@ -377,7 +323,6 @@ form:has(input[name="chain"][value="api"]:not(:checked)) .api-only { display: no
 .cards .unwritten.failed { color: var(--danger, #b3261e); cursor: help; }
 .rewrite-all { margin: 0.4rem 0 0.9rem; }
 .rewrite-all button[disabled] { opacity: .6; cursor: default; }
-.mine > .failed { color: var(--danger, #b3261e); font-size: 0.85rem; margin: 0; }
 .cards .site { display: flex; gap: 0.6rem; align-items: center; }
 
 /* The candidates of a search. A row is a poster, a name and a button, and
@@ -401,41 +346,9 @@ form:has(input[name="chain"][value="api"]:not(:checked)) .api-only { display: no
 .related li form { display: inline; }
 .related li.gone { opacity: .55; }
 
-.mine .field > .failed { color: var(--danger, #b3261e); font-size: 0.85rem; margin: 0.2rem 0 0; }
-.mine .field > .meta { margin: 0.2rem 0 0; }
-.mine .field > .row:last-child { margin-top: 0.6rem; }
-
-/* The mark: a corner of the card, above the cover, out of the popup's link. */
-.card { position: relative; }
-.card > .mark { position: absolute; top: 0.4rem; right: 0.4rem; z-index: 2; }
-/* A card clips what spills out of it, and an open picker is taller than a
-   card with no cover: while it is open, the card lets it out, on top. */
-.card:has(> .mark[open]) { overflow: visible; z-index: 3; }
-.mark > summary { list-style: none; cursor: pointer; display: grid; place-items: center;
-                  min-width: 2.2rem; min-height: 2.2rem; border-radius: 999px;
-                  background: var(--card); border: 1px solid var(--line); font-size: 1.1rem; }
-.mark > summary::-webkit-details-marker { display: none; }
-.mark .none { color: var(--dim); opacity: 0.6; font-size: 0.95rem; }
-.card > .mark:not([open]) .none { opacity: 0; }
-.card > .mark:not([open]) > summary { background: transparent; border-color: transparent; }
-/* Every card carries the picker now, so every title leaves its corner. */
-.card h2 { padding-right: 2.4rem; }
-.card:hover > .mark .none, .card > .mark:focus-within .none { opacity: 0.6; }
-.mark-menu { position: absolute; right: 0; top: calc(100% + 0.3rem); width: 15rem;
-             background: var(--card); border: 1px solid var(--line); border-radius: 12px;
-             padding: 0.5rem; box-shadow: 0 8px 24px rgb(0 0 0 / 0.18); }
-.mark-list { display: grid; grid-template-columns: repeat(6, 1fr); gap: 0.2rem; }
-.mark-list button { font-size: 1.25rem; min-height: 2.75rem; padding: 0; border-color: transparent; }
-.mark-list button.on { border-color: var(--accent); }
-.mark-other, .mark-clear { display: flex; gap: 0.3rem; margin-top: 0.4rem; }
-.mark-other input { flex: 1; min-width: 0; }
+/* A title with something beside it (an idea's page). */
 .title-row { display: flex; align-items: flex-start; gap: 0.6rem; }
 .title-row h1 { flex: 1; }
-.title-row .mark { position: relative; margin-top: 0.5rem; }
-@media (hover: none) { .card > .mark .none { opacity: 0.6; } }
-/* No hover to find it by on a phone: the plus is always there, dimmed. */
-@media (max-width: 42rem) { .card > .mark:not([open]) .none { opacity: 0.6; } }
-@media (max-width: 42rem) { .mark > summary { min-width: 2.75rem; min-height: 2.75rem; } }
 
 /* The new-idea drawer: a panel with its fields one under the other, each as
    wide as the panel. The page-wide `form label` rule sets labels inline,

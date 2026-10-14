@@ -23,6 +23,6 @@
 </section>
 <section class="detail" id="panel" aria-label="{{ t('Detail') }}"
          data-empty="{{ t('Choose a card to see it here.') }}">
-  <p class="detail-empty">{{ t('Choose a card to see it here.') }}</p>
+  {% if panel %}{% include "card-panel.html" %}{% else %}<p class="detail-empty">{{ t('Choose a card to see it here.') }}</p>{% endif %}
 </section>
 {% endblock %}

@@ -135,7 +135,7 @@ def test_a_mark_nobody_uses_is_an_empty_list(client):
     assert answer.status_code == 200 and 'id="card-' not in answer.text
 
 
-@pytest.mark.parametrize("path, link_id", [(f"/item/{LINK}", LINK)])
+@pytest.mark.parametrize("path, link_id", [(f"/panel/{LINK}", LINK)])
 def test_every_card_and_note_page_has_the_picker(client, path, link_id):
     body = client.get(path).text
     assert f'action="/item/{link_id}/mark"' in body

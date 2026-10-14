@@ -1,0 +1,91 @@
+{# A card in Ocio's right column (spec §3): the bar on top stays, the rest
+   scrolls. Every write is a form that works alone; shell.js posts it in
+   place and autosave.js saves the note as you type. #}
+{% set kind_one = KIND_ONE.get(note.type, '') %}
+<div class="card-top">
+  <form method="post" action="/item/{{ note.id|slug }}/mine/state" class="seg" data-inline>
+    {% for state, word in words.items() %}<button name="state" value="{{ state }}" class="{% if note.state == state %}on{% endif %}">{{ t(word) }}</button>{% endfor %}
+  </form>
+  <form method="post" action="/item/{{ note.id|slug }}/mine/score" class="stars big" data-inline>
+    {% for n in range(1, 6) %}<button name="score" value="{{ 0 if n == note.score else n }}" class="{% if n <= note.score %}on{% endif %}" title="{{ n }}/5" aria-label="{{ n }}/5">{% include "icon-star.html" %}</button>{% endfor %}
+  </form>
+  <details class="menu more">
+    <summary class="btn icon framed" aria-label="{{ t('More') }}" title="{{ t('More') }}">⋯</summary>
+    <div class="menu-list">
+      <form method="post" action="/item/{{ note.id|slug }}/describe" data-inline>
+        <button>{{ t('Rewrite the card') }}</button>
+      </form>
+      <details class="submenu">
+        <summary>{{ t('Change type') }} ▸</summary>
+        <form method="post" action="/item/{{ note.id|slug }}/kind" data-inline>
+          {% for kind, name in KIND_NAMES.items() %}<button name="kind" value="{{ kind }}" class="{% if note.type == kind %}on{% endif %}">{{ t(KIND_ONE[kind]) }}</button>{% endfor %}
+        </form>
+      </details>
+      <form method="post" action="/item/{{ note.id|slug }}/delete" data-inline
+            data-ask="{{ t('Move this card to the trash folder?') }}">
+        <button class="danger" onclick="return confirm(this.form.dataset.ask)">{{ t('Delete') }}</button>
+      </form>
+    </div>
+  </details>
+</div>
+<div class="detail-scroll card" data-panel="{{ panel_id }}"{% if rewriting %} data-working="{{ panel_id }}"{% endif %}>
+  <div class="card-head">
+    <span class="art" style="background: {{ note.type|poster_fill }}">
+      {% if note.cover %}<img src="/cover/{{ note.id|slug }}" alt="">{% endif %}
+    </span>
+    <div class="card-facts">
+      <p class="kind-line">{% if kind_one %}{{ t(kind_one) }} · {% endif %}{{ note.source }}</p>
+      <h1 dir="auto">{{ note.title }}</h1>
+      <p class="chips facts">
+        {%- set year = (note.published or '')[:4] -%}
+        {%- if year|length == 4 and year.isdigit() %}<span class="chip mono">{{ year }}</span>{% endif -%}
+        {%- if note.length %}<span class="chip">{{ note.length }}</span>{% endif -%}
+        {%- if note.rating %}<span class="chip mono">{{ note.source|catalog_name }} ★ {{ note.rating }}</span>{% endif -%}
+      </p>
+      {% if note.url is web_url %}<a class="btn primary" href="{{ note.url }}" target="_blank" rel="noreferrer">{{ t('Open in %1', note.source) }} ↗</a>{% endif %}
+    </div>
+  </div>
+  {% if not note.engine %}
+    <div class="unrewritten-box">
+      <p>{{ t('The card is as the source gave it (in English).') }}</p>
+      {% if rewriting %}<p class="working">{{ t('Rewriting…') }}</p>
+      {% else %}
+        <form method="post" action="/item/{{ note.id|slug }}/describe" data-inline>
+          <button class="btn primary">{{ t('Rewrite in Spanish') }}</button>
+        </form>
+      {% endif %}
+      {% if rewrite_failed %}<p class="failed">{{ t('Last time it failed: %1', rewrite_failed) }}</p>{% endif %}
+    </div>
+  {% elif rewriting %}
+    <p class="working">{{ t('Rewriting…') }}</p>
+  {% endif %}
+  {% if note.summary %}
+    <section class="about">
+      <p class="label">{{ t('WHAT IT IS ABOUT') }}</p>
+      {% for para in note.summary|paragraphs %}<p class="body" dir="auto">{{ para }}</p>{% endfor %}
+    </section>
+  {% endif %}
+  <section class="your-note">
+    <p class="label"><span>{{ t('YOUR NOTE') }}</span>
+      <span class="save-state" id="card-save-state" data-saving="{{ t('saving…') }}" data-saved="{{ t('saved') }}">{{ t('saves itself') }}</span></p>
+    <form method="post" action="/item/{{ note.id|slug }}/mine/note">
+      <textarea name="my_note" id="card-note" rows="4" aria-label="{{ t('YOUR NOTE') }}"
+                placeholder="{{ t('What you thought of it') }}"
+                data-autosave="/item/{{ note.id|slug }}/mine/note" data-indicator="#card-save-state">{{ note.my_note }}</textarea>
+      <button class="btn" data-nojs>{{ t('Save') }}</button>
+    </form>
+  </section>
+  <div class="chips tags">
+    {% for tag in note.tags %}
+      <form method="post" action="/item/{{ note.id|slug }}/tags" data-inline class="chip">
+        <span>#{{ tag }}</span>
+        <input type="hidden" name="tags" value="{{ note.tags|reject('equalto', tag)|join(' ') }}">
+        <button aria-label="{{ t('Remove the tag %1', tag) }}" title="{{ t('Remove the tag %1', tag) }}">✕</button>
+      </form>
+    {% endfor %}
+    <form method="post" action="/item/{{ note.id|slug }}/tags" data-inline class="tag-new">
+      <input type="hidden" name="tags" value="{{ note.tags|join(' ') }}">
+      <input name="add" required autocomplete="off" aria-label="{{ t('+ tag') }}" placeholder="{{ t('+ tag') }}">
+    </form>
+  </div>
+</div>

@@ -105,20 +105,6 @@ def test_each_engine_is_one_compact_row(client):
     assert body.count('class="row engine-row"') == 3
 
 
-def test_a_card_title_leaves_room_for_the_mark_in_its_corner():
-    assert re.search(r"\.card h2 \{[^}]*padding-right: 2\.4rem", css())
-
-
-def test_an_empty_mark_draws_no_circle_until_it_is_opened():
-    assert re.search(r"\.card > \.mark:not\(\[open\]\) > summary \{[^}]*border-color: transparent",
-                     css())
-
-
-def test_on_a_phone_an_empty_mark_still_shows_its_plus():
-    assert re.search(r"\(max-width: 42rem\)\s*\{\s*\.card > \.mark:not\(\[open\]\) \.none"
-                     r"\s*\{\s*opacity: 0\.6", css())
-
-
 def test_the_search_box_is_let_go_after_the_browser_focuses_it():
     js = WEB.joinpath("static", "layout.js").read_text(encoding="utf-8")
     assert 'addEventListener("load"' in js
@@ -127,10 +113,6 @@ def test_the_search_box_is_let_go_after_the_browser_focuses_it():
 def test_a_focus_nobody_asked_for_is_dropped_but_a_tap_is_not():
     js = WEB.joinpath("static", "layout.js").read_text(encoding="utf-8")
     assert '"pointerdown"' in js and '"focus"' in js
-
-
-def test_an_open_picker_is_not_cut_off_by_its_card():
-    assert re.search(r"\.card:has\(> \.mark\[open\]\) \{[^}]*overflow: visible", css())
 
 
 def test_the_filters_fold_before_the_first_paint():

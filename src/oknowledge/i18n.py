@@ -62,10 +62,8 @@ STRINGS = {
         "Search": "Buscar",
         "Categories": "Categorías",
         "Settings": "Ajustes",
-        "Mark": "Marcar",
-        "Another emoji": "Otro emoji",
-        "OK": "Listo",
         "That is not an emoji the mark can be.": "Eso no es un emoji que pueda ser una marca.",
+        "That is not a type a card can have.": "Ese no es un tipo de ficha.",
         "Nothing saved yet": "Todavía no guardaste nada",
         "Open original": "Abrir el original",
         "Close": "Cerrar",
@@ -75,7 +73,6 @@ STRINGS = {
         "Incomplete": "Incompleto",
         "Delete": "Borrar",
         "Reprocess": "Reprocesar",
-        "Edit tags": "Editar etiquetas",
         "Rename": "Renombrar",
         "Merge into": "Fusionar con",
         "Save": "Guardar",
@@ -94,20 +91,22 @@ STRINGS = {
         "Check that the folder exists, is mounted and is readable.":
             "Revisá que la carpeta exista, esté montada y se pueda leer.",
         "Leisure": "Ocio",
-        "to watch": "por ver",
-        "watching": "viendo",
-        "watched": "vista",
-        "to read": "por leer",
-        "reading": "leyendo",
-        "read": "leído",
         "In progress": "En curso",
-        "Your note": "Tu nota",
         "What you thought of it": "Qué te pareció",
+        "Change type": "Cambiar tipo",
+        "Move this card to the trash folder?": "¿Mover esta ficha a la papelera?",
+        "Open in %1": "Abrir en %1",
+        "The card is as the source gave it (in English).":
+            "La ficha está como vino de la fuente (en inglés).",
+        "Rewrite in Spanish": "Reescribir en español",
+        "WHAT IT IS ABOUT": "DE QUÉ TRATA",
+        "YOUR NOTE": "TU NOTA",
+        "saving…": "guardando…",
+        "saved": "guardado",
         "Movies": "Películas",
         "Books": "Libros",
         "Pending": "Pendiente",
         "not rewritten": "sin reescribir",
-        "rewriting…": "reescribiendo…",
         "Rewriting the cards one after the other. Reload in a while to read them.":
             "Reescribiendo las fichas, una después de la otra. Recargá en un rato para leerlas.",
         "Every card is already rewritten.": "Todas las fichas ya están reescritas.",
@@ -126,6 +125,7 @@ STRINGS = {
         "Series": "Series",
         "Anime": "Anime",
         "Movie": "Película",
+        "TV series": "Serie",
         "Book": "Libro",
         "To watch": "Por ver",
         "Watching": "Viendo",
@@ -261,8 +261,6 @@ STRINGS = {
         "Analyse 1 link": "Analizar 1 link",
 
         # On a card whose note was saved but never analysed.
-        "It could not be analysed. Try again.":
-            "No se pudo analizar. Prob\u00e1 de nuevo.",
         "Analyse %1 links": "Analizar %1 links",
         # Toasts the library page shows without reloading (shell.js).
         "It could not be saved": "No se pudo guardar",
@@ -296,7 +294,6 @@ STRINGS = {
         "You already have that link.": "Ese link ya lo tenés.",
         "Writing the summary now. Reload in a moment to read it.":
             "Escribiendo el resumen. Recargá en un momento para leerlo.",
-        "Rewrite the summary": "Reescribir el resumen",
         "The catalogue has no card for that one. Try another.":
             "El catálogo no tiene ficha de esa. Probá con otra.",
         "Write what to look for after the colon, like película:Terminator.":

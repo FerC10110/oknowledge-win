@@ -545,22 +545,6 @@ def test_the_click_marks_the_link_pending_before_it_answers(cards, monkeypatch):
     assert seen["status"] == "pending"
 
 
-def test_the_script_s_click_gets_no_page_back(cards, monkeypatch):
-    """The whole point: the user stays where they were. A redirect here would
-    make the browser fetch the library again and the script would have to
-    throw it away -- or, worse, follow it."""
-    monkeypatch.setattr(module, "reanalyze", lambda cfg, url, engine, **kw: None)
-    cfg, client = cards
-
-    answer = client.post("/item/waiting/reprocess", data={"back": "library"},
-                         headers={"X-Requested-With": "redo"},
-                         follow_redirects=False)
-
-    assert answer.status_code == 204
-    assert "location" not in answer.headers
-    assert answer.content == b""
-
-
 def test_a_click_without_the_script_still_gets_its_page(cards, monkeypatch):
     """The same route serves both: with JavaScript off the form posts plainly
     and the browser has to be sent somewhere."""
@@ -671,7 +655,7 @@ def test_the_card_s_retry_button_is_watched_too(cards, monkeypatch):
     monkeypatch.setattr(module, "reanalyze",
                         lambda cfg, url, engine, trace=None: seen.update(trace=trace))
 
-    client.post("/item/waiting/reprocess", headers={"x-requested-with": "redo"})
+    client.post("/item/waiting/reprocess")
 
     assert seen["trace"] == client.app.state.batch.note
 
