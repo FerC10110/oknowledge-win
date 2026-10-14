@@ -21,6 +21,9 @@ a:hover { color: var(--acc-hi); }
 /* --- the shell -------------------------------------------------------- */
 body { background: #141519; }
 .app { display: grid; height: 100vh; grid-template-rows: minmax(0, 1fr); }
+/* The handoff never sets a line height where it does not mean one: rows,
+   chips and headings sit at the browser's normal, not style.css's 1.65. */
+.sidebar, .app.home { line-height: normal; }
 .app.legacy { grid-template-columns: 216px minmax(0, 1fr); }
 .legacy-main { overflow-y: auto; min-height: 0; padding-top: 1.5rem; }
 
@@ -88,8 +91,11 @@ body { background: #141519; }
 .list { flex: 1; display: flex; flex-direction: column; min-height: 0; }
 .list-head { display: flex; justify-content: space-between; align-items: center;
   padding: 14px 20px 8px; font-size: 13px; color: var(--t5); }
-.list-head b { font-weight: 400; }
+.list-head > span { color: var(--t1); }
+.list-head b { font-weight: 400; color: var(--t5); }
+.list-head .seg a { padding: 4px 10px; font-size: 12px; }
 .list-body { flex: 1; overflow-y: auto; min-height: 0; padding: 4px 20px 80px; }
+.list-body:has(> .rows) { padding: 0 12px 80px; }
 .items { list-style: none; margin: 0; padding: 0; line-height: 1.35; }
 .items .item { padding: 0; }          /* style.css gives the note page's .item a top gap */
 .items .hit { color: inherit; text-decoration: none; display: block; }
@@ -113,6 +119,7 @@ body { background: #141519; }
 .items .busy { color: var(--acc); font-style: normal; }
 .tiles .date { display: none; }
 
+.rows { line-height: normal; }
 .rows .item { border-radius: 8px; }
 .rows .item.on, .rows .item:hover { background: var(--s5); }
 .rows .hit { display: grid; grid-template-columns: 8px minmax(0, 1fr) auto; gap: 12px;
@@ -142,7 +149,11 @@ a.more { display: block; text-align: center; margin: 16px 0; color: var(--t5); f
   display: flex; flex-direction: column; gap: 18px; }
 .detail-scroll > * { margin: 0; }
 .detail h1 { font-size: 26px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.2; color: var(--t1); }
-.meta-row { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--t5); }
+.detail h1 + .reading { margin-top: -12px; }      /* 6px under the title, not the column's 18 */
+.detail .body + .body { margin-top: -6px; }        /* paragraphs 12px apart */
+.meta-row { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--t5); }
+.meta-row .chip-menu { margin-left: -6px; }
+.meta-row .where { font-family: inherit; }
 .chip { display: inline-flex; align-items: center; gap: 6px; background: var(--s4);
   border-radius: 6px; padding: 3px 8px; font-size: 12px; color: var(--t2); cursor: pointer;
   list-style: none; }
@@ -154,8 +165,9 @@ a.more { display: block; text-align: center; margin: 16px 0; color: var(--t5); f
 .reading { font-size: 12px; color: var(--t6); }
 .detail .body { font-size: 15px; line-height: 1.65; color: var(--t2); }
 .points { background: var(--s2); border-radius: 10px; padding: 14px 16px; }
-.points .label { font-size: 11px; letter-spacing: .08em; color: var(--t6); margin: 0 0 6px; }
-.points ul { margin: 0; padding: 0; list-style: none; font-size: 13.5px; color: var(--t2); }
+.points .label { font-size: 11px; letter-spacing: .08em; color: var(--t6); margin: 0 0 8px; }
+.points ul { margin: 0; padding: 0; list-style: none; font-size: 14px; line-height: 1.5;
+  color: var(--t1); display: flex; flex-direction: column; gap: 5px; }
 .points li::before { content: "— "; color: var(--t6); }
 .reading-ai { color: var(--acc); font-size: 14px; }
 .skeleton { display: flex; flex-direction: column; gap: 10px; }
