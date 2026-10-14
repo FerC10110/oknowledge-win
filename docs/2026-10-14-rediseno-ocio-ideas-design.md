@@ -1,246 +1,276 @@
 # Rediseño, entrega 2: Ocio e Ideas
 
 **Fecha:** 2026-10-14 · **Rama:** `feat/rediseno-ocio-ideas`
-**Referencia visual:** `design_handoff_oknowledge_redesign/` (README §1–§3,
-capturas `04` Ocio, `05` Ideas pestaña Idea, `06` Ideas Links vinculados). Los
-números exactos (px, colores, radios) salen del README del handoff.
-**Base:** la entrega 1 (`docs/2026-10-14-rediseno-biblioteca-design.md`): todo lo
-que esa spec fija (tokens, Geist, barra lateral, campo, cabecera de lista,
-tarjetas y filas, panel, autoguardado, toast, estado en la URL) vale acá salvo
+**Referencia visual:** `design_handoff_oknowledge_redesign/`, sección "Pantallas
+dedicadas (versión final)" del README, `Idea detalle.dc.html`, `Ocio.dc.html` y
+las capturas `12-ocio.png` y `13-idea.png`. Esa sección **reemplaza** lo que el
+README dice de Ocio e Ideas en el panel de detalle. Los números exactos (px,
+colores, radios) salen del README.
+**Base:** la entrega 1 (`docs/2026-10-14-rediseno-biblioteca-design.md`): tokens,
+Geist, barra lateral, campo unificado, toast y estado en la URL valen acá salvo
 donde este documento dice otra cosa.
 
 > "arrancá con la entrega 2"
+>
+> "Rehacé la pantalla de detalle de una Idea según 'Ideas — Idea detalle.dc.html'
+> […] Rehacé la pantalla de Ocio según 'Ocio — Ocio.dc.html' […] Sin scroll de
+> página […] Todo se autoguarda. Eliminá los botones 'Guardar', los 💾 y los
+> formularios de 'Editar etiquetas' […] implementalo por partes: primero Ideas,
+> después Ocio."
 
 ## Decisiones tomadas
 
 | Pregunta | Respuesta |
 |---|---|
-| ¿Anime? | Un tipo más: TIPO = Todo, Películas, Series, Anime, Libros, ★ Favoritos |
-| ¿Cómo se agrega Ocio desde el campo? | El texto filtra en vivo; "Buscar en catálogos ↵" abre los candidatos en el panel. Prefijo (`película: …`) o link de catálogo guardan directo, como hoy |
-| ¿Cómo se crea una idea? | Con texto en el campo aparece "Nueva idea ↵": crea la idea con ese texto y la abre en el panel. Enter sigue buscando |
-| ¿Links de la idea? | Pestaña "Links vinculados (N)": vinculados con "Usar" y ✕, buscador en vivo, PUEDEN SERVIR al instante sin IA. La acción con IA va al ⋯ |
-| ¿Título de la idea? | Editable en el lugar: el título del panel es un campo sin borde que se guarda solo |
-| ¿Marcas en Ocio e Ideas? | Grupo MARCAS en la barra lateral de cada sección (📌 y las demás en uso), como en la Biblioteca |
+| ¿Dónde se abre una idea? | En su pantalla propia, `/ideas/{id}` (grid del README: contenido + columna de links) |
+| ¿Cómo es la lista `/ideas`? | Barra lateral + tarjetas a todo el ancho, sin panel. Clic abre la pantalla de la idea |
+| ¿Cómo se crea una idea? | Con texto en el campo aparece "Nueva idea ↵": crea la idea y abre su pantalla. Enter sigue buscando |
+| ¿Título de la idea? | Input sin borde en la cabecera, autoguardado |
+| ¿Qué links usa la IA? | Un alcance en la barra "Pedile a la IA": Links vinculados (N) / Toda la biblioteca / Sólo mi texto. Reemplaza las casillas "Usar" y la general |
+| ¿Acción "Links que pueden servir" con IA? | Sale de la interfaz (el README dice que el alcance la reemplaza). PUEDEN SERVIR se calcula al instante, sin IA |
+| ¿Anime? | Un tipo más en TIPO |
+| ¿Favoritos y MARCAS en Ocio? | No, como el diseño final: TIPO y ESTADO. Las estrellas 1–5 hacen ese papel. Las marcas guardadas se conservan en el vault |
+| ¿Orden en Ocio? | "Recientes ▾" con Recientes, Título, Año, Tus estrellas, en la URL (`orden=`) |
+| ¿Cómo se agrega Ocio desde el campo? | Texto filtra en vivo; "Buscar en catálogos ↵" abre los candidatos en el panel. Prefijo (`película: …`) o link de catálogo guardan directo |
+| ¿Orden de trabajo? | Primero Ideas, después Ocio |
 
-## 1. Una sola cáscara para las tres secciones
+## 1. Lo común
 
-Ocio e Ideas usan la pantalla de tres columnas de la Biblioteca (`home.html`,
-`list.html`, el panel, `shell.js`). Lo que hoy supone "es un link" pasa a
-depender de la **sección**, que define:
+**Sin scroll de página.** Las dos pantallas son de alto fijo (`100vh`), como la
+Biblioteca; sólo scrollean las columnas internas.
 
-- placeholder del campo y su botón de la derecha (§4, §5);
-- el grupo de filtros de la barra lateral;
-- cómo se dibuja un ítem en tarjeta y en fila;
-- qué panel abre `/panel/{id}`;
-- la palabra de la cabecera ("Ocio · 6", "Ideas · 4", o el filtro activo).
+**Barra lateral.** La de la entrega 1 (216px, una sola para toda la app). Los
+prototipos dibujan 200px; se mantiene 216 para que la barra no salte al cambiar
+de sección. Grupos por sección:
 
-**URLs.**
+- **Ocio:** TIPO (Todo, Películas, Series, Anime, Libros; un tipo sin fichas no
+  se dibuja) y ESTADO (Todo, Por ver, Viendo, Vista; con TIPO = Libros: Por
+  leer, Leyendo, Leído). Puntos de estado: Vista `#8fc29a`, Viendo `#a9b4de`,
+  Por ver `#6d6f78`.
+- **Ideas:** ESTADO (Todo, semilla, en marcha, hecha, descartada). En Todo no
+  están las descartadas, como hoy.
 
-| Sección | Lista | Fragmento de lista | Parámetros |
-|---|---|---|---|
-| Biblioteca | `/` | `/lista` | los de la entrega 1 |
-| Ocio | `/ocio` | `/ocio/lista` | `tipo`, `mark`, `q`, `sel`, `vista`, `hasta` |
-| Ideas | `/ideas` | `/ideas/lista` | `estado`, `mark`, `q`, `sel`, `vista`, `hasta` |
+**Autoguardado.** No queda ningún botón Guardar, 💾 ni formulario "Editar
+etiquetas" en estas pantallas.
 
-- ★ Favoritos de Ocio es `mark=⭐`, como en la Biblioteca.
-- Un `tipo` o `estado` desconocido se ignora (muestra Todo), como hoy.
-- `sel` que no está en la lista visible abre el primero; nunca un 500.
-- `/panel/{id}` sirve a las tres: elige el panel por el estante donde vive la
-  nota (link, tarjeta, idea). 404 si no existe.
-- `GET /item/{id}` de una tarjeta o idea redirige a `/ocio?sel={id}` o
-  `/ideas?sel={id}`, arrastrando `notice`, `n` y `m`, como ya hacen los links.
-  Toda escritura de Ocio e Ideas vuelve por ahí.
-- `shell.js` toma la ruta del fragmento de lista de un atributo `data-` de la
-  página, en lugar de `/lista` fijo.
+- Estado, estrellas, etiquetas (✕ y "+ etiqueta" con Enter), tipo, vínculos:
+  se postean al tocarlos. El JS manda `Accept: application/json` y las rutas
+  de hoy responden `{"ok": true}` (o `{"ok": false, "error": "…"}` con 4xx/5xx)
+  en lugar de redirigir; la pantalla se actualiza sin recargar.
+- Textos (título y texto de la idea, TU NOTA de Ocio): se guardan 1 s después
+  de la última tecla o al salir del campo. El indicador dice "Guardando…" y
+  después "Guardado"; si falla, el toast de error y el texto queda en el campo.
+- Sin JavaScript cada formulario tiene su botón Guardar, que el JS esconde, y
+  las rutas redirigen como hoy.
 
-**Se va:** `ocio.html`, `ideas.html`, las partes de Ocio e Ideas de `item.html`,
-`popup.js`, `/embed/{id}`, `idea-links.js` (su búsqueda en vivo pasa a
-`shell.js`), `mine-buttons.html` si nada más lo usa, y el formulario de idea
-nueva de `/ideas`. `/ocio/buscar` deja de ser una página propia (§4).
+**Lo que se va:** `ocio.html`, `ideas.html`, las partes de Ocio e Ideas de
+`item.html`, `popup.js`, `/embed/{id}` y `embed.html`, `idea-links.js`,
+`idea-link-results.html`, `link-card.html`, `candidates.html` y la página
+`/ocio/buscar`, `mine-buttons.html` y `mark-picker.html` si nada más los usa,
+`redo.js`. `GET /item/{id}` de una tarjeta redirige a `/ocio?sel={id}` y de
+una idea a `/ideas/{id}`, arrastrando `notice`, `n` y `m`.
 
-## 2. Autoguardado
+## 2. Ideas
 
-Todo se edita en el lugar, sin botón Guardar (handoff, Interactions):
+### Lista `/ideas`
 
-- Estado, estrellas, etiquetas, tipo, marcas y vínculos: formularios
-  `data-inline` como los del panel de la Biblioteca. Al tocar, se postea, se
-  muestra el toast y se recargan el panel y la lista.
-- Textos (TU NOTA de Ocio, texto y título de una idea): se guardan 1 s después
-  de la última tecla o al salir del campo, lo que pase primero. A la derecha
-  del rótulo: "se guarda sola"; mientras guarda "guardando…"; después
-  "guardado". Si falla, el toast de error de la entrega 1 y el texto queda
-  como está en el campo. No se recarga el panel al guardar un texto (perdería
-  el foco); sí la lista, sin mover la selección.
-- Sin JavaScript, cada formulario conserva su botón Guardar; el JS lo esconde.
+Barra lateral + columna a todo el ancho: campo, cabecera "Ideas · N" (o el
+filtro activo) con el selector Lista | Tarjetas, y la lista.
 
-## 3. Barra lateral
-
-- **Ocio:** grupo **TIPO**: Todo, Películas, Series, Anime, Libros (punto de
-  color + nombre + contador; un tipo sin notas no se dibuja), ★ Favoritos.
-- **Ideas:** grupo **ESTADO**: Todo, semilla, en marcha, hecha, descartada. En
-  Todo no están las descartadas (como hoy); su fila sí cuenta las suyas.
-- **Ambas:** grupo **MARCAS** como en la Biblioteca: 📌 Fijados y cada otra
-  marca con al menos una nota en esa sección. Sin COLECCIONES.
-- El filtro por etiqueta de Ideas sale de la barra; el campo busca por
-  etiquetas.
-
-## 4. Ocio
-
-**Lista.**
-- Tarjeta: miniatura = la portada (`/cover/{id}`); sin portada, bloque del
-  color del tipo. Chip abajo a la izquierda con el catálogo (`source`). ★ si
-  es favorita. Subtítulo "{duración} · {estado}" (p. ej. "608 páginas · En
-  curso"); sin duración, sólo el estado; sin estado, sólo la duración.
-- Fila: punto del tipo, título, el mismo subtítulo, año.
-- Orden: el de hoy (guardado, más nuevo primero).
-
-**Campo.** Placeholder "Buscá en Ocio o pegá un link de IMDb / Goodreads".
-- Texto común: filtra en vivo por título, autor y etiquetas. A la derecha
-  aparece **Buscar en catálogos ↵** (botón, no Enter).
-- Ese botón abre en el panel los candidatos de los catálogos para ese texto,
-  con el tipo del filtro activo (en Todo o Favoritos: películas), con un
-  segmentado de tipo arriba para cambiarlo. Cada candidato: portada chica,
-  título, año, autor o director, y **Guardar**. Guardar crea la tarjeta y la
-  abre (`/ocio?sel=`). Sin resultados: "No encontré nada en los catálogos".
-  Sin JavaScript, el botón hace GET a `/ocio?buscar=…&tipo=…` y la página
-  trae los candidatos en el panel.
-- Prefijo (`película: …`, los de `cards.wanted`) o link de un catálogo:
-  aparece **Guardar ↵** y Enter guarda directo, como hoy en la Biblioteca.
-
-**Panel.**
-- Fila meta: chip "● Libros ▾" que abre el menú de tipos y lo cambia en el
-  lugar (**ruta nueva**: `POST /item/{id}/kind`; cambia `type` y `category`
-  según el idioma, como al crearla). Después "catálogo · año".
-- Título; descripción (`summary`) en párrafos.
-- Segmentado **Pendiente | En curso | Terminada** y 5 estrellas (clic en la
-  actual = 0).
-- **TU NOTA**: textarea con autoguardado (§2), placeholder "Qué te pareció".
-- Etiquetas con ✕ y "+ etiqueta".
-- Barra de acciones: **Abrir original ↵** (la URL del catálogo) · ★ · ⋯ con
-  "Reescribir la descripción con IA", las marcas y **Borrar**.
-- Mientras se reescribe la descripción: la descripción muestra el esqueleto
-  de la entrega 1 y el panel se recarga al terminar, con toast.
-
-## 5. Ideas
-
-**Lista.**
-- Tarjeta sin miniatura: título, 3 líneas del texto de la idea (line-clamp),
-  y "● {estado} · N links".
-- Fila: punto del estado, título, "{estado} · N links", fecha.
+- Parámetros: `estado`, `q`, `vista`, `hasta`. `estado` desconocido = Todo.
+- Tarjeta (sin miniatura): título, 3 líneas del texto de la idea (line-clamp),
+  "● {estado} · N links". Fila: punto, título, "{estado} · N links", fecha.
+- Clic abre `/ideas/{id}`.
+- Campo, placeholder "Buscá en tus ideas": texto filtra en vivo (título, texto,
+  etiquetas) con `/ideas/lista`. A la derecha aparece **Nueva idea ↵** (botón;
+  Enter sigue buscando). Crea la idea con ese texto por el camino de hoy
+  (`/ideas/guardar`, la IA le pone título en segundo plano) y abre su pantalla.
 - Orden: el de hoy.
 
-**Campo.** Placeholder "Buscá en tus ideas".
-- Texto: filtra en vivo por título, texto y etiquetas. A la derecha aparece
-  **Nueva idea ↵** (botón; Enter sigue buscando).
-- Nueva idea crea la idea con ese texto (el mismo camino que hoy
-  `/ideas/guardar`), la IA le pone título en segundo plano, y se abre en el
-  panel (`/ideas?sel=`). Mientras no tiene título, el panel y la tarjeta
-  muestran el comienzo del texto y la tarjeta está "Analizando…" con el
-  sondeo de §5 "Mientras la IA trabaja".
+### Pantalla `/ideas/{id}`
 
-**Panel.**
-- Fila meta: chip "● en marcha ▾" que cambia el estado en el lugar; la fecha.
-- Título editable en el lugar (§2): campo sin borde con el estilo del título
-  (26px/600). Vacío no se guarda.
-- Pestañas **Idea | Links vinculados (N)**, subrayado activo de 2px. La pestaña
-  abierta va en la URL (`pestana=links`) para que recargar la deje igual; por
-  defecto Idea.
+Grid `216px | 1fr | 400px`, alto fijo. Idea inexistente: 404 de la app.
 
-**Pestaña Idea.**
-- El texto de la idea: textarea sin borde, autoguardado.
-- Segmentado de estado (semilla / en marcha / hecha / descartada).
-- Lo que escribió la IA, en este orden y sólo las que existen: **YA EXISTE**,
-  **MEJORAS** (cada fila `**débil** — arreglo` se dibuja con el título en
-  negrita), **AMPLIACIÓN** (lista). La línea "Con N links: …" se conserva.
-- Si no hay ninguna: recuadro "Todavía no le pediste nada a la IA. Probá
-  Mejorar…".
-- Etiquetas con ✕ y "+ etiqueta".
+**Cabecera** (padding `20px 40px 16px`, borde inferior):
+- Fila meta: "← Ideas" (vuelve a `/ideas` con el filtro que tenía, guardado en
+  `back=`) · "creada 13 oct"; a la derecha el indicador de guardado.
+- Fila principal: título editable (input sin borde, 28px/600; vacío no se
+  guarda). A la derecha: segmentado de estado, 5 estrellas (clic en la actual
+  = 0) y ⋯ con borde: **Regenerar todo con la IA** (lo que hoy hace
+  `describe` para una idea: título, resumen, puntos, etiquetas) y **Borrar
+  idea** en `#e59a8f`.
+- Mientras la IA le pone título a una idea recién creada, el input muestra el
+  comienzo del texto atenuado y el sondeo (abajo) lo reemplaza al terminar.
+- Etiquetas: chips con ✕ + "+ etiqueta".
 
-**Pestaña Links vinculados.**
-- Los vinculados: punto de categoría, título (abre el link en la Biblioteca,
-  `/?sel=`), casilla **Usar** y ✕. Arriba la casilla general "Usar los links
-  vinculados" (sólo si hay alguno en la biblioteca). Mismo comportamiento que
-  hoy: todas marcadas al abrir; sin la general no se usa ninguno. Un vinculado
-  que ya no está se ve atenuado con su ✕.
-- El buscador en vivo de hoy (`/item/{id}/buscar-links`), con "+ Sumar" en cada
-  resultado.
-- **PUEDEN SERVIR**: hasta 6 links de la biblioteca rankeados por palabras y
-  etiquetas en común con la idea (el ranking local que ya usa la acción de
-  links, sin llamar a la IA), sin los ya vinculados, con borde punteado y
-  "+ Sumar". Si la acción con IA ya escribió su sección, esas sugerencias van
-  primero, con su "por qué" en una línea.
-- El tope de 16 vinculados y su aviso no cambian.
+**Barra de IA** (padding `12px 40px`, bg `#17181d`, borde inferior):
+"PEDILE A LA IA" · **¿Ya existe?** · **Mejorar** · **Ampliar** · "usando" ·
+menú de alcance (§2.1). A la derecha, el estado del trabajo en curso
+("Buscando…", "Mejoras…", "Ampliación…", `#a9b4de`). Mientras una acción corre,
+su botón está deshabilitado. Si no hay motor que pueda buscar en la web,
+¿Ya existe? aparece deshabilitado con el motivo de hoy como `title`.
 
-**Acciones.** **¿Ya existe?** · **Mejorar** · **Ampliar** (estas dos con la
-selección de "Usar") · ⋯ con "Buscar links con IA" (la acción `links`),
-"Completar con IA" (lo que hoy hace `describe` para una idea) y **Borrar**.
-Las ideas no muestran estrellas ni ★ (los datos se conservan).
-Si no hay motor que pueda buscar en la web, **¿Ya existe?** aparece
-deshabilitado con el motivo de hoy como `title`.
+**Cuerpo en 2 columnas** (`1fr | 1.15fr`, borde entre ambas):
+- **TU IDEA**: textarea que llena el alto, placeholder "Escribila como te
+  salga: la IA la ordena.", nota "se guarda sola".
+- **Resultados** en pestañas **Resumen | ¿Ya existe? | Mejoras | Ampliación**:
+  - Resumen: el resumen de la idea en párrafo + los puntos numerados `01`…
+    (Mono 12px).
+  - ¿Ya existe?: el veredicto y cada hallazgo como tarjeta (nombre con link +
+    nota), y "Lo tuyo".
+  - Mejoras: cada fila `**débil** — arreglo` como tarjeta título + detalle.
+  - Ampliación: cada punto como tarjeta.
+  - La línea "Con N links: …" de una sección se muestra arriba de sus tarjetas.
+  - Pestaña sin contenido: "Todavía no se lo pediste." + botón primario que
+    corre esa acción (Resumen: "Regenerar todo con la IA").
+  - Al tocar una acción de la barra se abre su pestaña. La pestaña abierta va
+    en la URL (`pestana=`); por defecto Resumen.
 
-**Mientras la IA trabaja.** El botón de la acción en curso dice "pensando…" y
-está deshabilitado. El panel pregunta cada 3 s a una ruta nueva,
-`GET /item/{id}/actions/state` → `{"running": [...], "failed": [...]}`. Al
-terminar una acción se recarga el panel (si la idea sigue siendo la elegida,
-como en la entrega 1) y aparece el toast "Listo: {sección}" o "Falló:
-{sección}". Al reiniciar el servidor se pierde lo que estaba corriendo, como
-hoy.
+**Columna "Links de esta idea"** (400px, borde izquierdo):
+- Cabecera "Links de esta idea" con contador de vinculados.
+- Buscador "Buscá en tus N links para sumar" (en vivo, 250 ms, la búsqueda de
+  hoy `/item/{id}/buscar-links`; sin JS, GET con `?q=`).
+- **VINCULADOS**: punto de categoría, título (lleva a `/?sel=` del link),
+  dominio en Mono, ✕. Un vinculado que ya no está, atenuado con su ✕.
+- **PUEDEN SERVIR** (sin búsqueda) o **RESULTADOS** (con búsqueda): borde
+  punteado `#2a2b32`, punto, título, dominio, **+ Sumar**. PUEDEN SERVIR = hasta
+  6 links con al menos una palabra o etiqueta en común con la idea, rankeados
+  con `candidates()` (sin llamar a la IA), sin los vinculados. Ninguno: "Nada
+  en común todavía".
+- "+ Sumar" y ✕ actualizan la columna y el contador sin recargar. El tope de
+  16 vinculados y su aviso no cambian.
 
-## 6. Pendientes de la entrega 1 que entran
+### 2.1 Alcance de la IA
+
+`POST /item/{id}/actions/{action}` recibe `alcance`:
+
+| alcance | Qué links lee la IA en Mejorar y Ampliar |
+|---|---|
+| `vinculados` (por defecto; etiqueta "Links vinculados (N)") | los vinculados que siguen en la biblioteca, en el orden de la idea |
+| `todos` ("Toda la biblioteca") | hasta 6 links de toda la biblioteca rankeados con `candidates()` que tengan al menos una palabra en común, vinculados o no |
+| `nada` ("Sólo mi texto") | ninguno |
+
+- Valor desconocido = `vinculados`. Vinculados sin ninguno en la biblioteca =
+  sin links.
+- ¿Ya existe? busca en la web e ignora el alcance.
+- El bloque de links del prompt, sus límites y la línea "Con N links: …" no
+  cambian (spec de links de ideas, §3). Los campos `with_links`, `use` y
+  `category` se van de esta ruta.
+- El alcance elegido se recuerda mientras la pantalla está abierta (va en la
+  URL, `alcance=`); al entrar es `vinculados`.
+
+### 2.2 Mientras la IA trabaja
+
+`GET /item/{id}/actions/state` → `{"running": [...], "failed": [...],
+"title": "…"}`. La pantalla pregunta cada 3 s mientras algo corre (una acción,
+o el título de una idea recién creada). Al terminar: recarga las pestañas de
+resultados (y el título si cambió), abre la pestaña de esa acción y muestra
+el toast "Listo: {sección}" o "Falló: {sección}". Lo que corría se pierde al
+reiniciar el servidor, como hoy.
+
+## 3. Ocio
+
+Grid `216px | 1fr | 460px`, alto fijo. Parámetros: `tipo`, `estado`, `q`,
+`sel`, `orden`, `hasta`. Desconocidos = Todo / Recientes. `sel` que no está en
+la lista abre el primero.
+
+**Centro.**
+- Campo: "Buscá en Ocio o pegá un link de IMDb, MyAnimeList, Goodreads…".
+  Texto filtra en vivo (título, autor, etiquetas) con `/ocio/lista`; a la
+  derecha **Buscar en catálogos ↵**. Prefijo de `cards.wanted` o link de
+  catálogo: **Guardar ↵** y Enter guarda directo, como hoy.
+- Cabecera: "Ocio · N" (o el filtro activo); si hay fichas sin reescribir
+  (`engine == ""`), el aviso compacto "• N fichas sin reescribir
+  [Reescribir]" (postea a `/ocio/reescribir`, que existe). A la derecha
+  "Recientes ▾" con Recientes, Título, Año, Tus estrellas.
+- Grilla de pósters (`repeat(auto-fill,minmax(168px,1fr))`, gap 16,
+  `aspect-ratio:2/3`, radius 10): la portada (`/cover/{id}`); sin portada, un
+  degradé del color del tipo con el título encima. Chip de tipo arriba a la
+  izquierda, de estado arriba a la derecha (sin estado, sin chip).
+  Seleccionado: borde de 2px `#e7e7ea`. Debajo: título (ellipsis) y "año ·
+  ★★★ · {catálogo} {rating}" (cada parte sólo si existe). Sin vista Lista.
+- Carga de a 60 y suma al llegar al final, como la Biblioteca.
+
+**Candidatos de catálogos.** "Buscar en catálogos" carga en el panel
+`/ocio/candidatos?q=&tipo=` con el tipo del filtro activo (Todo: películas) y
+un segmentado de tipo arriba para cambiarlo. Cada candidato: portada chica,
+título, año, autor o director, **Guardar** (`/ocio/guardar`, que redirige a
+`/ocio?sel=`). Sin resultados: "No encontré nada en los catálogos". Sin JS:
+`/ocio?buscar=…&tipo=…` trae los candidatos en el panel.
+
+**Panel derecho** (`/panel/{id}` sirve también para fichas):
+- **Barra fija arriba** (padding `16px 24px`, borde inferior): segmentado
+  Por ver | Viendo | Vista (libros: Por leer | Leyendo | Leído), 5 estrellas
+  (19px, clic en la actual = 0) y ⋯ con **Reescribir la ficha**, **Cambiar
+  tipo ▸** (los cuatro tipos; ruta nueva `POST /item/{id}/kind`, cambia `type`
+  y `category` como al crearla) y **Borrar**.
+- Grid `112px | 1fr`: póster chico y al lado "Tipo · dominio", título
+  (24/600), chips de datos (año, duración, `{catálogo} ★ {rating}`) y el botón
+  primario **Abrir en {dominio} ↗** (la URL de la ficha, pestaña nueva).
+- Si la ficha no está reescrita: "La ficha está como vino de la fuente (en
+  inglés)." + **Reescribir en español** (postea a `/item/{id}/describe`).
+  Mientras trabaja: "Reescribiendo…", y el panel pregunta cada 3 s a
+  `/item/{id}/state` y se recarga al terminar, con toast.
+- **DE QUÉ TRATA** (15px/1.6), **TU NOTA** (autoguardada, "se guarda sola" →
+  "guardando…" → "guardado"), etiquetas inline.
+
+## 4. Pendientes de la entrega 1 que entran
 
 De `docs/2026-10-14-rediseno-biblioteca-pendientes.md`, porque tocan lo mismo:
 
-- `.chip`, `.chips`, `.warn` de `app.css` limitados al panel y la barra lateral.
-- Pegar un link que ya tenés lo abre: la redirección `already-saved` lleva
-  `sel`.
-- `notice`, `n` y `m` salen de la URL (`replaceState`) una vez mostrado el
-  toast.
-- Sin `sel` en la URL, el JS escribe el elegido, así una recarga no mueve el
-  panel.
-- La vista Lista muestra la marca (★, 📌…) en las tres secciones.
-- La ★ de la tarjeta tiene texto accesible.
-- Código muerto: `redo.js`, `/embed`, `popup.js`, `rank_marks`/`used_marks` en
-  `page()`, los helpers viejos de `index.py` (`tally`, `years`, `months`,
-  `tag_home`, `filter(when=)`), y las reglas de `style.css` que sólo usaban las
+- `.chip`, `.chips`, `.warn` de `app.css` limitados a donde se usan.
+- Pegar un link que ya tenés lo abre: la redirección `already-saved` lleva `sel`.
+- `notice`, `n` y `m` salen de la URL (`replaceState`) una vez mostrado el toast.
+- Sin `sel` en la URL, el JS escribe el elegido, así una recarga no mueve el panel.
+- La ★ de la tarjeta de la Biblioteca tiene texto accesible.
+- Código muerto: lo de §1 "Lo que se va", más `rank_marks`/`used_marks` en
+  `page()` y los helpers viejos de `index.py` (`tally`, `years`, `months`,
+  `tag_home`, `filter(when=)`) y las reglas de `style.css` que sólo usaban las
   páginas que se van.
 
-## 7. Textos
+## 5. Textos
 
-Todo texto nuevo entra en inglés como clave y en castellano en `i18n.py`, como
-en la entrega 1. Los del handoff van tal cual: "Buscá en Ocio o pegá un link de
-IMDb / Goodreads", "Buscá en tus ideas", "TIPO", "ESTADO", "TU NOTA", "se
-guarda sola", "Pendiente", "En curso", "Terminada", "Idea", "Links vinculados
-(%1)", "PUEDEN SERVIR", "+ Sumar", "MEJORAS", "AMPLIACIÓN", "YA EXISTE",
-"Todavía no le pediste nada a la IA. Probá Mejorar…", "¿Ya existe?", "Mejorar",
-"Ampliar", "Buscar en catálogos", "Nueva idea".
+Claves en inglés y castellano en `i18n.py`, como en la entrega 1. Los del
+handoff van tal cual, entre otros: "← Ideas", "creada %1", "Guardando…",
+"Guardado", "PEDILE A LA IA", "usando", "Links vinculados (%1)", "Toda la
+biblioteca", "Sólo mi texto", "TU IDEA", "Escribila como te salga: la IA la
+ordena.", "se guarda sola", "Resumen", "¿Ya existe?", "Mejoras", "Ampliación",
+"Todavía no se lo pediste.", "Regenerar todo con la IA", "Borrar idea", "Links
+de esta idea", "Buscá en tus %1 links para sumar", "VINCULADOS", "PUEDEN
+SERVIR", "RESULTADOS", "+ Sumar", "Nueva idea", "Buscá en Ocio o pegá un link de
+IMDb, MyAnimeList, Goodreads…", "%1 fichas sin reescribir", "Reescribir",
+"Recientes", "Por ver", "Viendo", "Vista", "Por leer", "Leyendo", "Leído",
+"Reescribir la ficha", "Cambiar tipo", "Abrir en %1", "La ficha está como vino
+de la fuente (en inglés).", "Reescribir en español", "Reescribiendo…", "DE QUÉ
+TRATA", "TU NOTA", "Qué te pareció", "Buscar en catálogos".
 
-## 8. Pruebas
+## 6. Pruebas
 
-- Por sección: cada filtro de la barra devuelve lo que corresponde; `tipo` y
-  `estado` desconocidos muestran Todo; `sel` inválido (`../x`, filtrado,
-  borrado) abre el primero; `/ocio/lista` e `/ideas/lista` con `desde`.
-- Campo: en Ocio, texto común filtra y ofrece catálogos; prefijo o link de
-  catálogo guarda; en Ideas, Nueva idea crea y abre. Los catálogos y la IA van
-  con stubs: ningún test sale a la red.
-- Cada guardado en el lugar, con JavaScript (formulario `data-inline`, toast)
-  y sin (botón Guardar, redirección a `?sel=`).
-- `POST /item/{id}/kind` cambia tipo y categoría; tipo desconocido no cambia
-  nada.
-- Panel de idea: pestañas y `pestana=links`; MEJORAS con negrita; el recuadro
-  vacío; PUEDEN SERVIR sin llamar a la IA, sin vinculados, hasta 6;
-  `/item/{id}/actions/state` con una acción corriendo y sin.
-- `GET /item/{id}` de tarjeta e idea redirige con `sel` y el aviso.
-- Lo que se borra no deja rutas ni plantillas colgando (`/embed` 404,
-  `popup.js` no se sirve).
-- Capturas de Ocio, Idea y Links vinculados a 1440×900 sobre un vault de
-  prueba, comparadas con `04`, `05` y `06` del handoff. El vault real no se
-  toca.
+- Ideas, lista: filtros de ESTADO (descartadas fuera de Todo), `estado`
+  desconocido, búsqueda en vivo, Nueva idea crea y redirige a `/ideas/{id}`.
+- Ideas, pantalla: 404; cabecera, barra de IA, pestañas y `pestana=`; MEJORAS
+  como tarjetas título + detalle; pestaña vacía con su botón; columna de links
+  con VINCULADOS, PUEDEN SERVIR (sin IA, sin vinculados, hasta 6, sólo con
+  algo en común) y RESULTADOS con `?q=`.
+- Alcance: `vinculados`, `todos` y `nada` arman el prompt con los links
+  correctos; desconocido = vinculados; ¿Ya existe? lo ignora; `with_links`,
+  `use` y `category` ya no hacen nada.
+- `/item/{id}/actions/state` con y sin acción corriendo.
+- Cada guardado con `Accept: application/json` (JSON) y sin (redirección), y
+  `POST /item/{id}/title` (vacío no guarda).
+- Ocio: filtros TIPO y ESTADO, palabras de libros, los cuatro órdenes, el aviso
+  de fichas sin reescribir (aparece sólo si hay), `/ocio/candidatos` con stub
+  de catálogos (ningún test sale a la red), `POST /item/{id}/kind` (tipo
+  desconocido no cambia nada), panel de ficha con y sin reescribir.
+- `GET /item/{id}` de ficha e idea redirige; `/embed` da 404; `popup.js`,
+  `idea-links.js` y `redo.js` no se sirven.
+- Capturas a 1440×900 sobre un vault de prueba, comparadas con `12-ocio.png` y
+  `13-idea.png`. El vault real no se toca.
 
 ## Fuera de alcance (entregas siguientes)
 
-- Selección múltiple y su barra flotante, Deshacer, atajos `1`/`2`/`3`, `/`,
-  `?` y la ayuda: entrega 3.
-- Ajustes como modal: entrega 3.
+- Selección múltiple, Deshacer, atajos y su ayuda; Ajustes como modal:
+  entrega 3.
 - Celular: entrega 4.
 - El resto de `docs/2026-10-14-rediseno-biblioteca-pendientes.md`.
 
