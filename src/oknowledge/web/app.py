@@ -1361,12 +1361,13 @@ def create_app(cfg: Config) -> FastAPI:
         for card in claimed:
             rewrite(live, card)
 
-    def act(live: Config, idea: str, action: str, category: str) -> None:
+    def act(live: Config, idea: str, action: str, category: str,
+            use: list[str]) -> None:
         """The background half of an action: run it, then say how it ended."""
         problem: str | None = "it stopped before it could say why"
         try:
             problem = run_idea_action(live, idea, action, category,
-                                      trace=progress.note)
+                                      trace=progress.note, use=use)
         except Exception as error:        # a background task has nowhere to raise to
             problem = str(error) or type(error).__name__
         finally:
@@ -1374,7 +1375,8 @@ def create_app(cfg: Config) -> FastAPI:
 
     @app.post("/item/{link_id}/actions/{action}")
     def ask_about_idea(background: BackgroundTasks, link_id: str, action: str,
-                       category: str = Form("")):
+                       category: str = Form(""), with_links: str = Form(""),
+                       use: list[str] = Form([])):
         """One of the four actions on an idea, behind the page.
 
         Already out there? needs an engine that searches; when the chain has
@@ -1394,8 +1396,11 @@ def create_app(cfg: Config) -> FastAPI:
         live = current["cfg"]
         if action == "exists" and not can_search(live):
             return see_other(item_url(link_id), notice="cannot-search")
+        # Only improve and expand read the idea's links, and only when the
+        # general box went with the form: unticked, it is not sent at all.
+        chosen = use if with_links and action in ("improve", "expand") else []
         if working.start(link_id, action):
-            background.add_task(act, live, link_id, action, category)
+            background.add_task(act, live, link_id, action, category, chosen)
         return see_other(item_url(link_id), notice="thinking")
 
     @app.get("/categories", response_class=HTMLResponse)

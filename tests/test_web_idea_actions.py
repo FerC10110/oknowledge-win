@@ -39,8 +39,9 @@ def ran(monkeypatch):
     calls = []
     outcome = {"problem": None}
 
-    def run(cfg, idea, action, category="", trace=None):
+    def run(cfg, idea, action, category="", trace=None, use=()):
         calls.append((idea, action, category))
+        outcome["use"] = list(use)
         return outcome["problem"]
 
     monkeypatch.setattr("oknowledge.web.app.run_idea_action", run)
@@ -348,3 +349,23 @@ def test_the_links_search_is_labelled_and_its_button_says_search(cfg):
     button = button[:button.index("</button>")]
     assert label < picker
     assert button.rstrip().endswith(">Search")
+
+
+def test_the_ticked_links_go_with_improve(cfg, ran):
+    note = put(cfg, related=["a", "b"])
+    TestClient(create_app(cfg)).post(f"/item/{note.id}/actions/improve",
+                                     data={"with_links": "1", "use": ["a", "b"]})
+    assert ran[1]["use"] == ["a", "b"]
+
+
+def test_without_the_general_box_no_link_goes(cfg, ran):
+    note = put(cfg, related=["a"])
+    TestClient(create_app(cfg)).post(f"/item/{note.id}/actions/expand", data={"use": ["a"]})
+    assert ran[1]["use"] == []
+
+
+def test_exists_and_links_ignore_the_boxes(cfg, ran):
+    note = put(cfg, related=["a"])
+    TestClient(create_app(cfg)).post(f"/item/{note.id}/actions/links",
+                                     data={"with_links": "1", "use": ["a"]})
+    assert ran[1]["use"] == []
