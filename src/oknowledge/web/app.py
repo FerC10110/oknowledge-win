@@ -62,6 +62,7 @@ from ..whatsapp import BadExport, parse as parse_export
 from .batch import Batch
 from .batch import run as run_batch
 from .import_file import BadUpload, drop, stage, staged, text_of
+from .library_view import MONTHS, dot, paragraphs, short_date, tint
 from .index import PER_PAGE, Library, read_full, tally, terms
 from .markup import blocks, split_suggestions
 from .working import Working
@@ -185,9 +186,6 @@ NOTICES = {
 # provider it can point at: the provider is named in the title beside it, and
 # a logo guessed wrong is worse than no logo.
 ENGINE_ICONS = ("opencode", "ollama", "api")
-
-MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun",
-          "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
 
 # How many tag chips the library shows before the rest go behind a disclosure.
 # A thousand notes make hundreds of tags, and a row of them pushes the cards --
@@ -732,6 +730,10 @@ def create_app(cfg: Config) -> FastAPI:
     templates = Jinja2Templates(directory=str(WEB.joinpath("templates")))
     templates.env.filters["plain"] = plain
     templates.env.filters["slug"] = lambda value: quote(str(value), safe="")
+    templates.env.filters["dot"] = dot
+    templates.env.filters["tint"] = tint
+    templates.env.filters["short_date"] = short_date
+    templates.env.filters["paragraphs"] = paragraphs
     templates.env.tests["web_url"] = is_web_url
     templates.env.tests["search_link"] = is_search_url
     # The engines there is an icon for. A name outside this never reaches an
