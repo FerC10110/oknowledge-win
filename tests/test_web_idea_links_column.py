@@ -93,3 +93,22 @@ def test_the_count_of_links(cfg):
 def test_the_script_is_served(cfg):
     reply = TestClient(create_app(cfg)).get("/static/idea-links.js")
     assert reply.status_code == 200 and "dataset.results" in reply.text
+
+
+def css_rule(selector):
+    import re
+    from oknowledge.web.app import WEB
+    css = WEB.joinpath("static", "style.css").read_text(encoding="utf-8")
+    return [m.group(1) for m in re.finditer(re.escape(selector) + r"\s*\{([^}]*)\}", css)]
+
+
+def test_the_idea_keeps_the_spacing_of_its_section():
+    """display: contents drops .mine's gap and top margin; the grid gives them back."""
+    assert any("margin-top: 0.8rem" in rule
+               for rule in css_rule(".item.has-aside > .mine.idea > * + *"))
+    assert any("margin-top: 2rem" in rule for rule in css_rule(".item.has-aside > .mine.idea > form.field"))
+
+
+def test_below_two_columns_the_idea_keeps_the_reading_width():
+    """body.wide lifts main's limit at every width; one column must not run edge to edge."""
+    assert any("max-width: var(--measure)" in rule for rule in css_rule("body.wide .item.has-aside"))

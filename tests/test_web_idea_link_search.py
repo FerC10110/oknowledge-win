@@ -67,7 +67,7 @@ def test_at_most_twelve(cfg):
     assert search(cfg, an_idea(cfg), "vpn").text.count('class="card"') == 12
 
 
-@pytest.mark.parametrize("q", ["", "v", "   ", "#"])
+@pytest.mark.parametrize("q", ["", "v", "   ", "#", "#a", "a b"])
 def test_too_little_to_search_is_empty(cfg, q):
     a_link(cfg, 1, "VPN")
     reply = search(cfg, an_idea(cfg), q)

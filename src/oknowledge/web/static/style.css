@@ -703,6 +703,13 @@ select:focus-visible, textarea:focus-visible, .chip:focus-visible {
    a wide screen and between the buttons and what they wrote on a phone. */
 .item.has-aside { display: grid; grid-template-columns: minmax(0, 1fr); }
 .item.has-aside > .mine.idea { display: contents; }
+/* What .mine's gap and top margin did, now that the section lends its
+   children out: grid items keep their margins, and none of them collapse. */
+.item.has-aside > .mine.idea > * + * { margin-top: 0.8rem; }
+.item.has-aside > .mine.idea > form.field { margin-top: 2rem; }
+/* body.wide lifts main's limit at every width; until there are two columns
+   the idea reads at the usual width. */
+body.wide .item.has-aside { max-width: var(--measure); margin: 0 auto; }
 .item.has-aside .idea-links { order: 1; }
 .item.has-aside .idea-actions, .item.has-aside .idea-meta,
 .item.has-aside > .actions { order: 2; }
@@ -724,6 +731,7 @@ ul.grid.idea-cards { grid-template-columns: minmax(0, 1fr); gap: 0.75rem; margin
 .idea-find input { width: 100%; }
 @media (min-width: 60rem) {
   body.wide main { max-width: calc(var(--measure) + 26rem); }
+  body.wide .item.has-aside { max-width: none; }
   .item.has-aside { grid-template-columns: minmax(0, 1fr) 24rem; column-gap: 2rem;
     align-items: start; }
   .item.has-aside > *, .item.has-aside > .mine.idea > * { grid-column: 1; }

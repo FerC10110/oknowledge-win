@@ -869,9 +869,9 @@ def create_app(cfg: Config) -> FastAPI:
 
     def links_for(note, q: str) -> tuple[bool, list]:
         """(whether `q` is a search at all, the links it finds that the idea
-        does not hold yet). Two characters at least: one would list the
-        whole library."""
-        if len(q.strip()) < 2 or not terms(q):
+        does not hold yet). A word of two characters at least, counted
+        after folding: one letter, or "#a", would list the whole library."""
+        if max(map(len, terms(q)), default=0) < 2:
             return False, []
         linked = set(note.related)
         hits, _ = library.search(q, page=1, per_page=IDEA_SEARCH_LIMIT + len(linked))
