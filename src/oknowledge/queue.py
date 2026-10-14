@@ -13,6 +13,7 @@ import datetime as dt
 import json
 import os
 import re
+import time
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -28,6 +29,17 @@ STATUSES = frozenset({"pending", "ok", "partial", "failed"})
 UNFINISHED = ("partial", "failed")
 
 _ID = re.compile(r"[A-Za-z0-9_-]+")
+
+# How long ago a lock file may have been last taken and still be worth
+# probing in busy(). lock() writes the pid on acquire, so a file's mtime is
+# when it was last taken. One link holds its lock for one fetch (under a
+# minute), at most one yt-dlp run (two minutes) and a chain of engine calls
+# that each time out at five minutes: well under an hour even in the worst
+# case. Six hours is a wide margin over that. Going past it costs only the
+# "Analysing…" row in the list -- /item/{id}/state probes its one lock
+# directly -- while every file it skips is one shared lock fewer that a
+# concurrent lock() could trip over, and one syscall fewer per request.
+BUSY_HOURS = 6
 
 
 class Locked(Exception):
@@ -221,13 +233,16 @@ class Queue:
         if not locks.is_dir():
             return []
         found = []
+        since = time.time() - BUSY_HOURS * 3600
         # Probe the lock files, not the entries: entries are never pruned, so
-        # reading them all would cost the whole library on every request.
+        # reading them all would cost the whole library on every request. And
+        # only the ones taken lately (BUSY_HOURS): each probe is a shared lock
+        # that a concurrent lock() of that link would see as someone else.
         for path in locks.glob("*.lock"):
             if not _ID.fullmatch(path.stem):
                 continue
             try:
-                if not self.held(path.stem):
+                if path.stat().st_mtime < since or not self.held(path.stem):
                     continue
             except OSError:
                 continue

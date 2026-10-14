@@ -418,6 +418,32 @@ def test_a_locked_link_leaves_the_queue_alone(cfg, q, monkeypatch):
     assert all_notes(cfg) == []
 
 
+def test_a_lock_busy_for_an_instant_does_not_lose_the_link(cfg, q, monkeypatch):
+    """A web request probing the lock files (Queue.busy, Queue.held) holds a
+    shared lock on this link's file for an instant. If add() takes that as
+    "someone else has it" it returns before enqueue(), and the paste is gone
+    without a trace (final review M2). A few quick tries ride it out."""
+    url = "https://arstechnica.com/vpn"
+    real = q.lock
+    tries = []
+
+    def lock(link):
+        tries.append(link)
+        if len(tries) == 1:
+            raise Locked(f"{link} is already being processed")
+        return real(link)
+
+    monkeypatch.setattr(q, "lock", lock)
+    extraction(monkeypatch, PAGE)
+    no_pictures(monkeypatch)
+
+    result = add(cfg, url, queue=q)
+
+    assert result.status == "ok"
+    assert len(tries) == 2
+    assert q.get(link_id(url)).status == "ok"
+
+
 # --- The retried note's name, and one bad link among many ---------------------
 
 

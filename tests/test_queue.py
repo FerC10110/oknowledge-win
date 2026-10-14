@@ -7,7 +7,7 @@ import pytest
 
 from marks import posix_only
 from oknowledge import queue as queue_module
-from oknowledge.queue import (PID_ROOM, STATUSES, UNFINISHED, Locked, Queue,
+from oknowledge.queue import (BUSY_HOURS, PID_ROOM, STATUSES, UNFINISHED, Locked, Queue,
                               state_dir)
 
 
@@ -459,3 +459,43 @@ def test_busy_reads_only_the_held_entries(tmp_path, monkeypatch):
     with q.lock("held0000"):
         assert [e.id for e in q.busy()] == ["held0000"]
     assert reads == ["held0000"]
+
+
+def _age(q, link, hours):
+    """Make the lock file of `link` look last taken `hours` ago."""
+    path = q.root / "locks" / f"{link}.lock"
+    then = time.time() - hours * 3600
+    os.utime(path, (then, then))
+
+
+def test_busy_does_not_probe_lock_files_last_taken_long_ago(tmp_path, monkeypatch):
+    """Lock files are never deleted, so a library has one per link it ever
+    read. Probing them all on every request takes a shared lock on each, and
+    a shared lock is exactly what makes a concurrent `/add`'s LOCK_EX|LOCK_NB
+    fail (final review M2). Only a lock taken recently can be held now."""
+    q = Queue(tmp_path)
+    for n in range(20):
+        with q.lock(f"old{n:05d}"):
+            pass
+        _age(q, f"old{n:05d}", BUSY_HOURS + 1)
+    q.enqueue("held0000", "https://h.com", "full")
+    probed = []
+    real = Queue.held
+    monkeypatch.setattr(Queue, "held", lambda self, i: (probed.append(i), real(self, i))[1])
+    with q.lock("held0000"):
+        assert [e.id for e in q.busy()] == ["held0000"]
+    assert probed == ["held0000"]
+
+
+def test_taking_a_lock_marks_its_file_fresh_however_old_it_was(tmp_path):
+    """busy()'s age filter rests on this: lock() writes the pid on acquire,
+    so the file's mtime is the moment it was last taken."""
+    q = Queue(tmp_path)
+    q.enqueue("held0000", "https://h.com", "full")
+    with q.lock("held0000"):
+        pass
+    _age(q, "held0000", BUSY_HOURS * 10)
+    with q.lock("held0000"):
+        age = time.time() - (q.root / "locks" / "held0000.lock").stat().st_mtime
+        assert age < 60
+        assert [e.id for e in q.busy()] == ["held0000"]

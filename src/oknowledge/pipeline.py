@@ -399,6 +399,15 @@ def _step(trace: Tracer, link: str, name: str) -> Iterator[_Told]:
                seconds=time.monotonic() - clock, detail=told.detail))
 
 
+# A web request probing the lock files (Queue.busy, Queue.held) holds a shared
+# lock on one for an instant, and to lock() that looks like another process
+# working on the link. Giving up at once would drop a paste before it reached
+# the queue, so add() tries a few times, a few milliseconds apart: long enough
+# to outlast a probe, far too short to wait out a real holder.
+ADD_LOCK_TRIES = 4
+ADD_LOCK_WAIT = 0.005
+
+
 def add(cfg: Config, url: str, content: str | None = None, engine: str | None = None,
         reprocess: bool = False, queue: Queue | None = None,
         trace: Tracer | None = None) -> Result:
@@ -418,7 +427,14 @@ def add(cfg: Config, url: str, content: str | None = None, engine: str | None = 
 
     with ExitStack() as stack:
         try:
-            stack.enter_context(q.lock(link))
+            for attempt in range(ADD_LOCK_TRIES):
+                try:
+                    stack.enter_context(q.lock(link))
+                    break
+                except Locked:
+                    if attempt == ADD_LOCK_TRIES - 1:
+                        raise
+                    time.sleep(ADD_LOCK_WAIT)
         except Locked as error:
             # Expected, not a failure: somebody else has this link. The queue
             # was left exactly as it was, and a later retry will finish it.
