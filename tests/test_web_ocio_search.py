@@ -95,6 +95,14 @@ def test_a_prefix_in_the_paste_box_goes_to_the_candidates(client):
     assert answer.headers["location"] == "/ocio/buscar?tipo=movie&q=Terminator"
 
 
+def test_a_prefix_in_the_unified_field_goes_to_the_candidates(client):
+    """The library's field sends its text as `q`; the Ocio path is the same."""
+    answer = client.post("/add", data={"q": "película:Terminator"},
+                         follow_redirects=False)
+    assert answer.status_code == 303
+    assert answer.headers["location"] == "/ocio/buscar?tipo=movie&q=Terminator"
+
+
 def test_a_link_still_goes_where_it_always_went(client, taken):
     client.post("/add", data={"url": "https://example.com/x"})
     assert taken == ["https://example.com/x"]      # el camino de hoy, intacto

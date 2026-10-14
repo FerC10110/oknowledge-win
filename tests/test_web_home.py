@@ -184,3 +184,56 @@ def test_search_and_marked_redirect_to_the_home(client):
     assert answer.status_code == 303 and answer.headers["location"] == "/?q=masa"
     answer = client.get("/marked?mark=⭐", follow_redirects=False)
     assert answer.headers["location"] == "/?mark=%E2%AD%90"
+
+
+# --- fix round 1 ------------------------------------------------------------
+
+def test_an_ocio_request_switches_the_field_to_saving(client):
+    """Spec §6: `película:…` goes to /add like a link, so the field saves it
+    and the list is not filtered by it."""
+    body = client.get("/?q=película:Terminator").text
+    assert '<form class="unified saving"' in body
+    assert items(body) == ["a1", "b2", "c3"]
+
+
+@pytest.mark.parametrize("q", ["masa", "nota: masa", "hola mundo"])
+def test_ordinary_words_are_never_taken_for_an_ocio_request(client, q):
+    body = client.get("/", params={"q": q}).text
+    assert '<form class="unified saving"' not in body
+
+
+def test_the_field_names_the_prefixes_it_saves(client):
+    from oknowledge import cards
+    form = re.search(r'<form class="unified[^>]*>', client.get("/").text).group(0)
+    listed = re.search(r'data-save-prefixes="([^"]*)"', form).group(1).split()
+    assert listed == sorted(cards.PREFIXES)
+
+
+@pytest.fixture
+def with_body(tmp_path):
+    vault = tmp_path / "vault"
+    (vault / "oknowledge" / "links").mkdir(parents=True)
+    cfg = Config(vault=vault)
+    n = note("k1", "Uno")
+    n.body = "solo el cuerpo dice zanahoriazul"
+    write_note(cfg, n, "es")
+    write_note(cfg, note("k2", "Dos"), "es")
+    rebuild_indexes(cfg, "es")
+    return TestClient(create_app(cfg))
+
+
+def test_searching_the_list_reads_no_note_from_disk(with_body, monkeypatch):
+    """The column draws no snippet, so a body hit must not cost a file read:
+    live search asks for this at every pause in typing."""
+    with_body.get("/")                       # the index is built before the trap
+    monkeypatch.setattr("oknowledge.web.index.read_full",
+                        lambda *a, **k: pytest.fail("read a note for a snippet"))
+    assert items(with_body.get("/?q=zanahoriazul").text) == ["k1"]
+    assert items(with_body.get("/lista?q=zanahoriazul").text) == ["k1"]
+
+
+def test_the_next_chunk_is_the_one_after_the_first(big):
+    first = items(big.get("/?hasta=120").text)
+    body = big.get("/lista?desde=60").text
+    assert items(body) == first[60:120]
+    assert 'data-more="/lista?desde=120"' in body

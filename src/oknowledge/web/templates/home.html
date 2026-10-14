@@ -6,7 +6,8 @@
 <section class="center" aria-label="{{ t('Library') }}">
   {# GET by default, so Enter searches without JavaScript; the hidden first
      button is the form's default one. Save posts the same field to /add. #}
-  <form class="unified{% if saving %} saving{% endif %}" id="unified" action="/" method="get" role="search">
+  <form class="unified{% if saving %} saving{% endif %}" id="unified" action="/" method="get" role="search"
+        data-save-prefixes="{{ save_prefixes }}">
     <button type="submit" class="default-submit" tabindex="-1" aria-hidden="true"></button>
     <input type="text" name="q" id="field-q" value="{{ view.q }}" autocomplete="off"
            inputmode="search" aria-label="{{ t('Search or paste a link to save it') }}"

@@ -11,6 +11,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from urllib.parse import urlencode
 
+from .. import cards
 from ..marks import rank_marks
 from .index import terms
 
@@ -74,6 +75,12 @@ def is_url(text: str) -> bool:
     return start.startswith(("http://", "https://", "www."))
 
 
+def saves(text: str) -> bool:
+    """What the unified field sends to /add: a link, or a card asked for
+    by its prefix ("película:Terminator", spec §6)."""
+    return is_url(text) or cards.wanted(text) is not None
+
+
 def _count(raw: str) -> int:
     try:
         asked = int(raw)
@@ -107,10 +114,11 @@ class View:
 
     @property
     def searching(self) -> str:
-        """The words to search for, or "" for none: a link is saved, not
-        searched, and "!!!" has nothing to look for."""
+        """The words to search for, or "" for none: a link (or a card asked
+        for by its prefix) is saved, not searched, and "!!!" has nothing to
+        look for."""
         words = any(c.isalnum() for word in terms(self.q) for c in word)
-        return self.q if words and not is_url(self.q) else ""
+        return self.q if words and not saves(self.q) else ""
 
     @property
     def filtered(self) -> bool:
@@ -155,7 +163,7 @@ def choose(library, view: View) -> list:
     """The notes this view shows, newest first (or best first, searching)."""
     if view.searching:
         hits, _ = library.search(view.searching, page=1,
-                                 per_page=max(1, len(library.notes)))
+                                 per_page=max(1, len(library.notes)), snippets=False)
         return [hit.note for hit in hits]
     found = library.filter(category=view.cat or None, tag=view.tag or None,
                            collection=view.col or None)

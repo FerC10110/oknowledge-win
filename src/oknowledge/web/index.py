@@ -383,8 +383,8 @@ class Library:
         """The category each tag is most used under."""
         return self._tag_home
 
-    def search(self, query: str, page: int = 1, per_page: int = PER_PAGE
-               ) -> tuple[list[Hit], int]:
+    def search(self, query: str, page: int = 1, per_page: int = PER_PAGE,
+               snippets: bool = True) -> tuple[list[Hit], int]:
         """(the hits on this page, the total number of hits).
 
         A note matches when every term of the query is somewhere in it. Hits
@@ -392,6 +392,9 @@ class Library:
         summary and points, then what a video mentioned, then source, author
         and url, then body); entries are already newest first and the sort is
         stable, so date breaks ties.
+
+        `snippets=False` leaves every snippet empty: a list that draws none
+        should not pay for them, and a hit only in the body costs a file read.
         """
         words = terms(query)
         if not words:
@@ -408,7 +411,7 @@ class Library:
                 ranked.append((score, entry))
         ranked.sort(key=lambda pair: pair[0])
         start = (page - 1) * per_page
-        return ([Hit(note=e.note, snippet=self._snippet(e, words))
+        return ([Hit(note=e.note, snippet=self._snippet(e, words) if snippets else "")
                  for _, e in ranked[start:start + per_page]], len(ranked))
 
     def _snippet(self, entry: Entry, words: list[str]) -> str:

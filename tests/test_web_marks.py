@@ -148,6 +148,12 @@ def test_each_card_has_an_anchor_to_come_back_to(client, path):
     assert re.search(r'<li class="card[^"]*" id="card-[0-9a-f]{12}"', client.get(path).text)
 
 
+def test_the_picker_sends_you_back_where_you_were(client):
+    body = client.get("/ocio?tipo=movie").text
+    assert f'action="/item/{CARD}/mark"' in body
+    assert 'name="back" value="/ocio?tipo=movie"' in body
+
+
 def test_tapping_the_mark_you_have_takes_it_off(client):
     client.post(f"/item/{LINK}/mark", data={"mark": "⭐", "back": "/"})
     body = client.get(f"/item/{LINK}").text

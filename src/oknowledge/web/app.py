@@ -63,7 +63,7 @@ from .batch import Batch
 from .batch import run as run_batch
 from .import_file import BadUpload, drop, stage, staged, text_of
 from .library_view import (
-    CHUNK, View, choose, dot, is_url, paragraphs, short_date, side_groups, tint,
+    CHUNK, View, choose, dot, paragraphs, saves, short_date, side_groups, tint,
 )
 from .index import Library, read_full, terms
 from .markup import blocks, split_suggestions
@@ -758,7 +758,10 @@ def create_app(cfg: Config) -> FastAPI:
         return {"view": view, "notes": notes[:view.hasta], "pending": pending,
                 "busy": set(working), "total": len(notes) + len(pending),
                 "more": len(notes) > view.hasta, "chunk": CHUNK,
-                "current": current, "saving": is_url(view.q)}
+                "current": current, "saving": saves(view.q),
+                # Every note the view holds, for /lista?desde= to slice
+                # without choosing them a second time.
+                "chosen": notes}
 
     def panel_context(link_id: str, view: View, working: dict[str, str]) -> dict | None:
         """Task 5 fills this in; until then the panel shows the title."""
@@ -778,6 +781,7 @@ def create_app(cfg: Config) -> FastAPI:
                     groups=side_groups(library.notes, library.categories(),
                                        library.collections(), current["cfg"].marks),
                     default_content=current["cfg"].default_content,
+                    save_prefixes=" ".join(sorted(cards.PREFIXES)),
                     panel=panel is not None, **shown, **(panel or {}))
 
     @app.get("/lista", response_class=HTMLResponse)
@@ -791,7 +795,7 @@ def create_app(cfg: Config) -> FastAPI:
             start = max(0, int(desde))
         except ValueError:
             start = 0
-        notes = choose(library, view)
+        notes = shown["chosen"]
         end = start + CHUNK
         return page(request, "list-more.html", **{**shown, "notes": notes[start:end],
                     "more": len(notes) > end, "next_desde": end,

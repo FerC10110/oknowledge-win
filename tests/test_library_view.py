@@ -4,7 +4,7 @@ import pytest
 
 from oknowledge.model import Note
 from oknowledge.web.library_view import (
-    CHUNK, View, choose, dot, hue, is_url, paragraphs, reading_minutes,
+    CHUNK, View, choose, dot, hue, is_url, paragraphs, reading_minutes, saves,
     short_date, side_groups, tint,
 )
 
@@ -111,6 +111,22 @@ def test_a_link_in_the_field_is_not_a_search():
     assert View.from_query({"q": "https://x.com"}).searching == ""
 
 
+@pytest.mark.parametrize("q", ["película:Terminator", "libro: Dune", "SERIE:Dark 2017"])
+def test_a_card_asked_for_by_its_prefix_is_saved_not_searched(q):
+    assert saves(q)
+    assert View.from_query({"q": q}).searching == ""
+
+
+@pytest.mark.parametrize("q", ["masa", "nota: masa", "película:", "hola: mundo", ""])
+def test_anything_else_is_not_saved(q):
+    assert not saves(q)
+
+
+def test_choosing_by_search_asks_for_no_snippets():
+    choose(LIB, View.from_query({"q": "a"}))
+    assert LIB.snippets is False
+
+
 def test_the_url_keeps_the_view_and_applies_changes():
     view = View.from_query({"cat": "Redes", "vista": "lista"})
     assert view.url(sel="a1") == "/?cat=Redes&sel=a1&vista=lista"
@@ -154,7 +170,8 @@ class FakeLibrary:
             found = [n for n in found if collection in n.collections]
         return found
 
-    def search(self, q, page=1, per_page=20):
+    def search(self, q, page=1, per_page=20, snippets=True):
+        self.snippets = snippets
         class Hit:
             def __init__(self, note):
                 self.note = note
