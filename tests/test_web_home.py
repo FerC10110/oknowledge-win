@@ -238,3 +238,12 @@ def test_the_next_chunk_is_the_one_after_the_first(big):
     body = big.get("/lista?desde=60").text
     assert items(body) == first[60:120]
     assert 'data-more="/lista?desde=120"' in body
+
+
+def test_the_home_speaks_spanish(client, isolated_ui_language):
+    isolated_ui_language.write_text('{"language": "es"}', encoding="utf-8")
+    body = client.get("/").text
+    for text in ("Buscá o pegá un link para guardarlo", "Biblioteca", "CATEGORÍAS",
+                 "MARCAS", "COLECCIONES", "Tarjetas", "Lista", "★ Favoritos",
+                 "Completo", "Resumen", "Abrir el original"):
+        assert text in body

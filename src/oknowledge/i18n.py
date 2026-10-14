@@ -38,7 +38,7 @@ STRINGS = {
         "Choose a link to read it here.": "Elegí un link para leerlo acá.",
         "Analysing…": "Analizando…",
         "No category": "Sin categoría",
-        "Show more": "Mostrar más",
+        "Show more": "Ver más",
         "See everything": "Ver todo",
         "Nothing matches “%1”": "Nada coincide con “%1”",
         "Try another word or a tag. If it is a new link, paste it whole with https:// to save it.":
@@ -46,10 +46,10 @@ STRINGS = {
         "There is nothing in %1": "No hay nada en %1",
         "Mark a link from its panel, or move it here from the category chip.":
             "Marcá un link desde su panel, o movelo acá desde el chip de categoría.",
-        "Paste a link in the box above to save it.": "Pegá un link en la caja de arriba para guardarlo.",
+        "Paste a link in the box above to save it.": "Pegá un link en el campo de arriba para guardarlo.",
         # The panel of a link, beside the list.
         "The AI is reading the link…": "La IA está leyendo el link…",
-        "New category": "Categoría nueva",
+        "New category": "Nueva categoría",
         "%1 min read of the summary": "%1 min de lectura del resumen",
         "IN THREE LINES": "EN TRES LÍNEAS",
         "Remove the tag %1": "Quitar la etiqueta %1",
