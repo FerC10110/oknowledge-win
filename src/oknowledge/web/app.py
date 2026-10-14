@@ -769,16 +769,14 @@ def create_app(cfg: Config) -> FastAPI:
                 # and it says there how far along a run is. It is a read of
                 # memory, not of the queue: no page pays for it.
                 "batch": progress.snapshot(),
-                "side": {"section": section,
-                         "counts": {"links": len(library.entries),
-                                    "ocio": len(shelf.entries),
-                                    "ideas": len(ideas.entries)}},
                 "toast": False}
         if library.error is not None:
             return templates.TemplateResponse(
                 request=request, name="error.html", status_code=503,
                 context={**base, "error": library.error, "categories": {},
-                         "tags": {}, "collections": {}})
+                         "tags": {}, "collections": {},
+                         "side": {"section": section, "counts": {
+                             "links": 0, "ocio": 0, "ideas": 0}}})
         # Every shelf, because the filter is in the nav and the nav is on
         # every page. Each refresh is a stat per file, and the library one
         # already ran for this request anyway.
@@ -789,6 +787,10 @@ def create_app(cfg: Config) -> FastAPI:
         return templates.TemplateResponse(
             request=request, name=name, status_code=status_code,
             context={**base, "used_marks": used,
+                     "side": {"section": section,
+                              "counts": {"links": len(library.entries),
+                                         "ocio": len(shelf.entries),
+                                         "ideas": len(ideas.entries)}},
                      "categories": library.categories(), "tags": library.tags(),
                      "collections": library.collections(), "collection": None,
                      "picking": False, **context},

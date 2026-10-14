@@ -66,3 +66,19 @@ def test_the_legacy_pages_scroll_in_their_own_column(client):
     body = client.get("/settings").text
     assert '<div class="app legacy">' in body
     assert '<div class="legacy-main">' in body
+
+
+def test_the_counts_follow_the_vault_on_every_page(tmp_path):
+    vault = tmp_path / "vault"
+    (vault / "oknowledge" / "links").mkdir(parents=True)
+    cfg = Config(vault=vault)
+    client = TestClient(create_app(cfg))
+    client.get("/settings")
+    from oknowledge.vault import note_path
+    card = note("c1")
+    write_note(cfg, card, "es", path=note_path(cfg, card, shelf=cfg.ocio))
+    idea = note("i1")
+    write_note(cfg, idea, "es", path=note_path(cfg, idea, shelf=cfg.ideas))
+    side = sidebar(client.get("/settings").text)
+    assert re.search(r'href="/ocio"[^>]*>.*?<b class="count[^"]*">1</b>', side, re.S)
+    assert re.search(r'href="/ideas"[^>]*>.*?<b class="count[^"]*">1</b>', side, re.S)
