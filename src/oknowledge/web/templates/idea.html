@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block title %}{{ note.title or t('Untitled idea') }} - oknowledge{% endblock %}
 {% block app_class %}idea-screen{% endblock %}
+{% block scripts %}<script src="/static/autosave.js" defer></script><script src="/static/idea.js" defer></script>{% endblock %}
 {% block layout %}
 <section class="idea-main" id="idea" data-id="{{ note.id }}" aria-label="{{ t('Ideas') }}">
   <header class="idea-head">

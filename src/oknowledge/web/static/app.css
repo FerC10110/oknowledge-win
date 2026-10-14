@@ -324,3 +324,4 @@ a.more { display: block; text-align: center; margin: 16px 0; color: var(--t5); f
    pinned to the row's left edge by the library's `.rows .sub .dot`. */
 .idea-shelf .rows .sub { margin: 0; flex: none; }
 .idea-shelf .rows .date { font-size: 12px; color: var(--t6); }
+[data-nojs][hidden] { display: none !important; }
