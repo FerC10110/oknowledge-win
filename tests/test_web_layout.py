@@ -66,7 +66,7 @@ def filters_summary(body):
                      body, re.S)
 
 
-@pytest.mark.parametrize("path", ["/ocio", "/ideas"])
+@pytest.mark.parametrize("path", ["/ocio"])
 def test_the_filters_fold_into_one_line(client, path):
     assert filters_summary(client.get(path).text)
 

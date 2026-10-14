@@ -91,3 +91,15 @@ def test_with_no_list_on_screen_the_panel_is_still_the_pick():
     body = between(SCRIPT.read_text(encoding="utf-8"), "function stillPicked", "\n  }")
     assert "!items" in body
     assert "dataset.current === id" in body
+
+
+def test_the_script_serves_any_list_column():
+    text = SCRIPT.read_text(encoding="utf-8")
+    assert "list.dataset.source" in text
+    assert 'form.dataset.mode' in text
+    assert '"estado", "tipo", "orden"' in text
+
+
+def test_in_ideas_enter_never_saves():
+    body = between(SCRIPT.read_text(encoding="utf-8"), "function saves", "// --- the list column")
+    assert 'mode !== "library"' in body

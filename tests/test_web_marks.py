@@ -135,15 +135,14 @@ def test_a_mark_nobody_uses_is_an_empty_list(client):
     assert answer.status_code == 200 and 'id="card-' not in answer.text
 
 
-@pytest.mark.parametrize("path, link_id", [("/ocio", CARD), ("/ideas", IDEA),
-                                           (f"/item/{LINK}", LINK)])
+@pytest.mark.parametrize("path, link_id", [("/ocio", CARD), (f"/item/{LINK}", LINK)])
 def test_every_card_and_note_page_has_the_picker(client, path, link_id):
     body = client.get(path).text
     assert f'action="/item/{link_id}/mark"' in body
     assert body.count('value="⭐"') >= 1
 
 
-@pytest.mark.parametrize("path", ["/ocio", "/ideas"])
+@pytest.mark.parametrize("path", ["/ocio"])
 def test_each_card_has_an_anchor_to_come_back_to(client, path):
     assert re.search(r'<li class="card[^"]*" id="card-[0-9a-f]{12}"', client.get(path).text)
 

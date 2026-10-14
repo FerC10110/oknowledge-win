@@ -1,5 +1,7 @@
 {# The redesign's left column (handoff §1). Sections always; the library's
-   groups only where the page passes `groups` and `view` (the library). #}
+   groups only where the page passes `groups` and `view` (the library); any
+   other section's groups where the page passes `filters`: a list of
+   {"title", "rows": [{"href", "label", "dot", "count", "on"}]}. #}
 <aside class="sidebar" aria-label="{{ t('Sections') }}">
   <a class="logo" href="/">oknowledge</a>
   <nav class="sections">
@@ -38,6 +40,14 @@
       </nav>
     {% endif %}
   {% endif %}
+  {% for group in filters|default([]) %}
+    <nav class="group" aria-label="{{ t(group.title) }}">
+      <p class="group-title">{{ t(group.title) }}</p>
+      {% for row in group.rows %}
+        <a href="{{ row.href }}" data-nav class="filter{% if row.on %} on{% endif %}"><i class="dot" style="background: {{ row.dot }}"></i><span>{{ t(row.label) }}</span><b class="count mono">{{ row.count }}</b></a>
+      {% endfor %}
+    </nav>
+  {% endfor %}
   <nav class="foot">
     <a href="/categories">{{ t('Categories') }}</a>
     <a href="/retry">{{ t('Activity') }}{% if batch.running %} <b class="mono">{{ batch.done }}/{{ batch.total }}</b>{% elif batch.busy %} <b class="mono">{{ batch.busy|length }}</b>{% endif %}</a>

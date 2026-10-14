@@ -1,15 +1,21 @@
 // The library without reloads (docs/2026-10-14-rediseno-biblioteca-design.md
-// §1, §4, §6, §7). Every action here has a plain link or form under it; this
-// only swaps the column that changed and keeps the URL in step.
+// §1, §4, §6, §7), and every other list drawn the same way: the ideas
+// (docs/2026-10-14-rediseno-ocio-ideas-design.md §2) and Ocio. Every action
+// here has a plain link or form under it; this only swaps the column that
+// changed and keeps the URL in step.
 (function () {
   "use strict";
   var list = document.getElementById("list");
-  var panel = document.getElementById("panel");
+  var panel = document.getElementById("panel");          // not on /ideas
   var form = document.getElementById("unified");
   var field = document.getElementById("field-q");
-  if (!list || !panel || !form || !field) return;
+  if (!list || !form || !field) return;
   var texts = document.body.dataset;
-  var STORE = "oknowledge.vista";
+  var mode = form.dataset.mode || "library";
+  var source = list.dataset.source || "/lista";
+  var STORE = "oknowledge.vista" + (mode === "library" ? "" : "." + mode);
+  // What a new search keeps from the URL: the shape and the sidebar's filter.
+  var KEEP = ["vista", "estado", "tipo", "orden"];
   var prefixes = (form.dataset.savePrefixes || "").split(/\s+/).filter(Boolean);
 
   function toast(text) {
@@ -33,6 +39,9 @@
   // library_view.saves -- a link, or "película: Terminator" (cards.wanted:
   // the word before the first colon, folded and trimmed, and a title after it).
   function saves(text) {
+    // Only the library saves on Enter. On /ideas Enter searches and only the
+    // "New idea" button saves (spec §2).
+    if (mode !== "library") return false;
     var start = text.trim().toLowerCase();
     if (start.indexOf("http://") === 0 || start.indexOf("https://") === 0 ||
         start.indexOf("www.") === 0) return true;
@@ -53,7 +62,7 @@
     var target = new URL(url, location.href);
     var body = document.getElementById("list-body");
     var top = body ? body.scrollTop : 0;
-    return fetch("/lista" + target.search)
+    return fetch(source + target.search)
       .then(function (r) { if (!r.ok) throw new Error(r.status); return r.text(); })
       .then(function (html) {
         if (mine !== asked) return;
@@ -66,10 +75,10 @@
         history.replaceState(null, "", target.pathname + target.search);
         if (keepScroll) document.getElementById("list-body").scrollTop = top;
         var items = document.getElementById("items");
-        if (moved) {
+        if (panel && moved) {
           var still = here().searchParams.get("sel");
           if (still) markCurrent(still);
-        } else {
+        } else if (panel) {
           var current = items ? items.dataset.current : "";
           var shown = panel.querySelector("[data-panel]");
           if (current && (!shown || shown.dataset.panel !== current)) loadPanel(current, true);
@@ -92,6 +101,7 @@
   // once, while the panel on screen is the old one until the new one lands.
   // With no list on screen (a search with no matches) the panel is the pick.
   function stillPicked(id) {
+    if (!panel) return true;
     var items = document.getElementById("items");
     return !items || items.dataset.current === id;
   }
@@ -101,6 +111,7 @@
   // reloading the page, which would wipe the toast that just said so.
   var shownAsked = 0;
   function loadPanel(id, gone) {
+    if (!panel) return;
     var mine = ++shownAsked;
     var url = here();
     url.searchParams.set("sel", id);
@@ -121,6 +132,7 @@
   }
 
   function emptyPanel() {
+    if (!panel) return;
     var url = here();
     url.searchParams.delete("sel");
     history.replaceState(null, "", url.pathname + url.search);
@@ -170,14 +182,17 @@
   });
 
   // --- remembered layout --------------------------------------------------
-  try {
-    var saved = localStorage.getItem(STORE);
-    var now = here();
-    if (saved === "lista" && !now.searchParams.get("vista")) {
-      now.searchParams.set("vista", "lista");
-      loadList(now.href);
-    }
-  } catch (e) { /* no storage: the URL decides */ }
+  // Per list (STORE), and only where the list offers the choice.
+  if (document.querySelector("a[data-view]")) {
+    try {
+      var saved = localStorage.getItem(STORE);
+      var now = here();
+      if (saved === "lista" && !now.searchParams.get("vista")) {
+        now.searchParams.set("vista", "lista");
+        loadList(now.href);
+      }
+    } catch (e) { /* no storage: the URL decides */ }
+  }
 
   // --- the unified field ---------------------------------------------------
   var timer = null;
@@ -185,14 +200,18 @@
     clearTimeout(timer);
     var text = field.value;
     var saving = saves(text);
-    form.classList.toggle("saving", saving);
+    // On /ideas "New idea" shows as soon as there is text, and the text
+    // still searches: the button saves it, Enter does not.
+    form.classList.toggle("saving", mode === "ideas" ? text.trim() !== "" : saving);
     if (saving) return;
     timer = setTimeout(function () {
-      var url = new URL("/", location.href);
+      var url = new URL(form.getAttribute("action") || "/", location.href);
       var q = text.trim().split(/\s+/).join(" ");
       if (q) url.searchParams.set("q", q);
-      var vista = here().searchParams.get("vista");
-      if (vista) url.searchParams.set("vista", vista);
+      KEEP.forEach(function (name) {
+        var value = here().searchParams.get(name);
+        if (value) url.searchParams.set(name, value);
+      });
       loadList(url.href);
     }, 250);
   });
@@ -288,7 +307,7 @@
         var page = new DOMParser().parseFromString(html, "text/html");
         var said = page.querySelector(".toast");
         toast(said ? said.textContent : "");
-        var shown = panel.querySelector("[data-panel]");
+        var shown = panel && panel.querySelector("[data-panel]");
         if (shown && stillPicked(shown.dataset.panel)) loadPanel(shown.dataset.panel, true);    // deleted: gone
         loadList(here().href, true);
       })
@@ -311,7 +330,7 @@
             toast(state.status === "failed" ? texts.failed : texts.done);
             // What the user picked, not what is on screen: that is still the
             // old panel while a newer pick is on its way.
-            var shown = panel.querySelector("[data-panel]");
+            var shown = panel && panel.querySelector("[data-panel]");
             if (shown && shown.dataset.panel === id && stillPicked(id)) loadPanel(id, true);
             loadList(here().href, true);
           })

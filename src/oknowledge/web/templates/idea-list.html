@@ -1,0 +1,27 @@
+{% import "idea-items.html" as shelf with context %}
+<div class="list-head">
+  <span>{{ view.label(t) }} · <b class="mono">{{ total }}</b></span>
+  <nav class="seg" aria-label="{{ t('Layout') }}">
+    <a href="{{ view.url(vista='lista') }}" data-view="lista"
+       class="{% if view.vista == 'lista' %}on{% endif %}">{{ t('List') }}</a>
+    <a href="{{ view.url(vista='tarjetas') }}" data-view="tarjetas"
+       class="{% if view.vista == 'tarjetas' %}on{% endif %}">{{ t('Cards') }}</a>
+  </nav>
+</div>
+<div class="list-body" id="list-body">
+  {% if notes %}
+    <ul class="items {{ 'rows' if view.vista == 'lista' else 'tiles' }}" id="items">
+      {% for note in notes %}{{ shelf.item(note, view) }}{% endfor %}
+    </ul>
+    {% if more %}<a class="more" href="{{ view.url(hasta=view.hasta + chunk) }}" data-more="{{ view.url('/ideas/lista', desde=view.hasta) }}">{{ t('Show more') }}</a>{% endif %}
+  {% elif view.q %}
+    <div class="empty-state"><p class="empty-title">{{ t('No idea matches “%1”', view.q) }}</p>
+      <p>{{ t('Press “New idea” to write it down.') }}</p></div>
+  {% elif view.estado %}
+    <div class="empty-state"><p class="empty-title">{{ t('There is nothing in %1', view.label(t)) }}</p>
+      <a class="btn" href="/ideas">{{ t('See everything') }}</a></div>
+  {% else %}
+    <div class="empty-state"><p class="empty-title">{{ t('No ideas yet') }}</p>
+      <p>{{ t('Write one in the box above and press “New idea”.') }}</p></div>
+  {% endif %}
+</div>

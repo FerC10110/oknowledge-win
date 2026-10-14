@@ -120,17 +120,22 @@ STRINGS = {
         "Every card is already rewritten.": "Todas las fichas ya están reescritas.",
         "Ideas": "Ideas",
         "New idea": "Nueva idea",
-        "What is the idea?": "¿Cuál es la idea?",
-        "Title (optional: the model names it if you leave it empty)":
-            "Título (opcional: si lo dejás vacío, lo pone el modelo)",
         "Untitled idea": "Idea sin título",
-        "not completed": "sin completar",
         "seed": "semilla",
         "under way": "en marcha",
         "done": "hecha",
         "dropped": "descartada",
         "%1 ideas could not be read and are not shown":
             "%1 ideas no se pudieron leer y no se muestran",
+        "Search your ideas": "Buscá en tus ideas",
+        "STATE": "ESTADO",
+        "1 link": "1 link",
+        "%1 links": "%1 links",
+        "No ideas yet": "Todavía no hay ideas",
+        "Write one in the box above and press “New idea”.":
+            "Escribila en el campo de arriba y tocá “Nueva idea”.",
+        "No idea matches “%1”": "Ninguna idea coincide con “%1”",
+        "Press “New idea” to write it down.": "Tocá “Nueva idea” para anotarla.",
         "Saved. The model is filling in the title and the tags: reload in a moment to see them.":
             "Guardada. El modelo está completando el título y las etiquetas: "
             "recargá en un momento para verlos.",

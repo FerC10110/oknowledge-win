@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}{% if view.q %}{{ view.q }} - {% endif %}{{ t('Ideas') }} - oknowledge{% endblock %}
+{% block app_class %}idea-shelf{% endblock %}
+{% block scripts %}<script src="/static/shell.js" defer></script>{% endblock %}
+{% block layout %}
+<section class="center" aria-label="{{ t('Ideas') }}">
+  {# GET, so Enter searches; "New idea" posts the same field (spec §2). #}
+  <form class="unified{% if view.q %} saving{% endif %}" id="unified" action="/ideas" method="get"
+        role="search" data-mode="ideas">
+    <button type="submit" class="default-submit" tabindex="-1" aria-hidden="true"></button>
+    <input type="text" name="q" id="field-q" value="{{ view.q }}" autocomplete="off"
+           aria-label="{{ t('Search your ideas') }}" placeholder="{{ t('Search your ideas') }}">
+    {% if view.estado %}<input type="hidden" name="estado" value="{{ view.estado }}">{% endif %}
+    {% if view.vista == 'lista' %}<input type="hidden" name="vista" value="lista">{% endif %}
+    <span class="save">
+      <button type="submit" class="btn primary" formmethod="post" formaction="/ideas/guardar" id="save-link">{{ t('New idea') }} ↵</button>
+    </span>
+    <kbd class="hint mono">/</kbd>
+  </form>
+  {% if unreadable_ideas %}
+    <p class="quiet">{{ t('%1 ideas could not be read and are not shown', unreadable_ideas) }}</p>
+  {% endif %}
+  <div class="list" id="list" data-source="/ideas/lista">{% include "idea-list.html" %}</div>
+</section>
+{% endblock %}

@@ -1,0 +1,15 @@
+{# One idea in the list: a card (title, three lines of your text, state and
+   links) or a row (dot, title, state and links, date) -- the class on the
+   <ul> decides. The whole item opens the idea's screen. #}
+{% macro item(note, view) -%}
+{% set word = IDEA_WORDS.get(note.state, '') %}
+<li class="item idea" id="idea-{{ note.id }}">
+  <a class="hit" href="{{ view.open(note.id) }}">
+    <span class="title" dir="auto">{{ note.title or t('Untitled idea') }}</span>
+    <span class="excerpt" dir="auto">{{ (note.my_note or note.summary)|plain }}</span>
+    <span class="sub"><i class="dot" style="background: {{ IDEA_DOTS.get(note.state, '#6d6f78') }}"></i>
+      {%- if word %}{{ t(word) }} · {% endif %}{% if note.related|length == 1 %}{{ t('1 link') }}{% else %}{{ t('%1 links', note.related|length) }}{% endif %}</span>
+    <span class="date mono">{{ note.saved|short_date(t) }}</span>
+  </a>
+</li>
+{%- endmacro %}

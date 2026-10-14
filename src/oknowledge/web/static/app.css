@@ -303,3 +303,24 @@ a.more { display: block; text-align: center; margin: 16px 0; color: var(--t5); f
 .row .add { background: none; border: 0; color: var(--acc); font: inherit; font-size: 12.5px;
   cursor: pointer; white-space: nowrap; }
 .row.gone .row-text { font-size: 12px; color: var(--t5); }
+
+/* --- the ideas list (spec §2) -------------------------------------------- */
+/* Scoped by the page (.app.idea-shelf): the <ul> keeps the library's classes. */
+.app.idea-shelf { grid-template-columns: 216px minmax(0, 1fr); overflow: hidden; line-height: normal; }
+.idea-shelf .tiles { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+.idea-shelf .items .hit { display: flex; flex-direction: column; gap: 8px; padding: 14px 16px; color: inherit;
+  text-decoration: none; height: 100%; box-sizing: border-box; }
+.idea-shelf .items .title { font-size: 14.5px; font-weight: 600; color: var(--t1); }
+.idea-shelf .items .excerpt { font-size: 13px; line-height: 1.5; color: var(--t4); display: -webkit-box;
+  -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.idea-shelf .items .sub { margin-top: auto; font-size: 12px; color: var(--t5); display: flex;
+  align-items: center; gap: 6px; }
+.idea-shelf .tiles .date { display: none; }
+.idea-shelf .rows .hit { flex-direction: row; align-items: center; gap: 14px; padding: 10px 16px 10px 30px; }
+.idea-shelf .rows .excerpt { display: none; }
+.idea-shelf .rows .title { flex: 1; min-width: 0; font-size: 13.5px; font-weight: 500;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* The row reads dot, title, "{state} · N links", date (spec §2): the dot is
+   pinned to the row's left edge by the library's `.rows .sub .dot`. */
+.idea-shelf .rows .sub { margin: 0; flex: none; }
+.idea-shelf .rows .date { font-size: 12px; color: var(--t6); }

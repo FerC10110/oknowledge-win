@@ -70,8 +70,9 @@ from .library_view import (
 )
 from .index import Library, read_full, terms
 from .markup import blocks, section_cards, split_suggestions
-from .shelf_view import (AI_BUTTONS, IDEA_WORDS, SECTION_NAMES, TAB_OF, TABS, WORKING, excerpt,
-                         idea_url, scope_of, tab_of)
+from .shelf_view import (AI_BUTTONS, IDEA_DOTS, IDEA_WORDS, SECTION_NAMES, TAB_OF, TABS, WORKING,
+                         IdeaView, choose_ideas, excerpt, idea_filters, idea_url, scope_of,
+                         tab_of)
 from .working import Working
 
 WEB = files("oknowledge").joinpath("web")
@@ -375,10 +376,6 @@ IDEA_STATE_WORDS = {"pending": "seed", "doing": "under way",
                     "done": "done", "dropped": "dropped"}
 """An idea's four states, in its own words: an idea is not watched or read,
 it is had, worked on, made, or let go."""
-
-IDEA_STATE_ORDER = tuple(IDEA_STATE_WORDS.items())
-"""The chips of the ideas section, in this order."""
-
 
 STATE_WORDS = {
     # The design's table. A book is read, not watched, and four words per
@@ -1991,28 +1988,38 @@ def create_app(cfg: Config) -> FastAPI:
             return see_other("/ocio", notice=notice)
         return see_other(item_url(saved), notice=notice)
 
-    @app.get("/ideas", response_class=HTMLResponse)
-    def idea_shelf(request: Request, estado: str = "", tag: str = ""):
-        """The ideas, newest first, the dropped ones only when asked for:
-        the fourth state exists to keep them, not to look at them.
-
-        An unknown filter shows the usual view rather than nothing: these
-        arrive from a URL somebody can type, and an empty page would look
-        like an empty shelf.
-        """
+    def idea_listing(view: IdeaView) -> dict:
         ideas.refresh()
-        notes = sorted(ideas.notes, key=lambda n: (n.saved, n.title), reverse=True)
-        if estado in IDEA_STATES:
-            notes = [n for n in notes if n.state == estado]
-        else:
-            estado = ""
-            notes = [n for n in notes if n.state != "dropped"]
-        if tag:
-            notes = [n for n in notes if tag in n.tags]
-        return page(request, "ideas.html", notes=notes, state=estado, tag=tag,
-                    states=_count_by(ideas.notes, "state"),
-                    idea_tags=ideas.tags(), unreadable_ideas=ideas.unreadable,
-                    STATES=IDEA_STATE_ORDER, STATE_WORDS=IDEA_STATE_WORDS)
+        notes = choose_ideas(ideas.notes, view)
+        return {"view": view, "notes": notes[:view.hasta], "chosen": notes,
+                "total": len(notes), "more": len(notes) > view.hasta, "chunk": CHUNK,
+                "IDEA_WORDS": IDEA_WORDS, "IDEA_DOTS": IDEA_DOTS}
+
+    @app.get("/ideas", response_class=HTMLResponse)
+    def idea_shelf(request: Request):
+        """The ideas at full width (spec §2). An unknown filter is the usual
+        view: these arrive from a URL somebody can type."""
+        view = IdeaView.from_query(request.query_params)
+        shown = idea_listing(view)
+        return page(request, "idea-shelf.html", section="ideas", toast=True,
+                    filters=idea_filters(ideas.notes, view),
+                    unreadable_ideas=ideas.unreadable, **shown)
+
+    @app.get("/ideas/lista", response_class=HTMLResponse)
+    def idea_column(request: Request, desde: str = ""):
+        """The list column alone, for the live search and "more". Registered
+        before /ideas/{idea_id}, which would take "lista" for an id."""
+        shown = idea_listing(IdeaView.from_query(request.query_params))
+        if not desde:
+            return page(request, "idea-list.html", **shown)
+        try:
+            start = max(0, int(desde))
+        except ValueError:
+            start = 0
+        end = start + CHUNK
+        notes = shown["chosen"]
+        return page(request, "idea-list-more.html", **{**shown, "notes": notes[start:end],
+                    "more": len(notes) > end, "next_desde": end, "next_hasta": end + CHUNK})
 
     def links_context(note, q: str) -> dict:
         """The column beside an idea (spec 2). The rows that may help are
@@ -2081,13 +2088,16 @@ def create_app(cfg: Config) -> FastAPI:
 
     @app.post("/ideas/guardar")
     def save_the_idea(background: BackgroundTasks, text: str = Form(""),
-                      title: str = Form("")):
-        """The form in the section. Written at once, with your text; the
-        name, the tags, the summary and the points come in behind the page.
+                      title: str = Form(""), q: str = Form("")):
+        """The "New idea" button of the list's field. Written at once, with
+        your text; the name, the tags, the summary and the points come in
+        behind the page.
 
         No text, no idea: the model has nothing to read, and a title alone
-        is a note you would not know what to do with in a month.
+        is a note you would not know what to do with in a month. The field
+        on /ideas is named `q`, the one it searches with.
         """
+        text = text or q
         if not text.strip():
             return see_other("/ideas", notice="idea-empty")
         live = current["cfg"]

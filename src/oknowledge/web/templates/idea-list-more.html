@@ -1,0 +1,3 @@
+{% import "idea-items.html" as shelf with context %}
+<ul>{% for note in notes %}{{ shelf.item(note, view) }}{% endfor %}</ul>
+{% if more %}<a class="more" href="{{ view.url(hasta=next_hasta) }}" data-more="{{ view.url('/ideas/lista', desde=next_desde) }}">{{ t('Show more') }}</a>{% endif %}
