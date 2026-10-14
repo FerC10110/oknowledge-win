@@ -199,10 +199,3 @@ def test_a_link_still_offers_all_of_it(client, cfg, a_link_in_the_library):
         assert f"/item/{LINK}/{path}" in body
 
 
-def test_the_popup_of_a_card_opens(client, a_card_in_the_shelf):
-    """La grilla de ocio apunta cada ficha a /embed, que es lo que el
-    popup carga. Un 404 ahí es una tarjeta que no se abre sin salir de la
-    grilla, que es para lo que el popup existe."""
-    answer = client.get(f"/embed/{CARD}")
-    assert answer.status_code == 200
-    assert "The Terminator" in answer.text

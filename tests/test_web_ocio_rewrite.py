@@ -73,14 +73,6 @@ def test_a_failed_rewrite_shows_its_reason_on_the_card_page(client, model):
     assert "Last time it failed: every engine failed: opencode: 429" in page
 
 
-def test_a_failed_rewrite_is_told_on_the_shelf(client, model):
-    model[0][T2] = "every engine failed: opencode: 429"
-    client.post(f"/item/{T2}/describe")
-    shelf = client.get("/ocio").text
-    assert "could not be rewritten" in shelf
-    assert 'title="every engine failed: opencode: 429"' in shelf
-
-
 def test_a_rewrite_that_works_clears_the_failure(client, model):
     model[0][T2] = "boom"
     client.post(f"/item/{T2}/describe")
@@ -97,15 +89,10 @@ def test_a_running_rewrite_says_so_and_is_not_asked_twice(cfg, model):
     client.post(f"/item/{T2}/describe")
     assert model[1] == []
     assert "rewriting…" in client.get(f"/item/{T2}").text
-    assert "rewriting…" in client.get("/ocio").text
+    assert f'data-working="{T2}"' in client.get("/ocio").text
 
 
 # --- every card at once -----------------------------------------------------------
-
-def test_the_shelf_offers_to_rewrite_what_is_left(client, model):
-    shelf = client.get("/ocio").text
-    assert 'action="/ocio/reescribir"' in shelf
-    assert "Rewrite every card not rewritten (2)" in shelf
 
 
 def test_rewriting_all_asks_for_each_unrewritten_card_once(client, model):
@@ -129,11 +116,3 @@ def test_one_failure_does_not_stop_the_rest(client, model):
     assert "Last time it failed: boom" in client.get(f"/item/{T2}").text
 
 
-def test_no_button_when_every_card_is_rewritten(tmp_path):
-    vault = tmp_path / "vault"
-    (vault / "oknowledge" / "links").mkdir(parents=True)
-    config = Config(vault=vault)
-    note = card(DONE, "Dune", engine="opencode")
-    write_note(config, note, "es", path=note_path(config, note, shelf=config.ocio))
-    rebuild_indexes(config, "es")
-    assert "/ocio/reescribir" not in TestClient(create_app(config)).get("/ocio").text

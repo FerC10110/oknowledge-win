@@ -59,18 +59,6 @@ def test_the_layout_script_closes_and_unfocuses_on_a_phone():
     assert "details.filters" in js and "details.paste" not in js and "blur" in js
 
 
-# --- the filters ------------------------------------------------------------
-
-def filters_summary(body):
-    return re.search(r'<details class="filters" open>\s*<summary[^>]*>(.*?)</summary>',
-                     body, re.S)
-
-
-@pytest.mark.parametrize("path", ["/ocio"])
-def test_the_filters_fold_into_one_line(client, path):
-    assert filters_summary(client.get(path).text)
-
-
 # --- the cards -------------------------------------------------------------
 
 def test_the_phone_css_clamps_a_card_summary():

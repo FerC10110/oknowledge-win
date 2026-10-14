@@ -1,0 +1,35 @@
+{% import "posters.html" as shelf with context %}
+<div class="list-head">
+  <span>{{ view.label(t) }} · <b class="mono">{{ total }}</b>
+  {% if unrewritten %}
+    <span class="unrewritten"><i class="dot" style="background: var(--acc)"></i>
+      {% if unrewritten == 1 %}{{ t('1 card not rewritten') }}{% else %}{{ t('%1 cards not rewritten', unrewritten) }}{% endif %}
+      {% if rewriting_all %}<em>{{ t('Rewriting…') }}</em>
+      {% else %}<form method="post" action="/ocio/reescribir" data-inline><button class="btn small">{{ t('Rewrite') }}</button></form>{% endif %}
+    </span>
+  {% endif %}
+  </span>
+  <details class="menu sort">
+    {% for key, label in SORTS if key == view.orden %}<summary class="btn">{{ t(label) }} ▾</summary>{% endfor %}
+    <div class="menu-list">
+      {% for key, label in SORTS %}<a href="{{ view.url(orden=key, sel='', hasta=chunk) }}" data-nav class="{% if key == view.orden %}on{% endif %}"><span>{{ t(label) }}</span><span>{% if key == view.orden %}✓{% endif %}</span></a>{% endfor %}
+    </div>
+  </details>
+</div>
+<div class="list-body" id="list-body">
+  {% if notes %}
+    <ul class="posters" id="items" data-current="{{ current }}">
+      {% for note in notes %}{{ shelf.poster(note, view, current, busy) }}{% endfor %}
+    </ul>
+    {% if more %}<a class="more" href="{{ view.url(hasta=view.hasta + chunk) }}" data-more="{{ view.url('/ocio/lista', desde=view.hasta) }}">{{ t('Show more') }}</a>{% endif %}
+  {% elif view.q %}
+    <div class="empty-state"><p class="empty-title">{{ t('Nothing matches “%1”', view.q) }}</p>
+      <p>{{ t('Search the catalogs to add it.') }}</p></div>
+  {% elif view.tipo or view.estado %}
+    <div class="empty-state"><p class="empty-title">{{ t('There is nothing in %1', view.label(t)) }}</p>
+      <a class="btn" href="/ocio">{{ t('See everything') }}</a></div>
+  {% else %}
+    <div class="empty-state"><p class="empty-title">{{ t('Nothing in Leisure yet') }}</p>
+      <p>{{ t('Type a title in the box above and search the catalogs.') }}</p></div>
+  {% endif %}
+</div>

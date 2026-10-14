@@ -6,12 +6,15 @@ testable on its own, like library_view."""
 from __future__ import annotations
 
 import dataclasses
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from urllib.parse import quote, urlencode
 
+from .. import cards
 from ..idea_actions import SCOPES
 from ..vault import IDEA_STATES
+from ..vault import STATES as CARD_STATES
 from .index import fold, terms
 from .library_view import CHUNK, LAYOUTS, _count
 
@@ -133,3 +136,133 @@ def idea_filters(notes, view: IdeaView) -> list[dict]:
               "dot": IDEA_DOTS[state], "count": counts[state], "on": view.estado == state}
              for state in IDEA_STATES]
     return [{"title": "STATE", "rows": rows}]
+
+
+KIND_HUES = {"movie": 300, "series": 200, "anime": 20, "book": 60}
+"""Each kind's hue for the poster with no cover (Ocio.dc.html)."""
+KIND_NAMES = {"movie": "Movies", "series": "Series", "anime": "Anime", "book": "Books"}
+KIND_ONE = {"movie": "Movie", "series": "Series", "anime": "Anime", "book": "Book"}
+_WATCH = {"pending": "To watch", "doing": "Watching", "done": "Watched"}
+_READ = {"pending": "To read", "doing": "Reading", "done": "Read"}
+CARD_WORDS = {"movie": _WATCH, "series": _WATCH, "anime": _WATCH, "book": _READ}
+CARD_DOTS = {"pending": "#6d6f78", "doing": "#a9b4de", "done": "#8fc29a"}
+SORTS = (("recientes", "Recent"), ("titulo", "Title"), ("anio", "Year"),
+         ("estrellas", "Your stars"))
+_SORT_KEYS = {key for key, _ in SORTS}
+CATALOGS = {"imdb.com": "IMDb", "openlibrary.org": "Open Library"}
+
+
+def words_for(kind: str) -> dict[str, str]:
+    """A book is read; everything else is watched -- and so is "All"."""
+    return CARD_WORDS.get(kind, _WATCH)
+
+
+def poster_fill(kind: str) -> str:
+    hue = KIND_HUES.get(kind)
+    if hue is None:
+        return "linear-gradient(160deg, #2a2c34, #17181d)"
+    return f"linear-gradient(160deg, oklch(0.42 0.06 {hue}), oklch(0.18 0.03 {hue}))"
+
+
+def kind_dot(kind: str) -> str:
+    hue = KIND_HUES.get(kind)
+    return "#6d6f78" if hue is None else f"oklch(0.74 0.09 {hue})"
+
+
+def catalog_name(source: str) -> str:
+    return CATALOGS.get(source, source)
+
+
+def year_of(note) -> int | None:
+    """The year a card came out, or None for no date or one nobody can read."""
+    found = re.match(r"(\d{4})", note.published or "")
+    return int(found.group(1)) if found else None
+
+
+@dataclass(frozen=True)
+class CardView:
+    """/ocio as its URL says it: `tipo`, `estado`, `q`, `sel`, `orden`,
+    `hasta` (spec §3). Unknown values are All and Recent."""
+
+    tipo: str = ""
+    estado: str = ""
+    q: str = ""
+    sel: str = ""
+    orden: str = "recientes"
+    hasta: int = CHUNK
+
+    @classmethod
+    def from_query(cls, params: Mapping[str, str]) -> CardView:
+        tipo, estado, orden = (params.get(k, "") for k in ("tipo", "estado", "orden"))
+        return cls(tipo=tipo if tipo in cards.KINDS else "",
+                   estado=estado if estado in CARD_STATES else "",
+                   q=" ".join(params.get("q", "").split()), sel=params.get("sel", ""),
+                   orden=orden if orden in _SORT_KEYS else "recientes",
+                   hasta=_count(params.get("hasta", "")))
+
+    def url(self, path: str = "/ocio", **changes) -> str:
+        own = {k: v for k, v in changes.items() if k in _CARD_FIELDS}
+        extra = [(k, str(v)) for k, v in changes.items() if k not in _CARD_FIELDS]
+        view = dataclasses.replace(self, **own)
+        pairs = [("tipo", view.tipo), ("estado", view.estado), ("q", view.q),
+                 ("sel", view.sel), ("orden", view.orden if view.orden != "recientes" else ""),
+                 ("hasta", str(view.hasta) if view.hasta != CHUNK else "")] + extra
+        query = urlencode([(k, v) for k, v in pairs if v])
+        return path + ("?" + query if query else "")
+
+    def label(self, t) -> str:
+        if self.q:
+            return t("Results")
+        state = t(words_for(self.tipo)[self.estado]) if self.estado else ""
+        if self.tipo:
+            name = t(KIND_NAMES[self.tipo])
+            return f"{name} · {state}" if state else name
+        return state or t("Leisure")
+
+
+_CARD_FIELDS = {f.name for f in dataclasses.fields(CardView)}
+
+
+def sort_cards(notes, orden: str) -> list:
+    """Newest saved first, then the order asked for; Python's sort is stable,
+    so the cards a key cannot tell apart stay newest first (spec §3)."""
+    found = sorted(notes, key=lambda n: (n.saved, n.id), reverse=True)
+    if orden == "titulo":
+        return sorted(found, key=lambda n: fold(n.title))
+    if orden == "anio":
+        return sorted(found, key=lambda n: (year_of(n) is None, -(year_of(n) or 0)))
+    if orden == "estrellas":
+        return sorted(found, key=lambda n: -max(0, min(int(n.score or 0), 5)))
+    return found
+
+
+def choose_cards(notes, view: CardView) -> list:
+    found = [n for n in notes if (not view.tipo or n.type == view.tipo)
+             and (not view.estado or n.state == view.estado)]
+    words = terms(view.q)
+    if words:
+        def text(n):
+            return fold(" ".join([n.title, n.author or "", " ".join(n.tags)]))
+        found = [n for n in found if all(word in text(n) for word in words)]
+    return sort_cards(found, view.orden)
+
+
+def card_filters(notes, view: CardView) -> list[dict]:
+    """TIPO (a kind with no cards is not drawn) and ESTADO, in the words of
+    the kind chosen, counted within it (spec §1)."""
+    fresh = {"q": "", "sel": "", "hasta": CHUNK}
+    kinds = [{"href": view.url(tipo="", **fresh), "label": "All", "dot": "#6d6f78",
+              "count": len(notes), "on": not view.tipo}]
+    for kind in cards.KINDS:
+        count = sum(1 for n in notes if n.type == kind)
+        if count:
+            kinds.append({"href": view.url(tipo=kind, **fresh), "label": KIND_NAMES[kind],
+                          "dot": kind_dot(kind), "count": count, "on": view.tipo == kind})
+    within = [n for n in notes if not view.tipo or n.type == view.tipo]
+    words = words_for(view.tipo)
+    states = [{"href": view.url(estado="", **fresh), "label": "All", "dot": "#6d6f78",
+               "count": len(within), "on": not view.estado}]
+    states += [{"href": view.url(estado=state, **fresh), "label": words[state],
+                "dot": CARD_DOTS[state], "count": sum(1 for n in within if n.state == state),
+                "on": view.estado == state} for state in CARD_STATES]
+    return [{"title": "TYPE", "rows": kinds}, {"title": "STATE", "rows": states}]

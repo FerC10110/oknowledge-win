@@ -85,52 +85,6 @@ def test_a_url_that_is_not_a_web_address_is_never_linked(tmp_path, url):
     assert "<script" not in re.sub(r'<script src="/static/[a-z]+\.js"( defer)?>', "", body)
 
 
-# --- the fragment the dialog loads -------------------------------------------
-
-
-def test_the_fragment_is_the_note_without_the_page_around_it(client):
-    answer = client.get("/embed/a1")
-
-    assert answer.status_code == 200
-    assert "Un shell para Hyprland." in answer.text
-    assert "Corre en Quickshell" in answer.text
-    assert "<!doctype html>" not in answer.text.lower()
-    assert "<header" not in answer.text
-
-
-def test_the_fragment_offers_the_whole_note(client):
-    """The dialog reads; everything that writes stays on the item page."""
-    assert 'href="/item/a1"' in client.get("/embed/a1").text
-
-
-def test_the_fragment_has_nothing_that_writes(client):
-    """No form in the dialog, so none of the write routes is reachable from it."""
-    body = client.get("/embed/a1").text
-
-    assert "<form" not in body
-    assert "method=\"post\"" not in body.lower()
-
-
-def test_a_fragment_for_a_link_that_is_not_there_is_a_404(client):
-    assert client.get("/embed/nope").status_code == 404
-
-
-def test_the_fragment_of_a_hand_edited_url_does_not_link_it(tmp_path):
-    _, client = build(tmp_path, note("a1", url="javascript:alert(1)"))
-
-    assert "alert(1)" not in client.get("/embed/a1").text
-
-
-# --- the script that turns the link into a dialog ----------------------------
-
-
-def test_the_popup_script_is_served(client):
-    answer = client.get("/static/popup.js")
-
-    assert answer.status_code == 200
-    assert "dialog" in answer.text
-
-
 # --- the one view that takes the whole screen --------------------------------
 
 
@@ -201,20 +155,8 @@ def test_the_note_page_shows_the_cover_the_card_showed(with_cover):
     assert 'src="/cover/a1"' in with_cover.get("/item/a1").text
 
 
-def test_the_popup_shows_it_too(with_cover):
-    """Clicking the card body is the usual way in, and it never leaves the
-    library page."""
-    assert 'src="/cover/a1"' in with_cover.get("/embed/a1").text
-
-
-def test_the_cover_is_above_the_text_and_below_the_title(with_cover):
-    body = with_cover.get("/embed/a1").text
-    assert body.index("<h1") < body.index('src="/cover/a1"') < body.index('class="summary"')
-
-
 def test_a_note_with_no_cover_draws_no_frame(with_cover):
-    for path in ("/panel/b2", "/embed/b2"):
-        assert "/cover/" not in with_cover.get(path).text
+    assert "/cover/" not in with_cover.get("/panel/b2").text
 
 
 def test_the_picture_the_note_points_at_is_really_served(with_cover):

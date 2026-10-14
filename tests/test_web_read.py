@@ -500,17 +500,6 @@ def test_a_note_never_asked_shows_no_section(client):
     assert 'class="mentions"' not in client.get("/item/a1").text
 
 
-def test_the_popup_shows_the_mentions_but_offers_no_way_to_delete(video):
-    """embed.html is a fragment that writes nothing, and its own header says
-    so. Respecting that matters more than saving a click."""
-    page = video.get("/embed/a1").text
-
-    assert 'class="mentions"' in page
-    assert "opencode" in page
-    assert "mentions/delete" not in page
-    assert "<form" not in page and "<button" not in page
-
-
 def test_every_confirmation_in_the_note_page_still_has_its_translation():
     """In i18n the key IS the English text, so changing the reprocess warning
     changes the key. The Spanish entry has to move with it, or a Spanish
@@ -535,7 +524,7 @@ def test_a_javascript_url_in_a_mention_is_text_not_a_live_link(tmp_path):
                          mentions=[Mention(name="Sneaky", url="javascript:alert(1)")]),
                "es")
     client = TestClient(create_app(cfg))
-    for path in ("/item/j1", "/embed/j1"):
+    for path in ("/item/j1",):
         page = client.get(path).text
         assert "Sneaky" in page, path
         assert 'href="javascript:' not in page, path
@@ -549,7 +538,7 @@ def test_a_rejected_mention_url_is_still_shown_as_text(tmp_path, bad):
     write_note(cfg, note("j1", "Uno", "Redes", [], "Resumen.", type="youtube",
                          mentions=[Mention(name="Foo", url=bad)]), "es")
     client = TestClient(create_app(cfg))
-    for path in ("/item/j1", "/embed/j1"):
+    for path in ("/item/j1",):
         page = client.get(path).text
         assert "Foo" in page, path
         assert bad in page.replace("&#39;", "'"), path

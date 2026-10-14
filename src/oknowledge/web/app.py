@@ -54,7 +54,6 @@ from ..queue import Locked, Queue
 from ..trace import trace_run
 from ..urls import is_search_url, link_id, normalize
 from ..vault import ACTIONS, IDEA_STATES, MAX_RELATED, states_for
-from ..vault import STATES as vault_states
 from ..vault import (
     BadCategory, IndexesStale, ProtectedNote, clean_category, delete_note,
     find_note, note_path, rebuild_indexes, rename_category, update_note,
@@ -70,9 +69,10 @@ from .library_view import (
 )
 from .index import Library, read_full, terms
 from .markup import section_cards
-from .shelf_view import (AI_BUTTONS, IDEA_DOTS, IDEA_WORDS, SECTION_NAMES, TAB_OF, TABS, WORKING,
-                         IdeaView, choose_ideas, excerpt, idea_filters, idea_url, scope_of,
-                         tab_of)
+from .shelf_view import (AI_BUTTONS, CARD_DOTS, IDEA_DOTS, IDEA_WORDS, KIND_ONE, SECTION_NAMES,
+                         SORTS, TAB_OF, TABS, WORKING, CardView, IdeaView, card_filters,
+                         catalog_name, choose_cards, choose_ideas, excerpt, idea_filters,
+                         idea_url, poster_fill, scope_of, tab_of, words_for)
 from .working import Working
 
 WEB = files("oknowledge").joinpath("web")
@@ -399,27 +399,6 @@ STEP_WORDS = {
 }
 STEP_STATES = {"start": "in progress", "ok": "finished", "fail": "failed"}
 
-KIND_WORDS = (("movie", "Movies"), ("series", "Series"),
-              ("anime", "Anime"), ("book", "Books"))
-"""The four kinds and the word each one wears on a chip, in the order the
-chips are drawn. A tuple of pairs and not a dict: the order is the point."""
-
-STATE_ORDER = (("pending", "Pending"), ("doing", "In progress"),
-               ("done", "Finished"))
-"""The three states, in the words the chips wear. Neutral on purpose: the
-section mixes books with films, and one chip cannot be "watching" and
-"reading" at once. The card's own buttons use the words of its kind."""
-
-
-def _count_by(notes, field: str) -> dict[str, int]:
-    """How many cards each value of one field has, for the filter chips."""
-    counts: dict[str, int] = {}
-    for note in notes:
-        value = getattr(note, field, "")
-        if value:
-            counts[value] = counts.get(value, 0) + 1
-    return dict(sorted(counts.items()))
-
 
 def catalog_type_for(kind: str) -> str:
     """Which catalog shelf a kind is asked of by default."""
@@ -729,6 +708,8 @@ def create_app(cfg: Config) -> FastAPI:
     templates.env.filters["plain"] = plain
     templates.env.filters["slug"] = lambda value: quote(str(value), safe="")
     templates.env.filters["dot"] = dot
+    templates.env.filters["catalog_name"] = catalog_name
+    templates.env.filters["poster_fill"] = poster_fill
     templates.env.filters["tint"] = tint
     templates.env.filters["short_date"] = short_date
     templates.env.filters["paragraphs"] = paragraphs
@@ -790,7 +771,7 @@ def create_app(cfg: Config) -> FastAPI:
         if exc.status_code == 404 and wants_json(request):
             t = translator(ui_language())
             return JSONResponse({"ok": False, "error": t(GONE)}, status_code=404)
-        if exc.status_code == 404 and not path.startswith(("/cover/", "/static/", "/embed/")):
+        if exc.status_code == 404 and not path.startswith(("/cover/", "/static/")):
             return page(request, "notfound.html", status_code=404)
         return await http_exception_handler(request, exc)
 
@@ -927,7 +908,7 @@ def create_app(cfg: Config) -> FastAPI:
 
     @app.get("/item/{link_id}/buscar-links", response_class=HTMLResponse)
     def idea_link_search(request: Request, link_id: str, q: str = ""):
-        """The idea's search box, as you type: a fragment, like /embed."""
+        """The idea's search box, as you type: a fragment, not a page."""
         ideas.refresh()
         idea = ideas.by_id(link_id)
         if idea is None:
@@ -963,24 +944,6 @@ def create_app(cfg: Config) -> FastAPI:
                     section=where.name,
                     words=STATE_WORDS.get(entry.note.type, STATE_WORDS["movie"]),
                     STATES=states_for(entry.note.type), **extra)
-
-    @app.get("/embed/{link_id}", response_class=HTMLResponse)
-    def embed(request: Request, link_id: str):
-        """One note with no page around it: what a card's dialog loads.
-
-        Read-only on purpose. Every write route checks the request's origin,
-        and a form inside a fragment fetched by script is the exact shape
-        that check exists for -- so the dialog reads and the item page writes.
-        """
-        library.refresh()
-        if library.error is not None:
-            return page(request, "embed.html")
-        # Either shelf: the ocio grid points every card at this route, the
-        # same way the library points every link at it.
-        entry, _ = anywhere(link_id)
-        if entry is None:
-            raise HTTPException(status_code=404, detail="no such link")
-        return page(request, "embed.html", note=read_full(entry))
 
     @app.get("/cover/{link_id}")
     def cover(link_id: str):
@@ -1846,42 +1809,58 @@ def create_app(cfg: Config) -> FastAPI:
                 background.add_task(rewrite, live, note.id)
         return note.id, notice
 
-    @app.get("/ocio", response_class=HTMLResponse)
-    def leisure(request: Request, tipo: str = "", estado: str = ""):
-        """The cards. A film is not a link about Docker, and the shelf that
-        holds one does not hold the other.
-
-        An unknown filter shows everything rather than nothing: these
-        arrive from a URL somebody can type, and an empty page would look
-        like an empty shelf.
-        """
+    def card_listing(view: CardView) -> dict:
         shelf.refresh()
-        notes = shelf.notes
-        if tipo in cards.KINDS:
-            notes = [n for n in notes if n.type == tipo]
-        if estado in vault_states:
-            notes = [n for n in notes if n.state == estado]
-        running, failed = rewriting.all_of("describe")
-        return page(request, "ocio.html", notes=notes, kind=tipo, state=estado,
-                    rewriting=running, rewrite_failed=failed,
-                    unrewritten=sum(1 for n in shelf.notes if not n.engine),
-                    counted=_count_by(shelf.notes, "type"),
-                    states=_count_by(shelf.notes, "state"),
-                    unreadable_cards=shelf.unreadable,
-                    KINDS=KIND_WORDS, STATES=STATE_ORDER,
-                    STATE_WORDS=dict(STATE_ORDER))
+        notes = choose_cards(shelf.notes, view)
+        ids = [n.id for n in notes]
+        running, _ = rewriting.all_of("describe")
+        left = [n.id for n in shelf.notes if not n.engine]
+        return {"view": view, "notes": notes[:view.hasta], "chosen": notes,
+                "total": len(notes), "more": len(notes) > view.hasta, "chunk": CHUNK,
+                # A pick that is not in the list opens the first card (spec §3).
+                "current": view.sel if view.sel in ids else (ids[0] if ids else ""),
+                "unrewritten": len(left),
+                "rewriting_all": bool(left) and all(i in running for i in left),
+                "busy": running, "KIND_ONE": KIND_ONE, "CARD_DOTS": CARD_DOTS,
+                "SORTS": SORTS, "words_for": words_for}
+
+    @app.get("/ocio", response_class=HTMLResponse)
+    def leisure(request: Request):
+        """The cards (spec §3). An unknown filter shows everything rather
+        than nothing: these arrive from a URL somebody can type."""
+        view = CardView.from_query(request.query_params)
+        shown = card_listing(view)
+        return page(request, "ocio-shelf.html", section="ocio", toast=True,
+                    filters=card_filters(shelf.notes, view),
+                    save_prefixes=" ".join(sorted(cards.PREFIXES)),
+                    unreadable_cards=shelf.unreadable, **shown)
+
+    @app.get("/ocio/lista", response_class=HTMLResponse)
+    def card_column(request: Request, desde: str = ""):
+        """The centre column alone: the live search and "show more" (spec §3)."""
+        shown = card_listing(CardView.from_query(request.query_params))
+        if not desde:
+            return page(request, "ocio-list.html", **shown)
+        try:
+            start = max(0, int(desde))
+        except ValueError:
+            start = 0
+        end = start + CHUNK
+        notes = shown["chosen"]
+        return page(request, "ocio-list-more.html", **{**shown, "notes": notes[start:end],
+                    "more": len(notes) > end, "next_desde": end, "next_hasta": end + CHUNK})
 
     @app.post("/ocio/reescribir")
-    def rewrite_every_card(background: BackgroundTasks):
+    def rewrite_every_card(request: Request, background: BackgroundTasks):
         """Every card still in the catalog's words, rewritten one after the
         other. A card already being rewritten is left to that run."""
         shelf.refresh()
         claimed = [n.id for n in shelf.notes
                    if not n.engine and rewriting.start(n.id, "describe")]
         if not claimed:
-            return see_other("/ocio", notice="nothing-to-rewrite")
+            return answer(request, "/ocio", "nothing-to-rewrite")
         background.add_task(rewrite_all, current["cfg"], claimed)
-        return see_other("/ocio", notice="rewriting-all")
+        return answer(request, "/ocio", "rewriting-all")
 
     def ask_catalogs(tipo: str, query: str, year: str = "") -> tuple[list, str]:
         """Every answer the catalogs give, and the reason a silent one gives.

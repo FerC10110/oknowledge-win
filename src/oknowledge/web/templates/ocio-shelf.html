@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}{% if view.q %}{{ view.q }} - {% endif %}{{ t('Leisure') }} - oknowledge{% endblock %}
+{% block app_class %}ocio{% endblock %}
+{% block layout %}
+<section class="center" aria-label="{{ t('Leisure') }}">
+  <form class="unified" id="unified" action="/ocio" method="get" role="search"
+        data-mode="ocio" data-save-prefixes="{{ save_prefixes }}">
+    <button type="submit" class="default-submit" tabindex="-1" aria-hidden="true"></button>
+    <input type="text" name="q" id="field-q" value="{{ view.q }}" autocomplete="off"
+           aria-label="{{ t('Search Leisure or paste a link from IMDb or Open Library') }}"
+           placeholder="{{ t('Search Leisure or paste a link from IMDb or Open Library') }}">
+    {% for name in ('tipo', 'estado') %}{% if view[name] %}<input type="hidden" name="{{ name }}" value="{{ view[name] }}">{% endif %}{% endfor %}
+    {% if view.orden != 'recientes' %}<input type="hidden" name="orden" value="{{ view.orden }}">{% endif %}
+    <span class="save">
+      <button type="submit" class="btn primary" formmethod="post" formaction="/add" id="save-link">{{ t('Save') }} ↵</button>
+    </span>
+    <kbd class="hint mono">/</kbd>
+  </form>
+  {% if unreadable_cards %}
+    <p class="quiet">{{ t('%1 cards could not be read and are not shown', unreadable_cards) }}</p>
+  {% endif %}
+  <div class="list" id="list" data-source="/ocio/lista">{% include "ocio-list.html" %}</div>
+</section>
+<section class="detail" id="panel" aria-label="{{ t('Detail') }}"
+         data-empty="{{ t('Choose a card to see it here.') }}">
+  <p class="detail-empty">{{ t('Choose a card to see it here.') }}</p>
+</section>
+{% endblock %}

@@ -325,3 +325,41 @@ a.more { display: block; text-align: center; margin: 16px 0; color: var(--t5); f
 .idea-shelf .rows .sub { margin: 0; flex: none; }
 .idea-shelf .rows .date { font-size: 12px; color: var(--t6); }
 [data-nojs][hidden] { display: none !important; }
+
+/* --- Ocio (spec §3, Ocio.dc.html) ----------------------------------------- */
+.app.ocio { grid-template-columns: 216px minmax(0, 1fr) 460px; overflow: hidden; line-height: normal; }
+.list-body:has(> .posters) { padding: 0 0 80px; }
+.posters { list-style: none; margin: 0; padding: 4px 20px 20px; display: grid; gap: 16px;
+  grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); align-content: start; }
+.posters .item { padding: 0; }        /* style.css gives the note page's .item a top gap */
+.poster .hit { display: flex; flex-direction: column; gap: 8px; color: inherit; text-decoration: none; }
+.poster .art { position: relative; display: block; aspect-ratio: 2 / 3; border-radius: 10px;
+  overflow: hidden; border: 2px solid transparent; }
+.poster.on .art { border-color: #e7e7ea; }
+.poster .art img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.poster .fill-title { position: absolute; left: 12px; right: 12px; bottom: 14px; font-size: 15px;
+  font-weight: 600; line-height: 1.25; color: #f1f1f3; }
+.poster .chip { position: absolute; top: 8px; display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 8px; border-radius: 6px; background: #141519cc; color: #e7e7ea; font-size: 11px; }
+.poster .chip.kind { left: 8px; }
+.poster .chip.state { right: 8px; }
+.poster .chip .dot { width: 6px; height: 6px; border-radius: 50%; }
+.poster .title { font-size: 13.5px; font-weight: 500; color: var(--t1); white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; }
+.poster .meta { display: flex; align-items: center; gap: 6px; margin-top: -6px; font-size: 12px;
+  color: var(--t5); white-space: nowrap; overflow: hidden; }
+.poster .meta > * { flex: none; }
+.poster .meta > * + *::before { content: "·"; margin-right: 6px; color: var(--t6); }
+.stars-shown { display: inline-flex; gap: 1px; }
+.stars-shown .star { color: #33353e; display: inline-flex; }
+.stars-shown .star.on { color: var(--fav); }
+.stars-shown svg { width: 11px; height: 11px; }
+.list-head .unrewritten { display: inline-flex; align-items: center; gap: 8px; margin-left: 12px;
+  padding: 4px 4px 4px 10px; border-radius: 8px; background: #1b1c21; font-size: 12.5px;
+  color: #c9cbd1; }
+.list-head .unrewritten .btn { height: auto; padding: 3px 9px; border: 0; border-radius: 6px;
+  background: var(--s7); color: var(--t1); font-size: 12.5px; }
+.list-head .unrewritten form { margin: 0; }
+.list-head .unrewritten em { font-style: normal; color: var(--acc); padding-right: 6px; }
+.list-head .sort > summary { height: auto; padding: 4px 10px; font-size: 12.5px; }
+.list-head .sort .menu-list { right: 0; left: auto; min-width: 170px; }

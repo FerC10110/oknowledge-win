@@ -1,6 +1,6 @@
 // Re-analyse a link without leaving the page you are on.
 //
-// Progressive enhancement, like popup.js: with this file blocked or broken the
+// Progressive enhancement: with this file blocked or broken the
 // button is an ordinary form post that works exactly as it did -- it just
 // reloads the library and takes you back to the top of it, which is the thing
 // this file exists to avoid.
