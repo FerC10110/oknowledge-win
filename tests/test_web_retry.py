@@ -463,14 +463,33 @@ def test_the_nav_counts_nothing_when_no_batch_is_running(setup):
 
 def test_a_link_being_worked_on_says_so(cards, monkeypatch):
     """What the spinning card polls. The queue and never the vault: every card
-    the user clicked asks this every few seconds."""
+    the user clicked asks this every few seconds. Working is the lock the task
+    holds; the `pending` the click writes is not work by itself."""
+    seen = {}
+
+    def reanalyze(cfg, url, engine, **kw):
+        with Queue().lock("waiting"):
+            seen["during"] = client.get("/item/waiting/state").json()
+
+    monkeypatch.setattr(module, "reanalyze", reanalyze)
+    cfg, client = cards
+
+    client.post("/item/waiting/reprocess", data={"back": "library"},
+                follow_redirects=False)
+
+    assert seen["during"] == {"working": True, "status": "pending"}
+
+
+def test_a_reprocess_whose_task_died_is_not_working(cards, monkeypatch):
+    """The task ended without finishing (an OSError, a restart): the entry is
+    left pending with nobody holding it, and a card polling it must stop."""
     monkeypatch.setattr(module, "reanalyze", lambda cfg, url, engine, **kw: None)
     cfg, client = cards
 
     client.post("/item/waiting/reprocess", data={"back": "library"},
                 follow_redirects=False)
 
-    assert client.get("/item/waiting/state").json() == {"working": True,
+    assert client.get("/item/waiting/state").json() == {"working": False,
                                                         "status": "pending"}
 
 

@@ -1641,17 +1641,18 @@ def create_app(cfg: Config) -> FastAPI:
 
         The queue and never the vault: every card the user clicked asks this
         every few seconds, and re-reading a thousand notes for it would be
-        absurd. The lock is the honest half of the answer -- it dies with the
-        process that held it, so nothing here can be stale -- and `pending`
-        covers the moment between the click and the task reaching that lock.
+        absurd. The rule is the list's own, analyzing(): a lock some process
+        holds -- it dies with that process, so nothing here can be stale -- or
+        a link just added whose entry does not exist yet. A `pending` entry
+        nobody holds is owed work, not work: its run died, and calling it
+        working would keep an open page's card spinning for ever.
         """
         q = Queue()
         try:
             entry = q.get(link_id)
-            if entry is None and link_id in analyzing():
+            working = q.held(link_id) or link_id in analyzing()
+            if entry is None and working:
                 return JSONResponse({"working": True, "status": "pending"})
-            working = entry is not None and (entry.status == "pending"
-                                             or q.held(link_id))
         except (OSError, ValueError):
             # An unreadable state tree. "Nobody is working on it" stops a
             # spinner; claiming work nobody is doing never stops one.

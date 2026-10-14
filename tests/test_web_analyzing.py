@@ -87,3 +87,21 @@ def test_a_held_entry_is_listed_and_a_held_note_is_marked_busy(client):
 def test_filters_do_not_list_the_pending(client):
     client.post("/add", data={"q": URL})
     assert items(client.get("/?cat=Redes").text) == ["old1"]
+
+
+def test_the_state_of_a_pending_entry_nobody_holds_is_not_working(client):
+    """A link whose analysis died (an OSError after enqueue, a restart) is
+    pending with no lock. The open page polls /state; calling it working
+    would keep its card "Analizando…" for ever, against the rule the list
+    itself follows."""
+    Queue().enqueue("dead0000", "https://muerto.com", "full")
+    assert client.get("/item/dead0000/state").json() == {"working": False,
+                                                         "status": "pending"}
+
+
+def test_the_state_of_a_pending_entry_someone_holds_is_working(client):
+    q = Queue()
+    q.enqueue("live0000", "https://vivo.com", "full")
+    with q.lock("live0000"):
+        assert client.get("/item/live0000/state").json() == {"working": True,
+                                                             "status": "pending"}
