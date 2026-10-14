@@ -128,7 +128,7 @@ body { background: #141519; }
 .rows .hit { position: relative; }
 .rows .sub .dot { position: absolute; left: 10px; top: 50%; margin-top: -3.5px; }
 
-.more { display: block; text-align: center; margin: 16px 0; color: var(--t5); font-size: 13px; }
+a.more { display: block; text-align: center; margin: 16px 0; color: var(--t5); font-size: 13px; }
 .empty-state { margin: 18vh auto 0; max-width: 26rem; text-align: center; color: var(--t5);
   font-size: 13.5px; }
 .empty-title { color: var(--t1); font-size: 16px; font-weight: 500; }

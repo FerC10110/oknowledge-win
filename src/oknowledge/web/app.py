@@ -468,6 +468,15 @@ IDEA_SEARCH_LIMIT = 12
 """Results beside an idea: enough to choose from, few enough to fit beside it."""
 
 
+def links_in_analysis() -> dict[str, str]:
+    """{id: url} of the links being analysed right now.
+
+    A module-level seam so the panel's "being read" state can be tested
+    before the queue feeds it (Task 6 fills this in from the queue).
+    """
+    return {}
+
+
 def item_url(link_id: str) -> str:
     return "/item/" + quote(link_id, safe="")
 
@@ -746,7 +755,7 @@ def create_app(cfg: Config) -> FastAPI:
 
     def analyzing() -> dict[str, str]:
         """{id: url} of the links being analysed right now. Task 6."""
-        return {}
+        return links_in_analysis()
 
     def listing(view: View, working: dict[str, str]) -> dict:
         notes = choose(library, view)

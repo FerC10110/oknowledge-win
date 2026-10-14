@@ -225,6 +225,54 @@ def test_the_picture_the_note_points_at_is_really_served(with_cover):
 
 # --- what the note page lets you change --------------------------------------
 
+@pytest.fixture
+def card_client(tmp_path):
+    """An Ocio card: its note page still has the fields a link's had."""
+    from oknowledge.vault import note_path
+    vault = tmp_path / "vault"
+    (vault / "oknowledge" / "links").mkdir(parents=True)
+    cfg = Config(vault=vault)
+    card = Note(id="c1", url="https://imdb.com/title/tt0088247", title="The Terminator",
+                category="Películas", tags=["accion"], type="movie", source="imdb.com",
+                saved="2026-10-11", summary="Un cyborg.")
+    write_note(cfg, card, "es", path=note_path(cfg, card, shelf=cfg.ocio))
+    rebuild_indexes(cfg, "es", cfg.ocio)
+    return TestClient(create_app(cfg))
+
+
+def test_every_field_says_what_it_is_above_itself(card_client):
+    """Bare boxes in a column said nothing about which was which. An
+    aria-label is not an answer: it is not on the screen."""
+    body = card_client.get("/item/c1").text
+    labelled = dict(re.findall(r'<label for="(field-\w+)">([^<]+)</label>', body))
+
+    assert labelled == {"field-tags": "Edit tags", "field-mine": "Your note"}
+    for field in labelled:
+        assert f'id="{field}"' in body          # the label points at something
+
+
+def test_saving_is_a_drawn_disk_with_a_name_for_what_cannot_see_it(card_client):
+    """A disk instead of the word, as asked. Drawn and not typed, for the same
+    reason the re-analyse arrow is: 💾 is a glyph the page would be hoping
+    some font on the machine draws, and on this one the other emoji did not.
+
+    The word stays in title and aria-label: a button whose whole content is a
+    picture has no accessible name.
+    """
+    body = card_client.get("/item/c1").text
+    actions = body[body.index('<div class="actions">'):]
+    saves = re.findall(r'<button type="submit" title="Save"\s+aria-label="Save">'
+                       r'\s*<svg class="icon"', actions)
+
+    assert len(saves) == 1                      # the tags
+    assert "Save</button>" not in actions       # and there it is not a word
+    # The colour of the text around it, so it reads in either theme and
+    # nothing here depends on telling two fixed colours apart.
+    drawn = re.search(r"<svg class=\"icon\".*?</svg>", actions, re.S).group(0)
+    assert "currentColor" in drawn and "#" not in drawn
+    assert not [ch for ch in actions if ord(ch) > 0xFFFF]
+
+
 def test_joining_a_collection_is_not_drawn_as_saving(client):
     """Two actions that differ should not look the same: that button does not
     save the box beside it, it files the note somewhere."""

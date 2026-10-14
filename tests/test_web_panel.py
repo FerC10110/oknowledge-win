@@ -142,3 +142,30 @@ def test_a_write_lands_on_the_panel_with_a_toast(client):
     body = client.post("/item/b2/category", data={"category": "Cocina"}).text
     assert '<p class="notice toast" role="status">' in body
     assert re.search(r'<li class="item on" id="card-b2"', body)
+
+
+def test_the_more_menu_lists_every_mark_with_the_current_one_on(client, cfg):
+    more = re.search(r'<details class="menu up more">.*?</details>', panel(client, "a1"), re.S).group(0)
+    for mark in cfg.marks:
+        assert f'value="{mark}"' in more
+    assert re.search(r'<button name="mark" value="⭐" class="on"', more)
+
+
+def test_while_the_ai_reads_it_the_panel_holds_only_the_title(client, monkeypatch):
+    # The seam the queue fills in (Task 6): {id: url} of the links being read.
+    monkeypatch.setattr("oknowledge.web.app.links_in_analysis",
+                        lambda: {"a1": "https://wireguard.com/a1"})
+    body = panel(client, "a1")
+    assert '<h1 dir="auto">WireGuard simple</h1>' in body
+    assert "The AI is reading the link…" in body and '<div class="skeleton">' in body
+    assert 'name="add"' not in body.split('<div class="detail-bar">')[0]
+    assert "#vpn" not in body and "chip-menu" not in body
+    assert "Casa conectada" not in body.split('<div class="detail-bar">')[0]
+
+
+def test_the_show_more_rule_does_not_reach_the_panel_menu():
+    """`.more` is also the panel's ⋯ menu: the list's link rule is scoped."""
+    from oknowledge.web.app import WEB
+    css = WEB.joinpath("static", "app.css").read_text(encoding="utf-8")
+    assert not re.search(r'(^|[\s,}])\.more\s*[,{]', css, re.M)
+    assert re.search(r'^a\.more\s*\{', css, re.M)
