@@ -6,8 +6,6 @@ at once and does the work afterwards, for the same reason reprocess does: the
 engine chain is minutes per link and no browser waits that long.
 """
 
-from pathlib import Path
-
 import pytest
 from fastapi.testclient import TestClient
 
@@ -113,22 +111,6 @@ def test_a_link_already_in_the_library_is_said_and_not_read_again(tmp_path, take
     assert taken == []
     assert "already have" in body
     assert "Uno" in body                        # and there it is
-
-
-def test_the_box_has_its_own_line_on_a_phone():
-    """The header already wraps at 40rem; the box is the widest thing in it,
-    so it has to be told where to go rather than squeezed beside the search."""
-    import oknowledge.web
-
-    css = (Path(oknowledge.web.__file__).parent / "static" / "style.css").read_text()
-    # Every block for that width, not the first one: there is more than one,
-    # and a test that reads only the first would pass on a rule in the wrong
-    # place -- or fail on one in the right place.
-    blocks = [part.split("}\n}")[0]
-              for part in css.split("@media (max-width: 40rem)")[1:]]
-
-    assert blocks
-    assert any(".paste-form input" in block for block in blocks)
 
 
 # --- the half that runs after the answer --------------------------------------

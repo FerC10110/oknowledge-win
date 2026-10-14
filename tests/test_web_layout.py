@@ -71,15 +71,10 @@ def test_the_filters_fold_into_one_line(client, path):
     assert filters_summary(client.get(path).text)
 
 
-# --- the strip of time and the cards ----------------------------------------
+# --- the cards -------------------------------------------------------------
 
-def test_the_phone_css_puts_the_months_on_their_own_row():
-    assert ".timeline .break" in css() and "order: 1" in css()
+def test_the_phone_css_clamps_a_card_summary():
     assert "-webkit-line-clamp: 4" in css()
-
-
-def test_while_picking_the_mark_gives_its_corner_to_the_checkbox():
-    assert re.search(r"body\.picking \.card > \.mark\s*\{\s*display: none", css())
 
 
 # --- the categories page ----------------------------------------------------

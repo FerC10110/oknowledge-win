@@ -740,7 +740,7 @@ def create_app(cfg: Config) -> FastAPI:
                                          "ideas": len(ideas.entries)}},
                      "categories": library.categories(), "tags": library.tags(),
                      "collections": library.collections(), "collection": None,
-                     "picking": False, **context},
+                     **context},
         )
 
     @app.exception_handler(StarletteHTTPException)
