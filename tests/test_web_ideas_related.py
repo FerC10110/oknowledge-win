@@ -129,13 +129,16 @@ def test_a_full_idea_is_said(cfg, client, link):
 
 def test_the_idea_shows_its_links_by_their_real_titles(cfg, client, link):
     idea = put(cfg, related=[link.stem])
-    assert f'<a href="/item/{LINK}">WireGuard</a>' in client.get(f"/item/{idea.id}").text
+    text = client.get(f"/item/{idea.id}").text
+    aside = text[text.index('<aside class="idea-links"'):text.index("</aside>")]
+    assert f'href="/item/{LINK}" data-popup="/embed/{LINK}"' in aside
+    assert ">WireGuard</a>" in aside
 
 
 def test_a_link_that_is_not_there_any_more_is_dimmed_not_dropped(cfg, client):
     idea = put(cfg, related=["2026-01-01-borrada"])
     page = client.get(f"/item/{idea.id}").text
-    assert 'class="gone"' in page
+    assert 'class="card gone"' in page
     assert "2026-01-01-borrada" in page
 
 

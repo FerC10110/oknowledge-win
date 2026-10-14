@@ -51,7 +51,7 @@ from ..models_cache import remember as remember_models
 from ..queue import Locked, Queue
 from ..trace import trace_run
 from ..urls import is_search_url, link_id, normalize
-from ..vault import ACTIONS, IDEA_STATES, states_for
+from ..vault import ACTIONS, IDEA_STATES, MAX_RELATED, states_for
 from ..vault import STATES as vault_states
 from ..vault import (
     BadCategory, IndexesStale, ProtectedNote, clean_category, delete_note,
@@ -916,7 +916,9 @@ def create_app(cfg: Config) -> FastAPI:
             by_stem = {e.path.stem: e.note for e in library.entries}
             extra["related"] = [(stem, by_stem.get(stem)) for stem in note.related]
             searched, found = links_for(note, q)
-            extra.update(q=q, searched=searched, found=found, idea_id=note.id)
+            extra.update(q=q, searched=searched, found=found, idea_id=note.id,
+                         max_related=MAX_RELATED,
+                         usable=any(link for _, link in extra["related"]))
             running, failed = working.of(link_id)
             rest, rows = split_suggestions(note.actions.get("links", ""))
             extra.update(

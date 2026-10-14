@@ -130,6 +130,10 @@ STRINGS = {
         "Add to the idea": "Sumar a la idea",
         "already linked": "ya relacionado",
         "Nothing matches": "Nada coincide",
+        "None yet": "Ninguno todavía",
+        "Search your links": "Buscar en tus links",
+        "Use the linked links": "Usar los links vinculados",
+        "Use": "Usar",
         "Add to an idea": "Sumar a una idea",
         "Remove from the idea": "Sacar de la idea",
         "This note is not in your library any more":

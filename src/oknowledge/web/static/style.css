@@ -697,3 +697,33 @@ select:focus-visible, textarea:focus-visible, .chip:focus-visible {
   .engine-row button { grid-column: 2; }
   .providers label { display: flex; align-items: center; min-height: 2.75rem; }
 }
+
+/* An idea's page: the links beside it. The idea section lends its children
+   to the article's grid, so the aside can sit at the right of all of them on
+   a wide screen and between the buttons and what they wrote on a phone. */
+.item.has-aside { display: grid; grid-template-columns: minmax(0, 1fr); }
+.item.has-aside > .mine.idea { display: contents; }
+.item.has-aside .idea-links { order: 1; }
+.item.has-aside .idea-actions, .item.has-aside .idea-meta,
+.item.has-aside > .actions { order: 2; }
+.idea-links h2 { font-size: 1rem; }
+ul.grid.idea-cards { grid-template-columns: minmax(0, 1fr); gap: 0.75rem; margin-bottom: 1rem; }
+.idea-cards .card .sum { display: -webkit-box; -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical; overflow: hidden; }
+.card-tools { display: flex; gap: 0.6rem; align-items: center;
+  justify-content: space-between; margin-top: 0.5rem; }
+.card-tools form { display: inline; }
+.card.gone { opacity: 0.55; }
+.card.unused { opacity: 0.6; }
+.idea-find { display: flex; flex-direction: column; gap: 0.3rem; margin-bottom: 0.75rem; }
+.idea-find input { width: 100%; }
+@media (min-width: 60rem) {
+  body.wide main { max-width: calc(var(--measure) + 26rem); }
+  .item.has-aside { grid-template-columns: minmax(0, 1fr) 24rem; column-gap: 2rem;
+    align-items: start; }
+  .item.has-aside > *, .item.has-aside > .mine.idea > * { grid-column: 1; }
+  .item.has-aside .idea-links { grid-column: 2; grid-row: 1 / span 40; order: 0;
+    position: sticky; top: 1rem; max-height: calc(100vh - 2rem); overflow: auto; }
+  .item.has-aside .idea-actions, .item.has-aside .idea-meta,
+  .item.has-aside > .actions { order: 0; }
+}

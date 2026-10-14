@@ -1,7 +1,11 @@
 {% extends "base.html" %}
+{% from "link-card.html" import link_card with context %}
+{% block body_class %}{% if idea %}wide{% endif %}{% endblock %}
+{% block scripts %}{% if idea %}<script src="/static/popup.js" defer></script>
+<script src="/static/idea-links.js" defer></script>{% endif %}{% endblock %}
 {% block title %}{{ note.title or t('Untitled idea') }} - oknowledge{% endblock %}
 {% block main %}
-  <article class="item">
+  <article class="item{% if idea %} has-aside{% endif %}">
     <p class="meta"><span class="cat">{{ note.category }}</span> · {{ note.source }} · {{ note.saved }}
       {% if note.status != 'ok' %}<span class="warn">{{ t('Incomplete') }}</span>{% endif %}
       {% include "engine-badge.html" %}</p>
@@ -126,7 +130,9 @@
                     {% for name in link_categories %}<option value="{{ name }}">{{ name }}</option>{% endfor %}
                   </select>
                 {% endif %}
-                <button type="submit" form="act-{{ action }}"
+                {% set shared = action in ('improve', 'expand') %}
+                <button type="submit" form="{{ 'act-think' if shared else 'act-' ~ action }}"
+                        {%- if shared %} formaction="/item/{{ note.id|slug }}/actions/{{ action }}"{% endif %}
                         {%- if has and not busy %} title="{{ t('Ask again') }}"{% endif %}
                         {%- if busy or blocked %} disabled{% endif %}>
                   {%- if busy %}{{ t('thinking…') }}
@@ -134,6 +140,12 @@
                 </button>
               </span>
             {% endfor %}
+            {% if usable %}
+              {# Ticked: the linked links ticked beside the idea go with
+                 Improve and Expand. Unticked, none does, whatever the cards say. #}
+              <label class="use-all"><input type="checkbox" name="with_links" value="1"
+                     form="act-think" checked> {{ t('Use the linked links') }}</label>
+            {% endif %}
           </div>
           {% for action in actions %}
             {% if action == 'exists' and not searchable %}
@@ -145,30 +157,55 @@
           {% endfor %}
           <span class="row"><button type="submit">{{ t('Save') }}</button></span>
         </form>
-        {% for action in actions %}
+        {% for action in actions if action not in ('improve', 'expand') %}
           <form id="act-{{ action }}" action="/item/{{ note.id|slug }}/actions/{{ action }}" method="post"></form>
         {% endfor %}
-        {% if related %}
-          <h2>{{ t('Links for this idea') }}</h2>
-          <ul class="related">
-            {% for stem, found in related %}
-              <li{% if not found %} class="gone"{% endif %}>
+        {# One form for both: a box belongs to one form, and the same choice of
+           links is for either button. Each button names its own action. #}
+        <form id="act-think" action="/item/{{ note.id|slug }}/actions/improve" method="post"></form>
+        {# Beside the idea on a wide screen, between its buttons and what they
+           wrote on a phone: the links it is built from, then the way to add more. #}
+        <aside class="idea-links" aria-labelledby="idea-links-title">
+          <h2 id="idea-links-title">{{ t('Links for this idea') }}
+            <span class="meta">{{ related|length }}/{{ max_related }}</span></h2>
+          {% if related %}
+            <ul class="grid idea-cards">
+              {% for stem, found in related %}
                 {% if found %}
-                  <a href="/item/{{ found.id|slug }}">{{ found.title }}</a>
-                  <span class="cat">{{ found.category }}</span>
+                  {% call link_card(found) %}
+                    <label class="use"><input type="checkbox" name="use" value="{{ stem }}" form="act-think" checked> {{ t('Use') }}</label>
+                    <form action="/item/{{ note.id|slug }}/related/drop" method="post">
+                      <button type="submit" name="stem" value="{{ stem }}"
+                              title="{{ t('Remove from the idea') }}"
+                              aria-label="{{ t('Remove from the idea') }}">×</button>
+                    </form>
+                  {% endcall %}
                 {% else %}
-                  <span title="{{ t('This note is not in your library any more') }}">{{ stem }}</span>
+                  <li class="card gone">
+                    <div class="pad">
+                      <h2 title="{{ t('This note is not in your library any more') }}">{{ stem }}</h2>
+                      <div class="card-tools">
+                        <form action="/item/{{ note.id|slug }}/related/drop" method="post">
+                          <button type="submit" name="stem" value="{{ stem }}"
+                                  title="{{ t('Remove from the idea') }}"
+                                  aria-label="{{ t('Remove from the idea') }}">×</button>
+                        </form>
+                      </div>
+                    </div>
+                  </li>
                 {% endif %}
-                <form action="/item/{{ note.id|slug }}/related/drop" method="post">
-                  <button type="submit" name="stem" value="{{ stem }}"
-                          title="{{ t('Remove from the idea') }}"
-                          aria-label="{{ t('Remove from the idea') }}">×</button>
-                </form>
-              </li>
-            {% endfor %}
-          </ul>
-        {% endif %}
-        <div id="idea-found">{% include "idea-link-results.html" %}</div>
+              {% endfor %}
+            </ul>
+          {% else %}
+            <p class="meta">{{ t('None yet') }}</p>
+          {% endif %}
+          <form method="get" action="/item/{{ note.id|slug }}" class="idea-find" role="search">
+            <label for="field-find">{{ t('Search your links') }}</label>
+            <input id="field-find" type="search" name="q" value="{{ q }}" autocomplete="off"
+                   data-results="/item/{{ note.id|slug }}/buscar-links">
+          </form>
+          <div id="idea-found" aria-live="polite">{% include "idea-link-results.html" %}</div>
+        </aside>
         {# What the actions wrote. Each has its own section in the idea's
            note, beside your text and never over it. #}
         <section class="idea-actions">

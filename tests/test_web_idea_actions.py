@@ -285,8 +285,9 @@ def test_the_actions_sit_between_your_text_and_save(cfg):
     form = note_form(page(cfg, note), note)
     text_ends = form.index("</textarea>")
     save = form.index('<button type="submit">')
-    for action in ("exists", "improve", "expand", "links"):
-        at = form.index(f'form="act-{action}"')
+    for marker in ('form="act-exists"', 'form="act-links"',
+                   '/actions/improve"', '/actions/expand"'):
+        at = form.index(marker)
         assert text_ends < at < save
 
 
@@ -295,9 +296,14 @@ def test_each_action_button_posts_its_own_form_not_the_note(cfg):
     note = put(cfg)
     text = page(cfg, note)
     after = text[text.index("</form>", text.index(f'/item/{note.id}/mine/note')):]
-    for action in ("exists", "improve", "expand", "links"):
+    for action in ("exists", "links"):
         assert (f'<form id="act-{action}" action="/item/{note.id}/actions/{action}" '
                 f'method="post"></form>') in after
+    # Improve and expand share one, so the ticked links go with either.
+    assert (f'<form id="act-think" action="/item/{note.id}/actions/improve" '
+            f'method="post"></form>') in after
+    for action in ("improve", "expand"):
+        assert f'form="act-think" formaction="/item/{note.id}/actions/{action}"' in text
 
 
 def test_the_category_choice_goes_with_the_links_button(cfg):
@@ -309,7 +315,7 @@ def test_the_category_choice_goes_with_the_links_button(cfg):
 def test_a_done_action_keeps_its_own_name_on_the_button(cfg):
     note = put(cfg, actions={"improve": "- algo"})
     form = note_form(page(cfg, note), note)
-    button = form[form.index('form="act-improve"'):]
+    button = form[form.index('/actions/improve"'):]
     button = button[:button.index("</button>")]
     assert "Improve" in button
     assert 'title="Ask again"' in button
