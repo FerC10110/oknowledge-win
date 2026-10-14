@@ -129,6 +129,7 @@ STRINGS = {
         "All categories": "Todas",
         "Add to the idea": "Sumar a la idea",
         "already linked": "ya relacionado",
+        "Nothing matches": "Nada coincide",
         "Add to an idea": "Sumar a una idea",
         "Remove from the idea": "Sacar de la idea",
         "This note is not in your library any more":

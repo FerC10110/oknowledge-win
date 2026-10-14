@@ -1,0 +1,33 @@
+{# A link as the library shows it, for the idea's page: its own controls
+   come from the caller, so the same card is "use or remove" beside an
+   idea and "add" in a search. No mark picker and no reprocess button:
+   those belong to the library's grid. #}
+{% macro link_card(link) %}
+<li class="card" id="card-{{ link.id }}">
+  {% if link.cover %}
+    <a class="shot" href="/item/{{ link.id|slug }}" data-popup="/embed/{{ link.id|slug }}"
+       tabindex="-1" aria-hidden="true">
+      <img src="/cover/{{ link.id|slug }}" alt="" loading="lazy">
+    </a>
+  {% endif %}
+  <div class="pad">
+    <h2 dir="auto">
+      {% if link.url is web_url %}
+        <a href="{{ link.url }}" target="_blank" rel="noreferrer">{{ link.title }}</a>
+      {% else %}{{ link.title }}{% endif %}
+    </h2>
+    <a class="body" href="/item/{{ link.id|slug }}" data-popup="/embed/{{ link.id|slug }}">
+      <p class="meta"><span class="cat">{{ link.category }}</span> · {{ link.saved }}</p>
+      <p class="sum" dir="auto">{{ link.summary|plain }}</p>
+    </a>
+    <p class="tags">{% for tag in link.tags %}<span>#{{ tag }}</span>{% endfor %}</p>
+    {% if link.source %}
+      <p class="site">
+        <img src="/icon/{{ link.source|slug }}" alt="" width="16" height="16" loading="lazy">
+        <span>{{ link.source }}</span>
+      </p>
+    {% endif %}
+    <div class="card-tools">{{ caller() }}</div>
+  </div>
+</li>
+{% endmacro %}

@@ -512,6 +512,10 @@ def tag_chips(tags: dict[str, int], home: dict[str, str], active: str | None
     return _clustered(first, home), rest
 
 
+IDEA_SEARCH_LIMIT = 12
+"""Results beside an idea: enough to choose from, few enough to fit beside it."""
+
+
 def item_url(link_id: str) -> str:
     return "/item/" + quote(link_id, safe="")
 
@@ -863,8 +867,38 @@ def create_app(cfg: Config) -> FastAPI:
                 return entry, shelves.shelf
         return None, None
 
+    def links_for(note, q: str) -> tuple[bool, list]:
+        """(whether `q` is a search at all, the links it finds that the idea
+        does not hold yet). Two characters at least: one would list the
+        whole library."""
+        if len(q.strip()) < 2 or not terms(q):
+            return False, []
+        linked = set(note.related)
+        hits, _ = library.search(q, page=1, per_page=IDEA_SEARCH_LIMIT + len(linked))
+        found = []
+        for hit in hits:
+            entry = library.entry(hit.note.id)
+            if entry is None or entry.path.stem in linked:
+                continue
+            found.append(hit.note)
+            if len(found) == IDEA_SEARCH_LIMIT:
+                break
+        return True, found
+
+    @app.get("/item/{link_id}/buscar-links", response_class=HTMLResponse)
+    def idea_link_search(request: Request, link_id: str, q: str = ""):
+        """The idea's search box, as you type: a fragment, like /embed."""
+        ideas.refresh()
+        idea = ideas.by_id(link_id)
+        if idea is None:
+            raise HTTPException(status_code=404, detail="no such idea")
+        library.refresh()
+        searched, found = links_for(idea, q)
+        return page(request, "idea-link-results.html", idea_id=link_id, q=q,
+                    searched=searched, found=found)
+
     @app.get("/item/{link_id}", response_class=HTMLResponse)
-    def item(request: Request, link_id: str):
+    def item(request: Request, link_id: str, q: str = ""):
         library.refresh()
         if library.error is not None:
             return page(request, "item.html")
@@ -881,6 +915,8 @@ def create_app(cfg: Config) -> FastAPI:
             library.refresh()
             by_stem = {e.path.stem: e.note for e in library.entries}
             extra["related"] = [(stem, by_stem.get(stem)) for stem in note.related]
+            searched, found = links_for(note, q)
+            extra.update(q=q, searched=searched, found=found, idea_id=note.id)
             running, failed = working.of(link_id)
             rest, rows = split_suggestions(note.actions.get("links", ""))
             extra.update(
@@ -1302,7 +1338,8 @@ def create_app(cfg: Config) -> FastAPI:
         return see_other(item_url(link_id), notice=result.notice)
 
     @app.post("/item/{link_id}/ideas")
-    def join_idea(link_id: str, idea: str = Form(""), back: str = Form("")):
+    def join_idea(link_id: str, idea: str = Form(""), back: str = Form(""),
+                  q: str = Form("")):
         """Add this link to one of your ideas.
 
         The idea's note is the one written -- the relation lives there, so
@@ -1317,14 +1354,17 @@ def create_app(cfg: Config) -> FastAPI:
             raise HTTPException(status_code=404, detail="no such link")
         stem = entry.path.stem
         home = item_url(idea) if back == "idea" else item_url(link_id)
+        # Added from the idea's own search: back to the same query, so the
+        # next result is one click away too.
+        again = q if back == "idea" else ""
         try:
             result = edit(idea, lambda cfg, language: add_related(
                 cfg, idea, stem, language), "saved", "indexes-stale", shelves=ideas)
         except IdeaFull:
-            return see_other(home, notice="idea-full")
+            return see_other(home, notice="idea-full", q=again)
         if result.notice == MISSING:
             return see_other(item_url(link_id), notice="no-such-idea")
-        return see_other(home, notice=result.notice)
+        return see_other(home, notice=result.notice, q=again)
 
     @app.post("/item/{link_id}/related/drop")
     def leave_idea(link_id: str, stem: str = Form("")):

@@ -1,0 +1,22 @@
+{# The search's answer, fetched as you type and also rendered inside the
+   idea's page for a browser without JavaScript. Each result adds itself to
+   the idea and comes back to the same query. #}
+{% from "link-card.html" import link_card with context %}
+{% if searched %}
+  {% if found %}
+    <ul class="grid idea-cards">
+      {% for link in found %}
+        {% call link_card(link) %}
+          <form action="/item/{{ link.id|slug }}/ideas" method="post">
+            <input type="hidden" name="idea" value="{{ idea_id }}">
+            <input type="hidden" name="back" value="idea">
+            <input type="hidden" name="q" value="{{ q }}">
+            <button type="submit">{{ t('Add to the idea') }}</button>
+          </form>
+        {% endcall %}
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p class="meta">{{ t('Nothing matches') }}</p>
+  {% endif %}
+{% endif %}
