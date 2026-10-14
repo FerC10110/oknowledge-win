@@ -10,6 +10,7 @@ not offered, a placeholder copied from the prompt.
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from importlib.resources import files
 from pathlib import Path
@@ -26,6 +27,9 @@ MAX_EXPANSIONS = 10
 MAX_SUGGESTIONS = 10
 MAX_CANDIDATES = 60
 SUMMARY_CHARS = 200
+MAX_LINK_SUMMARY = 600
+MAX_LINK_POINTS = 6
+MAX_LINK_POINT = 200
 
 VERDICTS = {
     "es": {"exists": "Ya existe.", "similar": "Hay parecidas.",
@@ -43,6 +47,12 @@ WORDS = {
            "none": "None of these links helps this idea.",
            "empty": "There are no links in {scope} that are not already linked."},
 }
+
+USED = {"es": ("Con {n} link: {names}.", "Con {n} links: {names}."),
+        "en": ("With {n} link: {names}.", "With {n} links: {names}.")}
+
+LINKS_INTRO = ("Links que guardé y elegí para esta idea. Usalos si aportan algo; "
+               "si no, ignoralos. No inventes lo que no dicen.")
 
 _WEB_URL = re.compile(r"https?://[^\s()<>\[\]]+")
 _WORD = re.compile(r"\w{4,}")
@@ -72,7 +82,7 @@ def _escape(name: str) -> str:
 
 
 def render_action_prompt(action: str, note: Note, language: str,
-                         candidates: str = "") -> str:
+                         candidates: str = "", links: str = "") -> str:
     """The prompt for one action on one idea."""
     template = files("oknowledge").joinpath(
         f"prompts/idea-{action}.txt").read_text(encoding="utf-8")
@@ -83,6 +93,7 @@ def render_action_prompt(action: str, note: Note, language: str,
         "TAGS": ", ".join(note.tags),
         "SUMMARY": note.summary.strip(),
         "CANDIDATES": candidates,
+        "LINKS": links,
     }
     # One pass, like render_idea_prompt: a text that looks like a
     # placeholder is never substituted a second time.
@@ -221,14 +232,54 @@ def no_candidates(scope: str, language: str) -> str:
     return f"*{words['among']}: {scope}.*\n\n" + words["empty"].format(scope=scope)
 
 
+# --- the idea's own links ---------------------------------------------------------
+
+def chosen_links(cfg: Config, note: Note, use: Iterable[str]) -> list[Note]:
+    """The links of `use` this idea holds, in the idea's order, read from the
+    library. A stem the idea does not link is not used whatever the form
+    said; one whose note is gone is skipped."""
+    wanted = set(use)
+    stems = [stem for stem in note.related if stem in wanted]
+    if not stems:
+        return []
+    by_stem = {path.stem: link for path, link in all_entries(cfg, cfg.links)}
+    return [by_stem[stem] for stem in stems if stem in by_stem]
+
+
+def links_block(links: list[Note]) -> str:
+    """What the model reads of each chosen link: one-line fields, cut, so a
+    summary cannot open a heading or a placeholder of its own."""
+    if not links:
+        return ""
+    parts = [LINKS_INTRO]
+    for link in links:
+        lines = [f"### {_line(link.title) or link.id}",
+                 f"Categoría: {_line(link.category)}",
+                 f"Resumen: {_line(link.summary)[:MAX_LINK_SUMMARY]}"]
+        points = [_line(point)[:MAX_LINK_POINT] for point in link.points]
+        points = [point for point in points if point][:MAX_LINK_POINTS]
+        if points:
+            lines += ["Puntos:", *(f"- {point}" for point in points)]
+        parts.append("\n".join(lines))
+    return "\n\n".join(parts)
+
+
+def used_line(links: list[Note], language: str) -> str:
+    """The first line of a section the links fed: which ones the model read."""
+    one, many = USED.get(language, USED["en"])
+    names = " · ".join((_line(link.title) or link.id).replace("*", "") for link in links)
+    return "*" + (one if len(links) == 1 else many).format(n=len(links), names=names) + "*"
+
+
 # --- one action, start to end ----------------------------------------------------
 
 def compose(cfg: Config, note: Note, action: str, category: str,
-            day: str) -> tuple[str, str, str]:
+            day: str, use: Iterable[str] = ()) -> tuple[str, str, str]:
     """The section `action` writes for this idea: (markdown, engine, model).
 
     Raises ai.AllEnginesFailed when no engine gave a usable answer. Engine
-    and model are empty when nobody had to be asked.
+    and model are empty when nobody had to be asked. `use` are the stems of
+    the idea's links that improve and expand may read.
     """
     if action not in ACTIONS:
         raise ValueError(f"no such action: {action!r}")
@@ -247,5 +298,12 @@ def compose(cfg: Config, note: Note, action: str, category: str,
         found, engine, model = ai.search_with_chain(
             cfg, prompt, lambda reply: exists_found(extract_json(reply)))
         return exists_section(found, language, day, model or engine), engine, model
+    picked = chosen_links(cfg, note, use)
+    if picked:
+        prompt = render_action_prompt(action, note, language, links=links_block(picked))
     parse = improve_section if action == "improve" else expand_section
-    return ai.ask_with_chain(cfg, prompt, lambda reply: parse(extract_json(reply)))
+    text, engine, model = ai.ask_with_chain(
+        cfg, prompt, lambda reply: parse(extract_json(reply)))
+    if picked:
+        text = used_line(picked, language) + "\n\n" + text
+    return text, engine, model

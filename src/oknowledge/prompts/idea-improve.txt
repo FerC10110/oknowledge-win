@@ -19,3 +19,5 @@ El resumen: {{SUMMARY}}
 La idea:
 
 {{TEXT}}
+
+{{LINKS}}
