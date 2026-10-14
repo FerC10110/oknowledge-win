@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block title %}{{ note.title or t('Untitled idea') }} - oknowledge{% endblock %}
+{% block app_class %}idea-screen{% endblock %}
+{% block layout %}
+<section class="idea-main" id="idea" data-id="{{ note.id }}" aria-label="{{ t('Ideas') }}">
+  <header class="idea-head">
+    <div class="idea-meta-row">
+      <a class="back" href="{{ back }}">← {{ t('Ideas') }}</a><span>·</span>
+      <span>{{ t('created %1', note.saved|short_date(t)) }}</span>
+      <span class="save-state" id="save-state" aria-live="polite"
+            data-saving="{{ t('Saving…') }}" data-saved="{{ t('Saved') }}"></span>
+    </div>
+    <div class="idea-title-row">
+      <form method="post" action="/item/{{ note.id|slug }}/title" class="idea-title">
+        <input name="title" id="idea-title" value="{{ note.title }}" autocomplete="off"
+               class="{% if placeholder %}waiting{% endif %}"
+               aria-label="{{ t('Title') }}" placeholder="{{ placeholder or t('Untitled idea') }}"
+               data-autosave="/item/{{ note.id|slug }}/title" data-skip-empty data-indicator="#save-state">
+        <button class="btn" data-nojs>{{ t('Save') }}</button>
+      </form>
+      <div class="idea-controls" id="idea-controls">
+        <form method="post" action="/item/{{ note.id|slug }}/mine/state" class="seg" data-json>
+          {% for state in IDEA_STATES %}<button name="state" value="{{ state }}" class="{% if note.state == state %}on{% endif %}">{{ t(IDEA_WORDS[state]) }}</button>{% endfor %}
+        </form>
+        <form method="post" action="/item/{{ note.id|slug }}/mine/score" class="stars" data-json>
+          {% for n in range(1, 6) %}<button name="score" value="{{ 0 if n == note.score else n }}" class="{% if n <= note.score %}on{% endif %}" title="{{ n }}/5" aria-label="{{ n }}/5">{% include "icon-star.html" %}</button>{% endfor %}
+        </form>
+        <details class="menu more">
+          <summary class="btn icon framed" aria-label="{{ t('More') }}" title="{{ t('More') }}">⋯</summary>
+          <div class="menu-list">
+            <form method="post" action="/item/{{ note.id|slug }}/describe" data-json data-runs="complete">
+              <button>{{ t('Regenerate everything with the AI') }}</button>
+            </form>
+            <form method="post" action="/item/{{ note.id|slug }}/delete" data-ask="{{ t('Move this idea to the trash folder?') }}">
+              <button class="danger" onclick="return confirm(this.form.dataset.ask)">{{ t('Delete idea') }}</button>
+            </form>
+          </div>
+        </details>
+      </div>
+    </div>
+    <div class="chips tags" id="idea-tags">
+      {% for tag in note.tags %}
+        <form method="post" action="/item/{{ note.id|slug }}/tags" class="chip" data-json>
+          <span>#{{ tag }}</span>
+          <input type="hidden" name="tags" value="{{ note.tags|reject('equalto', tag)|join(' ') }}">
+          <button aria-label="{{ t('Remove the tag %1', tag) }}" title="{{ t('Remove the tag %1', tag) }}">✕</button>
+        </form>
+      {% endfor %}
+      <form method="post" action="/item/{{ note.id|slug }}/tags" class="tag-new" data-json>
+        <input type="hidden" name="tags" value="{{ note.tags|join(' ') }}">
+        <input name="add" required autocomplete="off" aria-label="{{ t('+ tag') }}" placeholder="{{ t('+ tag') }}">
+      </form>
+    </div>
+  </header>
+  <div class="idea-ai" id="idea-ai" data-running="{{ running|sort|join(' ') }}"
+       data-done-as="{{ t('Done: %1') }}" data-failed-as="{{ t('Failed: %1') }}"
+       {% for action, name in SECTION_NAMES.items() %}data-name-{{ action }}="{{ t(name) }}" {% endfor %}>
+    <span class="label">{{ t('ASK THE AI') }}</span>
+    {% for action, label in AI_BUTTONS %}
+      {% set blocked = action == 'exists' and not searchable %}
+      <form method="post" action="/item/{{ note.id|slug }}/actions/{{ action }}" data-json data-runs="{{ action }}">
+        <input type="hidden" name="alcance" value="{{ scope }}">
+        <button class="ai-btn"{% if action in running or blocked %} disabled{% endif %}{% if blocked %} title="{{ t('No engine in your chain searches the web: opencode or the Anthropic API do.') }}"{% endif %}>{{ t(label) }}</button>
+      </form>
+    {% endfor %}
+    <span class="using">{{ t('using') }}</span>
+    <details class="menu scope">
+      <summary class="btn">{% if scope == 'todos' %}{{ t('The whole library') }}{% elif scope == 'nada' %}{{ t('Only my text') }}{% else %}{{ t('Linked links (%1)', linked_now) }}{% endif %} ▾</summary>
+      <div class="menu-list">
+        {% for key in ('vinculados', 'todos', 'nada') %}
+          <a href="{{ url(alcance=key) }}" data-scope="{{ key }}" class="{% if key == scope %}on{% endif %}">
+            <span>{% if key == 'todos' %}{{ t('The whole library') }}{% elif key == 'nada' %}{{ t('Only my text') }}{% else %}{{ t('Linked links (%1)', linked_now) }}{% endif %}</span>
+            <span>{% if key == scope %}✓{% endif %}</span></a>
+        {% endfor %}
+      </div>
+    </details>
+    <span class="working" id="idea-working">{% for action in running|sort %}{{ t(WORKING.get(action, '')) }} {% endfor %}</span>
+  </div>
+  <div class="idea-body">
+    <section class="idea-text">
+      <p class="label"><span>{{ t('YOUR IDEA') }}</span><span>{{ t('saves itself') }}</span></p>
+      <form method="post" action="/item/{{ note.id|slug }}/mine/note">
+        <textarea name="my_note" id="idea-text" aria-label="{{ t('Your idea') }}"
+                  placeholder="{{ t('Write it however it comes out: the AI puts it in order.') }}"
+                  data-autosave="/item/{{ note.id|slug }}/mine/note" data-indicator="#save-state">{{ note.my_note }}</textarea>
+        <button class="btn" data-nojs>{{ t('Save') }}</button>
+      </form>
+    </section>
+    <section class="idea-results" id="idea-results" aria-label="{{ t('Results') }}">
+      {% include "idea-results.html" %}
+    </section>
+  </div>
+</section>
+<aside class="links-column" aria-label="{{ t('Links of this idea') }}">
+  <div class="links-head">
+    <p class="links-title"><span>{{ t('Links of this idea') }}</span><b class="mono" id="idea-links-count">{{ note.related|length }}</b></p>
+  </div>
+</aside>
+{% endblock %}

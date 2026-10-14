@@ -74,7 +74,7 @@ def test_saving_writes_the_idea_and_queues_the_model(cfg, client, queued):
     [idea] = all_notes(cfg, cfg.ideas)
     assert (idea.my_note, idea.title, idea.type) == ("Una app para el gym.", "", "idea")
     assert answer.status_code == 303
-    assert answer.headers["location"] == f"/item/{idea.id}?notice=completing"
+    assert answer.headers["location"] == f"/ideas/{idea.id}?notice=completing"
     assert queued == [idea.id]
 
 

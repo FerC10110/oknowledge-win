@@ -131,7 +131,7 @@ def test_a_link_has_no_state_of_its_own(cfg, client):
 def test_asking_again_queues_the_model(cfg, client, queued):
     note = put(cfg)
     answer = client.post(f"/item/{note.id}/describe", follow_redirects=False)
-    assert answer.headers["location"] == f"/item/{note.id}?notice=completing"
+    assert answer.headers["location"] == f"/ideas/{note.id}?notice=completing"
     assert queued == [note.id]
 
 

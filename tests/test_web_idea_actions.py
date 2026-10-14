@@ -72,7 +72,7 @@ def test_a_button_queues_its_action_and_says_it_is_thinking(cfg, ran):
     reply = TestClient(create_app(cfg)).post(f"/item/{note.id}/actions/improve",
                                              follow_redirects=False)
     assert reply.status_code == 303
-    assert reply.headers["location"] == f"/item/{note.id}?notice=thinking"
+    assert reply.headers["location"] == f"/ideas/{note.id}?pestana=mejoras&notice=thinking"
     assert ran[0] == [(note.id, "improve", "")]
 
 
@@ -103,7 +103,7 @@ def test_exists_without_a_searcher_is_refused_up_front(tmp_path, ran):
     note = put(cfg)
     reply = TestClient(create_app(cfg)).post(f"/item/{note.id}/actions/exists",
                                              follow_redirects=False)
-    assert reply.headers["location"] == f"/item/{note.id}?notice=cannot-search"
+    assert reply.headers["location"] == f"/ideas/{note.id}?pestana=existe&notice=cannot-search"
     assert ran[0] == []
 
 

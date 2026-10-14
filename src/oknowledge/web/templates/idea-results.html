@@ -1,0 +1,48 @@
+<nav class="tabs" aria-label="{{ t('Results') }}">
+  {% for key, label, action in TABS %}<a href="{{ url(pestana=key) }}" data-tab="{{ key }}" class="{% if key == tab %}on{% endif %}">{{ t(label) }}</a>{% endfor %}
+</nav>
+{% for key, label, action in TABS %}
+<div class="tab-pane" data-pane="{{ key }}"{% if key != tab %} hidden{% endif %}>
+  {% if not action %}
+    {% if note.summary or note.points %}
+      {% for para in note.summary|paragraphs %}<p class="lead" dir="auto">{{ para }}</p>{% endfor %}
+      {% if note.points %}
+        <ol class="numbered">
+          {% for point in note.points %}<li><span class="n mono">{{ '%02d'|format(loop.index) }}</span> <span dir="auto">{{ point }}</span></li>{% endfor %}
+        </ol>
+      {% endif %}
+    {% else %}
+      <div class="tab-empty">
+        <p>{{ t('You have not asked yet.') }}</p>
+        <form method="post" action="/item/{{ note.id|slug }}/describe" data-json data-runs="complete">
+          <button class="btn primary"{% if 'complete' in running %} disabled{% endif %}>{{ t('Regenerate everything with the AI') }}</button>
+        </form>
+      </div>
+    {% endif %}
+  {% else %}
+    {% set part = sections[action] %}
+    {% if part.used or part.lead or part.cards or part.tail %}
+      {% if part.used %}<p class="used">{{ part.used }}</p>{% endif %}
+      {% for line in part.lead %}<p class="lead">{{ line }}</p>{% endfor %}
+      {% for title, detail in part.cards %}
+        <div class="result-card">
+          <p class="title">{{ title }}</p>
+          {% if detail %}<p class="detail">{{ detail }}</p>{% endif %}
+        </div>
+      {% endfor %}
+      {% for line in part.tail %}<p class="tail">{{ line }}</p>{% endfor %}
+    {% else %}
+      <div class="tab-empty">
+        <p>{{ t('You have not asked yet.') }}</p>
+        <form method="post" action="/item/{{ note.id|slug }}/actions/{{ action }}" data-json data-runs="{{ action }}">
+          <input type="hidden" name="alcance" value="{{ scope }}">
+          {% for one, label in AI_BUTTONS if one == action %}
+            <button class="btn primary"{% if action in running or (action == 'exists' and not searchable) %} disabled{% endif %}>{{ t(label) }}</button>
+          {% endfor %}
+        </form>
+      </div>
+    {% endif %}
+    {% if failed.get(action) %}<p class="failed">{{ t('Last time it failed: %1', failed[action]) }}</p>{% endif %}
+  {% endif %}
+</div>
+{% endfor %}

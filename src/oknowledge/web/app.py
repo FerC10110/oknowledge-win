@@ -69,7 +69,9 @@ from .library_view import (
     side_groups, tint,
 )
 from .index import Library, read_full, terms
-from .markup import blocks, split_suggestions
+from .markup import blocks, section_cards, split_suggestions
+from .shelf_view import (AI_BUTTONS, IDEA_WORDS, SECTION_NAMES, TAB_OF, TABS, WORKING, excerpt,
+                         idea_url, scope_of, tab_of)
 from .working import Working
 
 WEB = files("oknowledge").joinpath("web")
@@ -539,6 +541,13 @@ def local_path(back: str) -> str | None:
         return None
     query = urlencode([(k, v) for k, v in parse_qsl(parts.query) if k != "notice"])
     return parts.path + ("?" + query if query else "")
+
+
+def ideas_back(raw: str) -> str:
+    """Where "← Ideas" goes: the list as it was when the idea was opened
+    (spec §2), and never anywhere but the list."""
+    path = local_path(raw)
+    return path if path and (path == "/ideas" or path.startswith("/ideas?")) else "/ideas"
 
 
 # The two listings a card's button may send the user back to, and no others.
@@ -1167,7 +1176,7 @@ def create_app(cfg: Config) -> FastAPI:
         if ideas.by_id(link_id) is not None:
             if working.start(link_id, "complete"):
                 background.add_task(complete, current["cfg"], link_id)
-            return answer(request, item_url(link_id), "completing")
+            return answer(request, idea_url(link_id), "completing")
         shelf.refresh()
         if shelf.by_id(link_id) is None:
             raise HTTPException(status_code=404, detail="no such card")
@@ -1504,11 +1513,12 @@ def create_app(cfg: Config) -> FastAPI:
             return answer(request, "/ideas", "no-such-idea")
         live = current["cfg"]
         if action == "exists" and not can_search(live):
-            return answer(request, item_url(link_id), "cannot-search")
+            return answer(request, idea_url(link_id, pestana="existe"), "cannot-search")
         scope = alcance if alcance in SCOPES else "vinculados"
         if working.start(link_id, action):
             background.add_task(act, live, link_id, action, scope)
-        return answer(request, item_url(link_id), "thinking")
+        return answer(request, idea_url(link_id, pestana=TAB_OF.get(action, ""), alcance=scope),
+                      "thinking")
 
     @app.get("/item/{link_id}/actions/state")
     def idea_state(link_id: str):
@@ -2008,6 +2018,40 @@ def create_app(cfg: Config) -> FastAPI:
                     idea_tags=ideas.tags(), unreadable_ideas=ideas.unreadable,
                     STATES=IDEA_STATE_ORDER, STATE_WORDS=IDEA_STATE_WORDS)
 
+    def idea_context(note, pestana: str, alcance: str, back: str, q: str) -> dict:
+        """What an idea's screen shows (spec §2)."""
+        tab, scope, home = tab_of(pestana), scope_of(alcance), ideas_back(back)
+        running, failed = working.of(note.id)
+        library.refresh()
+        present = {entry.path.stem for entry in library.entries}
+        params = {"pestana": tab, "alcance": scope, "back": home, "q": q}
+        return {
+            "note": note, "tab": tab, "scope": scope, "back": home, "q": q,
+            "url": lambda **changes: idea_url(note.id, **{**params, **changes}),
+            "running": running, "failed": failed,
+            "searchable": can_search(current["cfg"]),
+            "linked_now": sum(1 for stem in note.related if stem in present),
+            # While the model names a new idea, the box shows the start of
+            # its text, dimmed, and the screen's poll fills the name in.
+            "placeholder": (excerpt(note.my_note)
+                            if "complete" in running and not note.title.strip() else ""),
+            "sections": {action: section_cards(note.actions.get(action, ""))
+                         for action in ("exists", "improve", "expand")},
+            "IDEA_STATES": IDEA_STATES, "IDEA_WORDS": IDEA_WORDS, "TABS": TABS,
+            "AI_BUTTONS": AI_BUTTONS, "WORKING": WORKING, "SECTION_NAMES": SECTION_NAMES,
+        }
+
+    @app.get("/ideas/{idea_id}", response_class=HTMLResponse)
+    def idea_screen(request: Request, idea_id: str, pestana: str = "", alcance: str = "",
+                    back: str = "", q: str = ""):
+        """One idea on a screen of its own. One that is not there is the app's 404."""
+        ideas.refresh()
+        entry = ideas.entry(idea_id)
+        if entry is None:
+            raise HTTPException(status_code=404, detail="no such idea")
+        return page(request, "idea.html", section="ideas", toast=True,
+                    **idea_context(read_full(entry), pestana, alcance, back, q))
+
     def save_idea(note) -> str:
         """Write a new idea and its shelf's index. Returns the notice, and
         raises when the note itself could not be written -- the two are
@@ -2045,7 +2089,7 @@ def create_app(cfg: Config) -> FastAPI:
             return see_other("/ideas", notice="write-failed")
         if working.start(note.id, "complete"):
             background.add_task(complete, live, note.id)
-        return see_other(item_url(note.id), notice=notice)
+        return see_other(idea_url(note.id), notice=notice)
 
     @app.post("/add")
     def add_pasted(background: BackgroundTasks, url: str = Form(""),
