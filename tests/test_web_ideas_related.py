@@ -127,21 +127,6 @@ def test_a_full_idea_is_said(cfg, client, link):
     assert link.stem not in related_of(cfg, idea)
 
 
-def test_the_idea_shows_its_links_by_their_real_titles(cfg, client, link):
-    idea = put(cfg, related=[link.stem])
-    text = client.get(f"/item/{idea.id}").text
-    aside = text[text.index('<aside class="idea-links'):][:text[text.index('<aside class="idea-links'):].index("</aside>")]
-    assert f'href="/item/{LINK}" data-popup="/embed/{LINK}"' in aside
-    assert ">WireGuard</a>" in aside
-
-
-def test_a_link_that_is_not_there_any_more_is_dimmed_not_dropped(cfg, client):
-    idea = put(cfg, related=["2026-01-01-borrada"])
-    page = client.get(f"/item/{idea.id}").text
-    assert 'class="card gone"' in page
-    assert "2026-01-01-borrada" in page
-
-
 def test_a_link_leaves_the_idea(cfg, client, link):
     idea = put(cfg, related=[link.stem, "otro"])
     client.post(f"/item/{idea.id}/related/drop", data={"stem": link.stem})

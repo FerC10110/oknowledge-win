@@ -1,11 +1,8 @@
 {% extends "base.html" %}
-{% from "link-card.html" import link_card with context %}
-{% block body_class %}{% if idea %}wide{% endif %}{% endblock %}
-{% block scripts %}{% if idea %}<script src="/static/popup.js" defer></script>
-<script src="/static/idea-links.js" defer></script>{% endif %}{% endblock %}
+{% block body_class %}{% endblock %}
 {% block title %}{{ note.title or t('Untitled idea') }} - oknowledge{% endblock %}
 {% block main %}
-  <article class="item{% if idea %} has-aside{% endif %}">
+  <article class="item">
     <p class="meta"><span class="cat">{{ note.category }}</span> · {{ note.source }} · {{ note.saved }}
       {% if note.status != 'ok' %}<span class="warn">{{ t('Incomplete') }}</span>{% endif %}
       {% include "engine-badge.html" %}</p>
@@ -13,7 +10,7 @@
       <h1 dir="auto">{{ note.title or t('Untitled idea') }}</h1>
       {% include "mark-picker.html" %}
     </div>
-    <p class="tags">{% for tag in note.tags %}<a href="{{ '/ideas' if idea else '/' }}?tag={{ tag|urlencode }}">#{{ tag }}</a>{% endfor %}</p>
+    <p class="tags">{% for tag in note.tags %}<a href="/?tag={{ tag|urlencode }}">#{{ tag }}</a>{% endfor %}</p>
     {% if note.collections %}
       {# One small form per chip, so leaving a collection is one click and
          there is no list to re-type -- these names have spaces in them and
@@ -98,174 +95,6 @@
             <button type="submit">{{ t('Save') }}</button>
           </span>
         </form>
-      </section>
-    {% endif %}
-    {% if idea %}
-      {# Your text first: it is the idea, and the model's summary and points
-         are only its reading of it. Title and text are one form, so a
-         renamed idea and its text land in one write. #}
-      <section class="mine idea">
-        <form action="/item/{{ note.id|slug }}/mine/note" method="post" class="field">
-          <label for="field-title">{{ t('Title') }}</label>
-          <input id="field-title" name="title" value="{{ note.title }}"
-                 placeholder="{{ t('Untitled idea') }}" autocomplete="off">
-          <input type="hidden" name="title_was" value="{{ note.title }}">
-          <label for="field-mine">{{ t('Your idea') }}</label>
-          <textarea id="field-mine" name="my_note" rows="8">{{ note.my_note }}</textarea>
-          {# The four actions, in a row under the text they read. Each button
-             posts its own empty form, declared after this one: forms cannot
-             nest. They read the saved text, so save first. #}
-          <div class="idea-run">
-            {% for action in actions %}
-              {% set has = note.actions.get(action) %}
-              {% set busy = action in running %}
-              {% set blocked = action == 'exists' and not searchable %}
-              {# Links searches your own library, so it reads as a search on a
-                 line of its own: what it looks for, where, and Search. #}
-              <span class="idea-go{% if action == 'links' %} idea-search{% endif %}">
-                {% if action == 'links' %}
-                  <label for="field-among">{{ t('Links that could serve my idea') }}</label>
-                  <select id="field-among" name="category" form="act-links">
-                    <option value="">{{ t('All categories') }}</option>
-                    {% for name in link_categories %}<option value="{{ name }}">{{ name }}</option>{% endfor %}
-                  </select>
-                {% endif %}
-                {% set shared = action in ('improve', 'expand') %}
-                <button type="submit" form="{{ 'act-think' if shared else 'act-' ~ action }}"
-                        {%- if shared %} formaction="/item/{{ note.id|slug }}/actions/{{ action }}"{% endif %}
-                        {%- if has and not busy %} title="{{ t('Ask again') }}"{% endif %}
-                        {%- if busy or blocked %} disabled{% endif %}>
-                  {%- if busy %}{{ t('thinking…') }}
-                  {%- else %}{% if has %}↻ {% endif %}{{ t('Search') if action == 'links' else t(action_buttons[action]) }}{% endif -%}
-                </button>
-              </span>
-            {% endfor %}
-            {% if usable %}
-              {# Ticked: the linked links ticked beside the idea go with
-                 Improve and Expand. Unticked, none does, whatever the cards say. #}
-              <label class="use-all"><input type="checkbox" name="with_links" value="1"
-                     form="act-think" checked> {{ t('Use the linked links') }}</label>
-            {% endif %}
-          </div>
-          {% for action in actions %}
-            {% if action == 'exists' and not searchable %}
-              <p class="meta">{{ t('No engine in your chain searches the web: opencode or the Anthropic API do.') }}</p>
-            {% endif %}
-            {% if failed.get(action) %}
-              <p class="failed">{{ t(action_buttons[action]) }} — {{ t('Last time it failed: %1', failed[action]) }}</p>
-            {% endif %}
-          {% endfor %}
-          <span class="row"><button type="submit">{{ t('Save') }}</button></span>
-        </form>
-        {% for action in actions if action not in ('improve', 'expand') %}
-          <form id="act-{{ action }}" action="/item/{{ note.id|slug }}/actions/{{ action }}" method="post"></form>
-        {% endfor %}
-        {# One form for both: a box belongs to one form, and the same choice of
-           links is for either button. Each button names its own action. #}
-        <form id="act-think" action="/item/{{ note.id|slug }}/actions/improve" method="post"></form>
-        {# Beside the idea on a wide screen, between its buttons and what they
-           wrote on a phone: a panel that stays in view, with the search and
-           the idea's own links as two tabs over one list that scrolls inside
-           it. The tabs are radio buttons and CSS, so they work without
-           JavaScript; the boxes in the hidden tab still go with the form. #}
-        <aside class="idea-links panel" aria-label="{{ t('Links for this idea') }}">
-          <input type="radio" name="idea-tab" id="tab-find" class="tab-switch" checked>
-          <input type="radio" name="idea-tab" id="tab-linked" class="tab-switch">
-          <div class="tabs">
-            <label for="tab-find">{{ t('Search') }}</label>
-            <label for="tab-linked">{{ t('Linked') }} ({{ related|length }}/{{ max_related }})</label>
-          </div>
-          <div class="tab-pane pane-find">
-            <form method="get" action="/item/{{ note.id|slug }}" class="idea-find" role="search">
-              <label for="field-find">{{ t('Search your links') }}</label>
-              <input id="field-find" type="search" name="q" value="{{ q }}" autocomplete="off"
-                     data-results="/item/{{ note.id|slug }}/buscar-links">
-            </form>
-            <div id="idea-found" aria-live="polite">{% include "idea-link-results.html" %}</div>
-          </div>
-          <div class="tab-pane pane-linked">
-            {% if related %}
-              <ul class="grid idea-cards">
-                {% for stem, found in related %}
-                  {% if found %}
-                    {% call link_card(found) %}
-                      <label class="use"><input type="checkbox" name="use" value="{{ stem }}" form="act-think" checked> {{ t('Use') }}</label>
-                      <form action="/item/{{ note.id|slug }}/related/drop" method="post">
-                        <button type="submit" name="stem" value="{{ stem }}"
-                                title="{{ t('Remove from the idea') }}"
-                                aria-label="{{ t('Remove from the idea') }}">×</button>
-                      </form>
-                    {% endcall %}
-                  {% else %}
-                    <li class="card gone">
-                      <div class="pad">
-                        <h2 title="{{ t('This note is not in your library any more') }}">{{ stem }}</h2>
-                        <div class="card-tools">
-                          <form action="/item/{{ note.id|slug }}/related/drop" method="post">
-                            <button type="submit" name="stem" value="{{ stem }}"
-                                    title="{{ t('Remove from the idea') }}"
-                                    aria-label="{{ t('Remove from the idea') }}">×</button>
-                          </form>
-                        </div>
-                      </div>
-                    </li>
-                  {% endif %}
-                {% endfor %}
-              </ul>
-            {% else %}
-              <p class="meta">{{ t('None yet') }}</p>
-            {% endif %}
-          </div>
-        </aside>
-        {# What the actions wrote. Each has its own section in the idea's
-           note, beside your text and never over it. #}
-        <section class="idea-actions">
-          {% for action in actions %}
-            {% set has = note.actions.get(action) %}
-            {% if has %}
-            <div class="idea-action">
-                <h2>{{ t(action_titles[action]) }}</h2>
-                {% for kind, body in sections[action] %}
-                  {% if kind == 'ul' %}<ul>{% for item in body %}<li>{{ item }}</li>{% endfor %}</ul>
-                  {% else %}<p>{{ body }}</p>{% endif %}
-                {% endfor %}
-                {% if action == 'links' and suggested %}
-                  <ul class="related">
-                    {% for stem, why, found, linked in suggested %}
-                      <li{% if not found %} class="gone"{% endif %}>
-                        {% if found %}
-                          <a href="/item/{{ found.id|slug }}">{{ found.title }}</a>
-                          <span class="cat">{{ found.category }}</span>
-                        {% else %}
-                          <span title="{{ t('This note is not in your library any more') }}">{{ stem }}</span>
-                        {% endif %}
-                        {% if why %}<span class="why">{{ why }}</span>{% endif %}
-                        {% if found and linked %}
-                          <span class="meta">{{ t('already linked') }}</span>
-                        {% elif found %}
-                          <form action="/item/{{ found.id|slug }}/ideas" method="post">
-                            <input type="hidden" name="idea" value="{{ note.id }}">
-                            <input type="hidden" name="back" value="idea">
-                            <button type="submit">{{ t('Add to the idea') }}</button>
-                          </form>
-                        {% endif %}
-                      </li>
-                    {% endfor %}
-                  </ul>
-                {% endif %}
-            </div>
-            {% endif %}
-          {% endfor %}
-        </section>
-        {# State, stars and asking again, on one line that wraps. #}
-        <div class="idea-meta">
-          {% include "mine-buttons.html" %}
-          {# Always offered, unlike a card's: an idea grows, and fresh tags
-             and points for what you added is the reason to ask again. #}
-          <form action="/item/{{ note.id|slug }}/describe" method="post" class="row">
-            <button type="submit">{{ t('Ask the model again') }}</button>
-          </form>
-        </div>
       </section>
     {% endif %}
     <div class="actions">

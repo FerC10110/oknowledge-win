@@ -69,7 +69,7 @@ from .library_view import (
     side_groups, tint,
 )
 from .index import Library, read_full, terms
-from .markup import blocks, section_cards, split_suggestions
+from .markup import section_cards
 from .shelf_view import (AI_BUTTONS, IDEA_DOTS, IDEA_WORDS, SECTION_NAMES, TAB_OF, TABS, WORKING,
                          IdeaView, choose_ideas, excerpt, idea_filters, idea_url, scope_of,
                          tab_of)
@@ -398,13 +398,6 @@ STEP_WORDS = {
     "links": "Find links for the idea",
 }
 STEP_STATES = {"start": "in progress", "ok": "finished", "fail": "failed"}
-
-ACTION_TITLES = {"exists": "Already out there", "improve": "Improvements",
-                 "expand": "Expansion", "links": "Links that may help"}
-"""Each section's heading on the page. The note's own headings are
-vault.ACTION_HEADINGS, in the content language; these follow the UI."""
-ACTION_BUTTONS = {"exists": "Already out there?", "improve": "Improve",
-                  "expand": "Expand", "links": "Links that may help"}
 
 KIND_WORDS = (("movie", "Movies"), ("series", "Series"),
               ("anime", "Anime"), ("book", "Books"))
@@ -942,7 +935,7 @@ def create_app(cfg: Config) -> FastAPI:
         return page(request, "idea-links.html", note=idea, **links_context(idea, q))
 
     @app.get("/item/{link_id}", response_class=HTMLResponse)
-    def item(request: Request, link_id: str, q: str = ""):
+    def item(request: Request, link_id: str):
         library.refresh()
         if library.error is not None:
             return page(request, "item.html")
@@ -954,38 +947,19 @@ def create_app(cfg: Config) -> FastAPI:
             params = request.query_params
             return see_other("/", sel=link_id, notice=params.get("notice"),
                              n=params.get("n"), m=params.get("m"))
+        if where.name == "ideas":
+            params = request.query_params
+            return see_other(idea_url(link_id), notice=params.get("notice"),
+                             n=params.get("n"), m=params.get("m"))
         # The index holds list views without bodies; this note is read fresh.
         note = read_full(entry)
         extra = {}
-        if where.name == "ideas":
-            # Each link by its file name, resolved against the library now,
-            # so a link that changed its title shows the new one -- and one
-            # that is gone shows up dimmed, with an x, instead of vanishing.
-            library.refresh()
-            by_stem = {e.path.stem: e.note for e in library.entries}
-            extra["related"] = [(stem, by_stem.get(stem)) for stem in note.related]
-            searched, found = links_for(note, q)
-            extra.update(q=q, searched=searched, found=found, idea_id=note.id,
-                         max_related=MAX_RELATED,
-                         usable=any(link for _, link in extra["related"]))
-            running, failed = working.of(link_id)
-            rest, rows = split_suggestions(note.actions.get("links", ""))
-            extra.update(
-                actions=ACTIONS, action_titles=ACTION_TITLES,
-                action_buttons=ACTION_BUTTONS, running=running, failed=failed,
-                searchable=can_search(current["cfg"]),
-                link_categories=list(library.categories()),
-                sections={action: blocks(rest if action == "links"
-                                         else note.actions.get(action, ""))
-                          for action in ACTIONS},
-                suggested=[(stem, why, by_stem.get(stem), stem in note.related)
-                           for stem, why in rows])
-        elif where.name == "ocio":
+        if where.name == "ocio":
             running, failed = rewriting.of(link_id)
             extra.update(rewriting="describe" in running,
                          rewrite_failed=failed.get("describe", ""))
         return page(request, "item.html", note=note,
-                    card=where.name == "ocio", idea=where.name == "ideas",
+                    card=where.name == "ocio",
                     section=where.name,
                     words=STATE_WORDS.get(entry.note.type, STATE_WORDS["movie"]),
                     STATES=states_for(entry.note.type), **extra)

@@ -13,13 +13,10 @@ from dataclasses import dataclass, field
 
 from markupsafe import Markup, escape
 
-from ..vault import normalize_related
-
 _LINK = re.compile(r"\[((?:[^\]\\\n]|\\.)+)\]\((https?://[^\s()<>]+)\)")
 _STRONG = re.compile(r"\*\*(.+?)\*\*")
 _EM = re.compile(r"(?<![*\w])\*(?![\s*])([^*\n]+?)\*(?![*\w])")
 _ITEM = re.compile(r"[-*+]\s+(.*)")
-_SUGGESTION = re.compile(r"\s*[-*+]\s+\[\[([^\]\n]+)\]\]\s*(?:[—–-]\s*)?(.*)")
 
 
 def _unescape(name: str) -> str:
@@ -34,36 +31,6 @@ def inline(text: str) -> Markup:
     safe = _STRONG.sub(r"<strong>\1</strong>", safe)
     safe = _EM.sub(r"<em>\1</em>", safe)
     return Markup(safe)
-
-
-def blocks(text: str) -> list[tuple[str, object]]:
-    """("p", line) and ("ul", [items]), consecutive bullets in one list."""
-    drawn: list[tuple[str, object]] = []
-    for line in text.splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        item = _ITEM.fullmatch(line)
-        if item and drawn and drawn[-1][0] == "ul":
-            drawn[-1][1].append(inline(item.group(1)))
-        elif item:
-            drawn.append(("ul", [inline(item.group(1))]))
-        else:
-            drawn.append(("p", inline(line)))
-    return drawn
-
-
-def split_suggestions(text: str) -> tuple[str, list[tuple[str, str]]]:
-    """(the section without its suggestion rows, the rows as (stem, why))."""
-    rest, rows = [], []
-    for line in text.splitlines():
-        match = _SUGGESTION.fullmatch(line)
-        stem = normalize_related([f"[[{match.group(1)}]]"]) if match else []
-        if stem:
-            rows.append((stem[0], match.group(2).strip()))
-        else:
-            rest.append(line)
-    return "\n".join(rest).strip(), rows
 
 
 _USED = re.compile(r"\*(?:Con|With) \d+ links?: .+\*")

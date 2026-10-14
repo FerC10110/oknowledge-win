@@ -8,7 +8,7 @@ from oknowledge.ideas import new_idea
 from oknowledge.model import Note
 from oknowledge.vault import find_note, note_path, rebuild_indexes, write_note
 from oknowledge.web.app import create_app
-from oknowledge.web.markup import blocks, inline, split_suggestions
+from oknowledge.web.markup import inline
 from oknowledge.web.working import Working
 
 LINK = "bbbbbbbbbbbb"
@@ -134,21 +134,7 @@ def test_working_runs_one_of_each_and_remembers_the_last_failure():
 # --- the page -------------------------------------------------------------------
 
 def page(cfg, note, app=None):
-    return TestClient(app or create_app(cfg)).get(f"/item/{note.id}").text
-
-
-def test_the_four_buttons_are_there(cfg):
-    note = put(cfg)
-    text = page(cfg, note)
-    for action in ("exists", "improve", "expand", "links"):
-        assert f'action="/item/{note.id}/actions/{action}"' in text
-
-
-def test_a_running_action_says_thinking_and_is_disabled(cfg):
-    note = put(cfg)
-    app = create_app(cfg)
-    app.state.working.start(note.id, "expand")
-    assert "thinking…" in page(cfg, note, app)
+    return TestClient(app or create_app(cfg)).get(f"/ideas/{note.id}").text
 
 
 def test_the_last_failure_is_shown_and_cleared_by_a_success(cfg, ran):
@@ -157,29 +143,16 @@ def test_the_last_failure_is_shown_and_cleared_by_a_success(cfg, ran):
     client = TestClient(app)
     ran[1]["problem"] = "opencode: 429"
     client.post(f"/item/{note.id}/actions/improve")
-    assert "Last time it failed: opencode: 429" in client.get(f"/item/{note.id}").text
+    assert "Last time it failed: opencode: 429" in client.get(f"/ideas/{note.id}").text
     ran[1]["problem"] = None
     client.post(f"/item/{note.id}/actions/improve")
-    assert "Last time it failed" not in client.get(f"/item/{note.id}").text
+    assert "Last time it failed" not in client.get(f"/ideas/{note.id}").text
 
 
 def test_exists_is_disabled_with_its_reason_when_nobody_searches(tmp_path):
     cfg = make(tmp_path, chain=("ollama",))
     note = put(cfg)
     assert "No engine in your chain searches the web" in page(cfg, note)
-
-
-def test_exists_is_offered_when_the_chain_searches(cfg):
-    note = put(cfg)
-    assert "No engine in your chain searches the web" not in page(cfg, note)
-
-
-def test_a_section_with_text_is_drawn_under_its_heading(cfg):
-    note = put(cfg, actions={"improve": "- **Lento** — cachear"})
-    text = page(cfg, note)
-    assert "Improvements" in text
-    assert "<strong>Lento</strong> — cachear" in text
-    assert "Ask again" in text
 
 
 def test_a_section_cannot_inject_markup_or_script_links(cfg):
@@ -189,38 +162,6 @@ def test_a_section_cannot_inject_markup_or_script_links(cfg):
     assert "<script>x</script>" not in text
     assert 'href="javascript:' not in text
     assert '<a href="https://ok.com" target="_blank" rel="noreferrer">bien</a>' in text
-
-
-def test_a_suggestion_offers_add_to_the_idea(cfg):
-    path = a_link(cfg)
-    note = put(cfg, actions={"links": f"*Entre: Redes.*\n\n- [[{path.stem}]] — la vpn"})
-    text = page(cfg, note)
-    assert f'action="/item/{LINK}/ideas"' in text
-    assert f'name="idea" value="{note.id}"' in text
-    assert 'name="back" value="idea"' in text
-    assert "la vpn" in text
-
-
-def test_a_suggestion_already_linked_offers_nothing(cfg):
-    path = a_link(cfg)
-    note = put(cfg, related=[path.stem],
-               actions={"links": f"- [[{path.stem}]] — la vpn"})
-    text = page(cfg, note)
-    assert "already linked" in text
-    assert 'name="back" value="idea"' not in text
-
-
-def test_a_gone_suggestion_is_dimmed_and_cannot_be_added(cfg):
-    note = put(cfg, actions={"links": "- [[2026-01-01-borrado]] — ya no está"})
-    text = page(cfg, note)
-    assert "2026-01-01-borrado" in text
-    assert 'name="back" value="idea"' not in text
-
-
-def test_the_category_picker_lists_the_library(cfg):
-    a_link(cfg)
-    note = put(cfg)
-    assert '<option value="Redes">Redes</option>' in page(cfg, note)
 
 
 def test_add_from_the_idea_goes_back_to_the_idea(cfg):
@@ -251,20 +192,6 @@ def test_inline_escapes_first_and_links_only_the_web():
     assert str(inline("**a** and *b*")) == "<strong>a</strong> and <em>b</em>"
 
 
-def test_blocks_group_bullets_into_one_list():
-    drawn = blocks("**Hay.** Buscado.\n\n- uno\n- dos\n\n*Entre: Redes.*")
-    assert [kind for kind, _ in drawn] == ["p", "ul", "p"]
-    assert [str(item) for item in drawn[1][1]] == ["uno", "dos"]
-    assert str(drawn[2][1]) == "<em>Entre: Redes.</em>"
-
-
-def test_suggestions_are_split_from_the_rest():
-    other, rows = split_suggestions(
-        "*Entre: Redes.*\n\n- [[a/2026-x.md|alias]] — porque\n- [[b]]\nNinguno.")
-    assert rows == [("2026-x", "porque"), ("b", "")]
-    assert other == "*Entre: Redes.*\n\nNinguno."
-
-
 def test_a_category_that_is_not_in_the_library_is_ignored(cfg, ran):
     a_link(cfg)
     note = put(cfg)
@@ -272,92 +199,6 @@ def test_a_category_that_is_not_in_the_library_is_ignored(cfg, ran):
                                      data={"category": "Redes\n\n## Mi nota\n\nx"})
     assert ran[0] == [(note.id, "links", "")]
 
-
-# --- the actions sit in a row under your text -------------------------------------
-
-def note_form(text, note):
-    start = text.index(f'<form action="/item/{note.id}/mine/note"')
-    return text[start:text.index("</form>", start)]
-
-
-def test_the_actions_sit_between_your_text_and_save(cfg):
-    note = put(cfg)
-    form = note_form(page(cfg, note), note)
-    text_ends = form.index("</textarea>")
-    save = form.index('<button type="submit">')
-    for marker in ('form="act-exists"', 'form="act-links"',
-                   '/actions/improve"', '/actions/expand"'):
-        at = form.index(marker)
-        assert text_ends < at < save
-
-
-def test_each_action_button_posts_its_own_form_not_the_note(cfg):
-    """Forms cannot nest: the buttons point at forms declared after the note."""
-    note = put(cfg)
-    text = page(cfg, note)
-    after = text[text.index("</form>", text.index(f'/item/{note.id}/mine/note')):]
-    for action in ("exists", "links"):
-        assert (f'<form id="act-{action}" action="/item/{note.id}/actions/{action}" '
-                f'method="post"></form>') in after
-    # Improve and expand share one, so the ticked links go with either.
-    assert (f'<form id="act-think" action="/item/{note.id}/actions/improve" '
-            f'method="post"></form>') in after
-    for action in ("improve", "expand"):
-        assert f'form="act-think" formaction="/item/{note.id}/actions/{action}"' in text
-
-
-def test_the_category_choice_goes_with_the_links_button(cfg):
-    note = put(cfg)
-    form = note_form(page(cfg, note), note)
-    assert 'name="category" form="act-links"' in form
-
-
-def test_a_done_action_keeps_its_own_name_on_the_button(cfg):
-    note = put(cfg, actions={"improve": "- algo"})
-    form = note_form(page(cfg, note), note)
-    button = form[form.index('/actions/improve"'):]
-    button = button[:button.index("</button>")]
-    assert "Improve" in button
-    assert 'title="Ask again"' in button
-
-
-def test_the_action_row_lines_up_side_by_side():
-    from oknowledge.web.app import WEB
-    import re
-    css = WEB.joinpath("static", "style.css").read_text(encoding="utf-8")
-    assert re.search(r"\.idea-run\s*\{[^}]*display:\s*flex[^}]*flex-wrap:\s*wrap", css)
-
-
-def test_state_stars_and_ask_again_share_one_line(cfg):
-    note = put(cfg)
-    text = page(cfg, note)
-    block = text[text.index('<div class="idea-meta">'):]
-    block = block[:block.index("</div>")]
-    for form in ("/mine/state", "/mine/score", "/describe"):
-        assert f'action="/item/{note.id}{form}"' in block
-
-
-def test_the_idea_rows_drop_the_page_wide_padding():
-    from oknowledge.web.app import WEB
-    import re
-    css = WEB.joinpath("static", "style.css").read_text(encoding="utf-8")
-    assert re.search(r"\.mine\.idea \.row\s*\{[^}]*padding:\s*0", css)
-    assert re.search(r"\.idea-meta\s*\{[^}]*display:\s*flex[^}]*flex-wrap:\s*wrap", css)
-
-
-def test_the_links_search_is_labelled_and_its_button_says_search(cfg):
-    """A bare picker and a button named like a heading did not read as a search."""
-    note = put(cfg)
-    form = note_form(page(cfg, note), note)
-    label = form.index('<label for="field-among">Links that could serve my idea</label>')
-    picker = form.index('id="field-among"')
-    button = form[form.index('form="act-links"', picker + 1):]
-    button = button[:button.index("</button>")]
-    assert label < picker
-    assert button.rstrip().endswith(">Search")
-
-
-# --- the scope (spec 2.1) ------------------------------------------------------
 
 @pytest.mark.parametrize("sent,used", [({}, "vinculados"), ({"alcance": "todos"}, "todos"),
                                         ({"alcance": "nada"}, "nada"),

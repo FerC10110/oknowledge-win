@@ -144,7 +144,6 @@ STRINGS = {
         "Title": "Título",
         "Your idea": "Tu idea",
         "Ask the model again": "Pedírselo de nuevo al modelo",
-        "Links for this idea": "Links de esta idea",
         "Thinking it over. Reload in a moment to read it.":
             "Pensándolo. Recargá en un momento para leerlo.",
         "No engine in your chain searches the web: opencode or the Anthropic API do.":
@@ -156,23 +155,12 @@ STRINGS = {
         "Expansion": "Ampliación",
         "Expand": "Ampliar",
         "Links that may help": "Links que pueden servir",
-        "Ask again": "Pedir de nuevo",
-        "thinking…": "pensando…",
         "Last time it failed: %1": "La última vez falló: %1",
         "Among": "Entre",
-        "Links that could serve my idea": "Links que pueden servir a mi idea",
-        "All categories": "Todas",
-        "Add to the idea": "Sumar a la idea",
         "already linked": "ya relacionado",
         "Nothing matches": "Nada coincide",
-        "None yet": "Ninguno todavía",
         "Linked": "Vinculados",
-        "Search your links": "Buscar en tus links",
-        "Use the linked links": "Usar los links vinculados",
         "Use": "Usar",
-        "Remove from the idea": "Sacar de la idea",
-        "This note is not in your library any more":
-            "Esta nota ya no está en tu biblioteca",
         "That idea already has 16 links. Take one off before adding another.":
             "Esa idea ya tiene 16 links. Sacale uno antes de sumar otro.",
         "That idea is not there any more.": "Esa idea ya no está.",

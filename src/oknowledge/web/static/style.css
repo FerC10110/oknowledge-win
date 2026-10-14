@@ -401,36 +401,9 @@ form:has(input[name="chain"][value="api"]:not(:checked)) .api-only { display: no
 .related li form { display: inline; }
 .related li.gone { opacity: .55; }
 
-/* An idea's four actions: each section above its own button. */
-/* The four actions, side by side under the text they read; Save below them.
-   The links one carries its category picker glued to its button. */
-.idea-run { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0.6rem 0 0.2rem; }
-.idea-go { display: inline-flex; align-items: center; gap: 0.35rem; }
-.idea-go select { max-width: 11rem; }
-/* The links search takes its own line: label, where to look, Search. */
-.idea-search { flex: 1 1 100%; flex-wrap: wrap; }
-.mine .idea-search label { margin: 0 0.2rem 0 0; color: var(--fg); font-size: 0.95rem; }
-.idea-run button[disabled] { opacity: .6; cursor: default; }
 .mine .field > .failed { color: var(--danger, #b3261e); font-size: 0.85rem; margin: 0.2rem 0 0; }
 .mine .field > .meta { margin: 0.2rem 0 0; }
 .mine .field > .row:last-child { margin-top: 0.6rem; }
-.mine.idea .row { padding: 0; }
-/* The actions' empty forms would each take a gap in the column. */
-.mine.idea > form:empty { display: none; }
-.mine.idea .field > .row:last-child button { border-color: var(--accent); color: var(--accent);
-                                              padding-left: 1.4rem; padding-right: 1.4rem; }
-.idea-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem 1.2rem; }
-@media (max-width: 42rem) {
-  .idea-search label { flex: 1 1 100%; }
-  .idea-go select { flex: 1 1 0; width: 0; max-width: none; min-width: 0; }
-  .idea-go button { white-space: nowrap; }
-}
-.idea-actions { display: grid; gap: 1rem; margin-top: 1.5rem; }
-.idea-actions:not(:has(.idea-action)) { display: none; }
-.idea-action h2 { margin-bottom: .25rem; }
-.idea-action .why { color: var(--dim); margin-left: .5rem; }
-.idea-action .failed { color: var(--danger, #b3261e); }
-.idea-action button[disabled] { opacity: .6; cursor: default; }
 
 /* The mark: a corner of the card, above the cover, out of the popup's link. */
 .card { position: relative; }
@@ -565,68 +538,7 @@ select:focus-visible, textarea:focus-visible, .chip:focus-visible {
   .providers label { display: flex; align-items: center; min-height: 2.75rem; }
 }
 
-/* An idea's page: the links beside it. The idea section lends its children
-   to the article's grid, so the aside can sit at the right of all of them on
-   a wide screen and between the buttons and what they wrote on a phone. */
-.item.has-aside { display: grid; grid-template-columns: minmax(0, 1fr); }
-.item.has-aside > .mine.idea { display: contents; }
-/* What .mine's gap and top margin did, now that the section lends its
-   children out: grid items keep their margins, and none of them collapse. */
-.item.has-aside > .mine.idea > * + * { margin-top: 0.8rem; }
-.item.has-aside > .mine.idea > form.field { margin-top: 1.25rem; }
-/* body.wide lifts main's limit at every width; until there are two columns
-   the idea reads at the usual width. */
-body.wide .item.has-aside { max-width: var(--measure); margin: 0 auto; }
-.item.has-aside .idea-links { order: 1; }
-.item.has-aside .idea-actions, .item.has-aside .idea-meta,
-.item.has-aside > .actions { order: 2; }
-ul.grid.idea-cards { grid-template-columns: minmax(0, 1fr); gap: 0.75rem; margin-bottom: 1rem; }
-/* Beside an idea a card is as tall as what it says, not the grid's fixed
-   height, and its title is a card's and not one of the page's headings. */
-.idea-cards .card { height: auto; }
-.idea-cards .card h2 { font-size: 0.95rem; text-transform: none; letter-spacing: 0;
-  color: var(--fg); margin: 0 0 0.3rem; }
-.idea-cards .card .sum { flex: none; display: -webkit-box; -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical; overflow: hidden; white-space: normal;
-  -webkit-mask-image: none; mask-image: none; margin-bottom: 0.4rem; }
-.card-tools { display: flex; gap: 0.6rem; align-items: center;
-  justify-content: space-between; margin-top: 0.5rem; }
-.card-tools form { display: inline; }
-.card.gone { opacity: 0.55; }
-.card.unused { opacity: 0.6; }
-.idea-find { display: flex; flex-direction: column; gap: 0.3rem; margin-bottom: 0.75rem; }
-.idea-find input { width: 100%; }
-/* The panel: set apart from the idea by its own ground and border, two tabs
-   on top and one list under them that scrolls inside it, never the page. */
-.idea-links.panel { display: flex; flex-direction: column; min-height: 0;
-  background: color-mix(in srgb, var(--line) 30%, var(--bg));
-  border: 1px solid var(--line); border-radius: 14px; padding: 0.75rem; }
-.tab-switch { position: absolute; opacity: 0; width: 1px; height: 1px; pointer-events: none; }
-.idea-links .tabs { display: flex; gap: 0.25rem; flex: none; margin-bottom: 0.75rem;
-  border-bottom: 1px solid var(--line); }
-.idea-links .tabs label { padding: 0.4rem 0.8rem; cursor: pointer; color: var(--dim);
-  border-bottom: 2px solid transparent; margin-bottom: -1px; font-size: 0.9rem; }
-#tab-find:checked ~ .tabs label[for="tab-find"],
-#tab-linked:checked ~ .tabs label[for="tab-linked"] { color: var(--fg); border-bottom-color: var(--accent); }
-#tab-find:focus-visible ~ .tabs label[for="tab-find"],
-#tab-linked:focus-visible ~ .tabs label[for="tab-linked"] { outline: 2px solid var(--focus); outline-offset: 2px; }
-.idea-links .tab-pane { display: flex; flex-direction: column; flex: 1; min-height: 0;
-  overflow-y: auto; overscroll-behavior: contain; max-height: 70vh; }
-.idea-links .pane-find .idea-find { position: sticky; top: 0; z-index: 1; padding-bottom: 0.5rem;
-  margin-bottom: 0.25rem; background: color-mix(in srgb, var(--line) 30%, var(--bg)); }
-#tab-linked:checked ~ .pane-find { display: none; }
-.idea-links .tab-pane.pane-linked { display: none; }
-#tab-linked:checked ~ .pane-linked { display: flex; }
-.idea-links ul.grid.idea-cards { margin-bottom: 0; }
+/* Ocio's page lifts main's limit for its side panel. */
 @media (min-width: 60rem) {
   body.wide main { max-width: calc(var(--measure) + 26rem); }
-  body.wide .item.has-aside { max-width: none; }
-  .item.has-aside { grid-template-columns: minmax(0, 1fr) 24rem; column-gap: 2rem;
-    align-items: start; }
-  .item.has-aside > *, .item.has-aside > .mine.idea > * { grid-column: 1; }
-  .item.has-aside > .mine.idea > .idea-links { grid-column: 2; grid-row: 1 / span 40; order: 0;
-    position: sticky; top: 1rem; height: calc(100vh - 2rem); margin-top: 0; }
-  .idea-links .tab-pane { max-height: none; }
-  .item.has-aside .idea-actions, .item.has-aside .idea-meta,
-  .item.has-aside > .actions { order: 0; }
 }

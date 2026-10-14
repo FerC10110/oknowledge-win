@@ -57,14 +57,7 @@ def idea_now(cfg, note):
 
 
 def page_of(client, note):
-    return client.get(f"/item/{note.id}").text
-
-
-def test_the_page_offers_your_title_and_text_to_edit(cfg, client):
-    page = page_of(client, put(cfg, title="Gimnasio con IA", text="Una app."))
-    assert 'name="title" value="Gimnasio con IA"' in page
-    assert ">Una app.</textarea>" in page
-    assert "Your idea" in page
+    return client.get(f"/ideas/{note.id}").text
 
 
 def test_four_states_in_an_idea_s_own_words(cfg, client):
@@ -80,10 +73,6 @@ def test_an_idea_page_offers_nothing_that_belongs_to_a_link(cfg, client):
         assert f'/item/{note.id}/{action}"' not in page
     for action in ("tags", "delete", "describe", "mine/state", "mine/score", "mine/note"):
         assert f'/item/{note.id}/{action}"' in page
-
-
-def test_an_untitled_idea_has_a_heading(cfg, client):
-    assert '<h1 dir="auto">Untitled idea</h1>' in page_of(client, put(cfg, title=""))
 
 
 def test_an_idea_can_be_dropped_from_its_page(cfg, client):
@@ -158,8 +147,6 @@ def test_a_page_opened_before_the_model_named_it_keeps_the_name(cfg, client):
     # you add a line and save without reloading. The empty box you never
     # touched must not erase the name.
     note = put(cfg, title="")
-    page = page_of(client, note)
-    assert 'name="title_was" value=""' in page
     path, there = find_note(cfg, note.id, shelf=cfg.ideas)
     there.title = "Gimnasio con IA"
     write_note(cfg, there, "es", path=path)
@@ -174,11 +161,6 @@ def test_a_title_you_changed_is_saved_even_over_the_model_s(cfg, client):
     client.post(f"/item/{note.id}/mine/note",
                 data={"title": "Mío", "title_was": "Del modelo", "my_note": "x"})
     assert idea_now(cfg, note).title == "Mío"
-
-
-def test_an_idea_s_tags_lead_to_the_ideas(cfg, client):
-    note = put(cfg, tags=["gimnasio"])
-    assert 'href="/ideas?tag=gimnasio"' in page_of(client, note)
 
 
 def test_a_stale_page_does_not_put_back_an_old_title(cfg, client):
