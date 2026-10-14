@@ -284,7 +284,7 @@ details pre { white-space: pre-wrap; font: inherit; color: var(--dim); }
 form h2 { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.08em;
           color: var(--dim); margin-top: 2rem; }
 form label { display: inline-flex; align-items: center; gap: 0.4rem; margin-right: 1.2rem; }
-input[type=text], input:not([type]), select, button { padding: 0.4rem 0.7rem; font: inherit;
+input[type=text], input[type=search], input:not([type]), select, button { padding: 0.4rem 0.7rem; font: inherit;
   border: 1px solid var(--line); border-radius: 8px; background: var(--card); color: inherit; }
 button { cursor: pointer; }
 /* One labelled field per line, each as wide as the column: eight tags in a
@@ -706,10 +706,15 @@ select:focus-visible, textarea:focus-visible, .chip:focus-visible {
 .item.has-aside .idea-links { order: 1; }
 .item.has-aside .idea-actions, .item.has-aside .idea-meta,
 .item.has-aside > .actions { order: 2; }
-.idea-links h2 { font-size: 1rem; }
 ul.grid.idea-cards { grid-template-columns: minmax(0, 1fr); gap: 0.75rem; margin-bottom: 1rem; }
-.idea-cards .card .sum { display: -webkit-box; -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical; overflow: hidden; }
+/* Beside an idea a card is as tall as what it says, not the grid's fixed
+   height, and its title is a card's and not one of the page's headings. */
+.idea-cards .card { height: auto; }
+.idea-cards .card h2 { font-size: 0.95rem; text-transform: none; letter-spacing: 0;
+  color: var(--fg); margin: 0 0 0.3rem; }
+.idea-cards .card .sum { flex: none; display: -webkit-box; -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical; overflow: hidden; white-space: normal;
+  -webkit-mask-image: none; mask-image: none; margin-bottom: 0.4rem; }
 .card-tools { display: flex; gap: 0.6rem; align-items: center;
   justify-content: space-between; margin-top: 0.5rem; }
 .card-tools form { display: inline; }
@@ -722,7 +727,7 @@ ul.grid.idea-cards { grid-template-columns: minmax(0, 1fr); gap: 0.75rem; margin
   .item.has-aside { grid-template-columns: minmax(0, 1fr) 24rem; column-gap: 2rem;
     align-items: start; }
   .item.has-aside > *, .item.has-aside > .mine.idea > * { grid-column: 1; }
-  .item.has-aside .idea-links { grid-column: 2; grid-row: 1 / span 40; order: 0;
+  .item.has-aside > .mine.idea > .idea-links { grid-column: 2; grid-row: 1 / span 40; order: 0;
     position: sticky; top: 1rem; max-height: calc(100vh - 2rem); overflow: auto; }
   .item.has-aside .idea-actions, .item.has-aside .idea-meta,
   .item.has-aside > .actions { order: 0; }

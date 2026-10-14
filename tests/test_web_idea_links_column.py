@@ -88,3 +88,8 @@ def test_the_page_is_wide_and_loads_its_scripts(cfg):
 def test_the_count_of_links(cfg):
     stem = a_link(cfg, 1, "WireGuard")
     assert "1/16" in page_of(cfg, an_idea(cfg, related=[stem]))
+
+
+def test_the_script_is_served(cfg):
+    reply = TestClient(create_app(cfg)).get("/static/idea-links.js")
+    assert reply.status_code == 200 and "dataset.results" in reply.text
