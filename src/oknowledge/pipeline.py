@@ -1398,7 +1398,7 @@ def complete_idea(cfg: Config, idea: str, trace: Tracer | None = None) -> bool:
     return True
 
 
-def retitle_idea(cfg: Config, idea: str, title: str | None, text: str,
+def retitle_idea(cfg: Config, idea: str, title: str | None, text: str | None,
                  language: str) -> tuple[Path, str | None] | None:
     """Save an idea's title and text from its page, and move the file onto
     the name the title earns. The caller holds the idea's lock.
@@ -1407,7 +1407,8 @@ def retitle_idea(cfg: Config, idea: str, title: str | None, text: str,
     when there is no such idea. Raises IndexesStale when the note landed and
     only the index is behind -- the editing routes tell those two apart.
     A title of None keeps the one on disk: the page you saved from may
-    predate the name the model gave it.
+    predate the name the model gave it. A text of None keeps the one on
+    disk: the title box saves on its own.
     """
     found = find_note(cfg, idea, shelf=cfg.ideas)
     if found is None:
@@ -1415,7 +1416,8 @@ def retitle_idea(cfg: Config, idea: str, title: str | None, text: str,
     path, note = found
     if title is not None:
         note.title = clean_title(title)
-    note.my_note = text.strip()
+    if text is not None:
+        note.my_note = text.strip()
     path = write_note(cfg, note, language, path=path)
     path, trouble = _rename_to_title(cfg, note, path, shelf=cfg.ideas)
     try:

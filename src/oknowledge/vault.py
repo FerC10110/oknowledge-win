@@ -792,8 +792,11 @@ def update_note(cfg: Config, link_id: str, language: str,
     if state is not None:
         note.state = state if state in states_for(note.type) else note.state
     if score is not None:
+        # "0" is the stars taken off (clicking the one you had, spec §2);
+        # anything else that is not one to five leaves them as they were.
         picked = _stars(score)
-        note.score = picked if picked else note.score
+        if picked or str(score).strip() == "0":
+            note.score = picked
     if my_note is not None:
         note.my_note = my_note.strip()
     if mark is not None:

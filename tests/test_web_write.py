@@ -68,6 +68,7 @@ WRITE_ROUTES = [
     ("/item/a1/mine/state", {"state": "done"}),
     ("/item/a1/mine/score", {"score": "4"}),
     ("/item/a1/mine/note", {"my_note": "x"}),
+    ("/item/a1/title", {"title": "x"}),
     # Asking an engine for its models. A cross-site POST here would run
     # `opencode models` and reach the user's provider with their key.
     ("/settings/models/opencode", {}),

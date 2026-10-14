@@ -93,7 +93,7 @@ def test_the_stars_set_the_score(client, a_card_in_the_shelf, cfg):
     assert note_now(cfg).score == 4
 
 
-@pytest.mark.parametrize("bad", ["9", "0", "-1", "cinco", "", "4.5"])
+@pytest.mark.parametrize("bad", ["9", "-1", "cinco", "", "4.5"])
 def test_a_score_that_is_not_one_to_five_writes_nothing(client, a_card_in_the_shelf,
                                                         cfg, bad):
     before = card_file(cfg).read_text(encoding="utf-8")

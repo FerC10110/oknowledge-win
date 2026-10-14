@@ -143,6 +143,7 @@ NOTICES = {
     "idea-empty": "Write the idea first: there is nothing to save yet.",
     "idea-full": "That idea already has 16 links. Take one off before adding another.",
     "no-such-idea": "That idea is not there any more.",
+    "title-empty": "Write a title: an empty one is not saved.",
     # An idea's action: it runs behind the page, like a card's summary.
     "thinking": "Thinking it over. Reload in a moment to read it.",
     "cannot-search": "No engine in your chain searches the web: "
@@ -464,6 +465,38 @@ def see_other(path: str, **params) -> RedirectResponse:
     join = "&" if "?" in path else "?"
     return RedirectResponse(path + join + query, status_code=303)
 
+GONE = "That is not there any more."
+"""What a script is told when the note it was editing has gone."""
+
+FAILURES = {"bad-category": 400, "bad-mark": 400, "bad-collection": 400,
+            "title-empty": 400, "busy": 409, "idea-full": 409,
+            "cannot-search": 409, "no-such-idea": 404, "write-failed": 500}
+"""The notices that mean nothing was written, and the status each is
+answered with when a script asked for JSON. Every other notice landed."""
+
+
+def wants_json(request: Request) -> bool:
+    """A script asking for the answer as data: the redesigned screens save in
+    place and need to know how it went, not a page to go to (spec §1)."""
+    return "application/json" in request.headers.get("accept", "")
+
+
+def answer(request: Request, where: str, notice: str = "", **params) -> Response:
+    """The answer to a write: a 303 for a form, JSON for a script.
+
+    The JSON carries the notice in words, so the toast says what the page
+    would have said after the redirect.
+    """
+    if not wants_json(request):
+        return see_other(where, notice=notice, **params)
+    t = translator(ui_language())
+    text = NOTICES.get(notice)
+    said = t(text, params.get("n", 0), params.get("m", 0)) if text else ""
+    status = FAILURES.get(notice)
+    if status is not None:
+        return JSONResponse({"ok": False, "error": said}, status_code=status)
+    return JSONResponse({"ok": True, "notice": said})
+
 
 IDEA_SEARCH_LIMIT = 12
 """Results beside an idea: enough to choose from, few enough to fit beside it."""
@@ -746,6 +779,9 @@ def create_app(cfg: Config) -> FastAPI:
     @app.exception_handler(StarletteHTTPException)
     async def not_found(request: Request, exc: StarletteHTTPException):
         path = request.url.path
+        if exc.status_code == 404 and wants_json(request):
+            t = translator(ui_language())
+            return JSONResponse({"ok": False, "error": t(GONE)}, status_code=404)
         if exc.status_code == 404 and not path.startswith(("/cover/", "/static/", "/embed/")):
             return page(request, "notfound.html", status_code=404)
         return await http_exception_handler(request, exc)
@@ -1073,19 +1109,19 @@ def create_app(cfg: Config) -> FastAPI:
         return Edited(done, True)
 
     @app.post("/item/{link_id}/category")
-    def move(link_id: str, category: str = Form("")):
+    def move(request: Request, link_id: str, category: str = Form("")):
         if clean_category(category) is None:
             # Before the lock, so a refused name creates nothing anywhere --
             # not even the lock file. update_note() checks it again anyway.
-            return see_other(item_url(link_id), notice="bad-category")
+            return answer(request, item_url(link_id), notice="bad-category")
         result = edit(link_id, lambda cfg, language: update_note(
             cfg, link_id, language, category=category), "saved", "indexes-stale")
         if result.notice == MISSING:
             raise HTTPException(status_code=404, detail="no such link")
-        return see_other(item_url(link_id), notice=result.notice)
+        return answer(request, item_url(link_id), notice=result.notice)
 
     @app.post("/item/{link_id}/tags")
-    def retag(link_id: str, tags: str = Form(""), add: str = Form("")):
+    def retag(request: Request, link_id: str, tags: str = Form(""), add: str = Form("")):
         # A card's tags are the catalog's genres, and correcting them by
         # hand is part of the design: the model never writes over them.
         shelves, which = held_by(link_id)
@@ -1098,9 +1134,9 @@ def create_app(cfg: Config) -> FastAPI:
             "saved", "indexes-stale", shelves=shelves)
         if result.notice == MISSING:
             raise HTTPException(status_code=404, detail="no such link")
-        return see_other(item_url(link_id), notice=result.notice)
+        return answer(request, item_url(link_id), notice=result.notice)
 
-    def mine(link_id: str, **change):
+    def mine(request: Request, link_id: str, **change):
         """One of your fields on one card or one idea, and nothing else.
 
         Not on a link: these fields exist on every Note, but a state and a
@@ -1115,7 +1151,7 @@ def create_app(cfg: Config) -> FastAPI:
             "saved", "indexes-stale", shelves=shelves)
         if result.notice == MISSING:
             raise HTTPException(status_code=404, detail="no such card")
-        return see_other(item_url(link_id), notice=result.notice)
+        return answer(request, item_url(link_id), notice=result.notice)
 
     @app.post("/item/{link_id}/describe")
     def rewrite_card(background: BackgroundTasks, link_id: str):
@@ -1139,22 +1175,22 @@ def create_app(cfg: Config) -> FastAPI:
         return see_other(item_url(link_id), notice="rewriting")
 
     @app.post("/item/{link_id}/mine/state")
-    def set_state(link_id: str, state: str = Form("")):
-        return mine(link_id, state=state)
+    def set_state(request: Request, link_id: str, state: str = Form("")):
+        return mine(request, link_id, state=state)
 
     @app.post("/item/{link_id}/mine/score")
-    def set_score(link_id: str, score: str = Form("")):
-        return mine(link_id, score=score)
+    def set_score(request: Request, link_id: str, score: str = Form("")):
+        return mine(request, link_id, score=score)
 
     @app.post("/item/{link_id}/mine/note")
-    def set_my_note(link_id: str, my_note: str = Form(""),
+    def set_my_note(request: Request, link_id: str, my_note: str = Form(""),
                     title: str | None = Form(None),
                     title_was: str | None = Form(None)):
         # An idea's page sends its title with its text: one form, so a
         # renamed idea and its text land in one write. A card's never does.
         shelves, which = held_by(link_id)
         if which.name != "ideas" or title is None:
-            return mine(link_id, my_note=my_note)
+            return mine(request, link_id, my_note=my_note)
         # The box as it was drawn, and you did not touch it: the title on
         # disk stands, whatever the model named the idea since.
         wanted = None if title_was is not None and title == title_was else title
@@ -1168,10 +1204,32 @@ def create_app(cfg: Config) -> FastAPI:
         result = edit(link_id, retitle, "saved", "indexes-stale", shelves=shelves)
         if result.notice == MISSING:
             raise HTTPException(status_code=404, detail="no such idea")
-        return see_other(item_url(link_id), notice=result.notice)
+        return answer(request, item_url(link_id), notice=result.notice)
+
+    @app.post("/item/{link_id}/title")
+    def retitle_route(request: Request, link_id: str, title: str = Form("")):
+        """An idea's name, from the box in its header (spec §2). An empty box
+        is not a name: the one on disk stays and the screen keeps what you
+        typed. The file moves onto the name the title earns, as before."""
+        ideas.refresh()
+        if ideas.by_id(link_id) is None:
+            raise HTTPException(status_code=404, detail="no such idea")
+        if not title.strip():
+            return answer(request, item_url(link_id), "title-empty")
+
+        def rename(cfg, language):
+            done = retitle_idea(cfg, link_id, title, None, language)
+            if done is not None and done[1]:
+                log.warning("%s", done[1])
+            return done
+
+        result = edit(link_id, rename, "saved", "indexes-stale", shelves=ideas)
+        if result.notice == MISSING:
+            raise HTTPException(status_code=404, detail="no such idea")
+        return answer(request, item_url(link_id), result.notice)
 
     @app.post("/item/{link_id}/mark")
-    def set_mark(link_id: str, mark: str = Form(""), back: str = Form("")):
+    def set_mark(request: Request, link_id: str, mark: str = Form(""), back: str = Form("")):
         """Your one emoji on a note, on any shelf. Back to the card it was
         set from, so marking ten cards is ten taps and no scrolling.
 
@@ -1183,9 +1241,11 @@ def create_app(cfg: Config) -> FastAPI:
         home = local_path(back) or item_url(link_id)
 
         def to_card(notice: str):
-            answer = see_other(home, notice=notice)
-            answer.headers["location"] += "#card-" + quote(link_id, safe="")
-            return answer
+            if wants_json(request):
+                return answer(request, home, notice)
+            moved = see_other(home, notice=notice)
+            moved.headers["location"] += "#card-" + quote(link_id, safe="")
+            return moved
 
         if clean_mark(mark) is None:
             return to_card("bad-mark")
@@ -1197,14 +1257,14 @@ def create_app(cfg: Config) -> FastAPI:
         return to_card(result.notice)
 
     @app.post("/item/{link_id}/mentions/delete")
-    def drop_mention(link_id: str, name: str = Form("")):
+    def drop_mention(request: Request, link_id: str, name: str = Form("")):
         # No index names a mention, so update_note() does not rebuild them and
         # the "indexes-stale" notice cannot happen here.
         result = edit(link_id, lambda cfg, language: update_note(
             cfg, link_id, language, drop_mention=name), "saved", "indexes-stale")
         if result.notice == MISSING:
             raise HTTPException(status_code=404, detail="no such link")
-        return see_other(item_url(link_id), notice=result.notice)
+        return answer(request, item_url(link_id), notice=result.notice)
 
     @app.post("/item/{link_id}/delete")
     def remove(link_id: str):
@@ -1321,7 +1381,7 @@ def create_app(cfg: Config) -> FastAPI:
         return collect([leave or name], id, False, where)
 
     @app.post("/item/{link_id}/collections")
-    def collections_of(link_id: str, add: str = Form(""), drop: str = Form("")):
+    def collections_of(request: Request, link_id: str, add: str = Form(""), drop: str = Form("")):
         """One note, one collection at a time: a chip with an x to leave one,
         a box to join one. No list to re-type, and no separator to invent for
         names that have spaces in them."""
@@ -1331,16 +1391,16 @@ def create_app(cfg: Config) -> FastAPI:
         else:
             wanted = normalize_collections([add], library.collections())
             if not wanted:
-                return see_other(item_url(link_id), notice="bad-collection")
+                return answer(request, item_url(link_id), notice="bad-collection")
             result = edit(link_id, lambda cfg, language: update_note(
                 cfg, link_id, language, add_collection=wanted[0]),
                 "saved", "indexes-stale")
         if result.notice == MISSING:
             raise HTTPException(status_code=404, detail="no such link")
-        return see_other(item_url(link_id), notice=result.notice)
+        return answer(request, item_url(link_id), notice=result.notice)
 
     @app.post("/item/{link_id}/ideas")
-    def join_idea(link_id: str, idea: str = Form(""), back: str = Form(""),
+    def join_idea(request: Request, link_id: str, idea: str = Form(""), back: str = Form(""),
                   q: str = Form("")):
         """Add this link to one of your ideas.
 
@@ -1363,20 +1423,20 @@ def create_app(cfg: Config) -> FastAPI:
             result = edit(idea, lambda cfg, language: add_related(
                 cfg, idea, stem, language), "saved", "indexes-stale", shelves=ideas)
         except IdeaFull:
-            return see_other(home, notice="idea-full", q=again)
+            return answer(request, home, notice="idea-full", q=again)
         if result.notice == MISSING:
-            return see_other(item_url(link_id), notice="no-such-idea")
-        return see_other(home, notice=result.notice, q=again)
+            return answer(request, item_url(link_id), notice="no-such-idea")
+        return answer(request, home, notice=result.notice, q=again)
 
     @app.post("/item/{link_id}/related/drop")
-    def leave_idea(link_id: str, stem: str = Form("")):
+    def leave_idea(request: Request, link_id: str, stem: str = Form("")):
         """Take one link off this idea, by the file name the idea holds --
         which is how a link that is gone can still be taken off."""
         result = edit(link_id, lambda cfg, language: drop_related(
             cfg, link_id, stem, language), "saved", "indexes-stale", shelves=ideas)
         if result.notice == MISSING:
             raise HTTPException(status_code=404, detail="no such idea")
-        return see_other(item_url(link_id), notice=result.notice)
+        return answer(request, item_url(link_id), notice=result.notice)
 
     def rewrite(live: Config, card: str) -> None:
         """The background half of a card's rewrite: run it, then say how it

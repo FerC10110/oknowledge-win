@@ -191,3 +191,10 @@ def test_completing_and_retitling_keep_the_mark(cfg, engine):
 
 def test_retitling_an_idea_that_is_not_there_is_none(cfg):
     assert retitle_idea(cfg, "000000000000", "t", "x", "es") is None
+
+
+def test_a_title_alone_keeps_the_text(cfg):
+    note, _ = put(cfg, title="Mi gym")
+    path, trouble = retitle_idea(cfg, note.id, "Gimnasio", None, "es")
+    assert trouble is None and path.name == "2026-10-12-gimnasio.md"
+    assert now(cfg, note)[1].my_note == "Una app que me arme la rutina."
