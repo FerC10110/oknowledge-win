@@ -446,3 +446,16 @@ def test_busy_lists_only_the_links_someone_holds(tmp_path):
     with q.lock("aaaa1111"):
         assert [e.id for e in q.busy()] == ["aaaa1111"]
     assert q.busy() == []
+
+
+def test_busy_reads_only_the_held_entries(tmp_path, monkeypatch):
+    q = Queue(tmp_path)
+    for n in range(30):
+        q.enqueue(f"idle{n:04d}", f"https://i{n}.com", "full")
+    q.enqueue("held0000", "https://h.com", "full")
+    reads = []
+    real = Queue.get
+    monkeypatch.setattr(Queue, "get", lambda self, i: (reads.append(i), real(self, i))[1])
+    with q.lock("held0000"):
+        assert [e.id for e in q.busy()] == ["held0000"]
+    assert reads == ["held0000"]

@@ -217,15 +217,24 @@ class Queue:
     def busy(self) -> list[QueueEntry]:
         """Pending entries some live process holds now: the ones really being
         worked on. A pending entry nobody holds is owed work, not work."""
+        locks = self.root / "locks"
+        if not locks.is_dir():
+            return []
         found = []
-        for entry in self.entries():
-            if entry.status != "pending":
+        # Probe the lock files, not the entries: entries are never pruned, so
+        # reading them all would cost the whole library on every request.
+        for path in locks.glob("*.lock"):
+            if not _ID.fullmatch(path.stem):
                 continue
             try:
-                if self.held(entry.id):
-                    found.append(entry)
+                if not self.held(path.stem):
+                    continue
             except OSError:
                 continue
+            entry = self.get(path.stem)
+            if entry is not None and entry.status == "pending":
+                found.append(entry)
+        found.sort(key=lambda e: (e.updated, e.id), reverse=True)
         return found
 
     @contextmanager
