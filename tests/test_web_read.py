@@ -98,13 +98,13 @@ def test_the_interface_follows_the_config(tmp_path):
     vault = tmp_path / "vault"
     (vault / "oknowledge" / "links").mkdir(parents=True)
     body = TestClient(create_app(Config(vault=vault, ui_language="es"))).get("/").text
-    assert "Buscá en tu biblioteca" in body
+    assert "Biblioteca" in body and "Ajustes" in body
 
 
 def test_the_interface_is_english_unless_the_config_says_otherwise(client):
     body = client.get("/").text
-    assert "Search your library" in body
-    assert "Buscá" not in body
+    assert "Library" in body and "Settings" in body
+    assert "Biblioteca" not in body
 
 
 # --- ruling 1: refresh() is cheap when nothing changed -------------------------------

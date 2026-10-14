@@ -336,7 +336,7 @@ def test_an_unknown_item_is_an_html_404(tmp_path):
     response = client.get("/item/nope")
     assert response.status_code == 404
     assert response.headers["content-type"].startswith("text/html")
-    assert "Search your library" in response.text
+    assert '<aside class="sidebar"' in response.text
 
 
 def test_a_blank_query_shows_the_library_not_no_results(tmp_path):

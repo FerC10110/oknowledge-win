@@ -518,6 +518,16 @@ def item_url(link_id: str) -> str:
     return "/item/" + quote(link_id, safe="")
 
 
+def section_of(path: str) -> str | None:
+    """Which sidebar section a page belongs to, by its path."""
+    if path == "/" or path.startswith(("/lista", "/panel/")):
+        return "links"
+    for key in ("ocio", "ideas"):
+        if path == f"/{key}" or path.startswith(f"/{key}/"):
+            return key
+    return None
+
+
 def local_path(back: str) -> str | None:
     """A page of ours to go back to, or None.
 
@@ -749,6 +759,7 @@ def create_app(cfg: Config) -> FastAPI:
         t = translator(language)
         # Where this page is, for the forms that bring you back to it.
         here = request.url.path + ("?" + request.url.query if request.url.query else "")
+        section = context.pop("section", None) or section_of(request.url.path)
         base = {"t": t, "lang": language, "query": "", "here": here,
                 "marks": current["cfg"].marks, "used_marks": [], "active_mark": None,
                 "unreadable": library.unreadable, "links_dir": cfg.links_dir,
@@ -757,7 +768,12 @@ def create_app(cfg: Config) -> FastAPI:
                 # On every page, because the link to the batch is in the nav
                 # and it says there how far along a run is. It is a read of
                 # memory, not of the queue: no page pays for it.
-                "batch": progress.snapshot()}
+                "batch": progress.snapshot(),
+                "side": {"section": section,
+                         "counts": {"links": len(library.entries),
+                                    "ocio": len(shelf.entries),
+                                    "ideas": len(ideas.entries)}},
+                "toast": False}
         if library.error is not None:
             return templates.TemplateResponse(
                 request=request, name="error.html", status_code=503,
@@ -943,7 +959,7 @@ def create_app(cfg: Config) -> FastAPI:
                                      if n.state != "dropped"]
         return page(request, "item.html", note=note,
                     card=where.name == "ocio", idea=where.name == "ideas",
-                    link=where.name == "links",
+                    link=where.name == "links", section=where.name,
                     words=STATE_WORDS.get(entry.note.type, STATE_WORDS["movie"]),
                     STATES=states_for(entry.note.type), **extra)
 

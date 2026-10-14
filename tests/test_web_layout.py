@@ -44,12 +44,6 @@ def css():
 
 # --- the header -------------------------------------------------------------
 
-def test_the_paste_box_folds_into_a_plus(client):
-    body = client.get("/").text
-    assert re.search(r'<details class="paste" open>\s*<summary[^>]*>＋</summary>', body)
-    assert 'action="/add"' in body
-
-
 def test_saving_everything_is_called_complete_not_all():
     from oknowledge.i18n import STRINGS
     assert STRINGS["es"]["Full"] == "Completo"
@@ -62,7 +56,7 @@ def test_every_page_loads_the_layout_script(client):
 def test_the_layout_script_closes_and_unfocuses_on_a_phone():
     js = WEB.joinpath("static", "layout.js").read_text(encoding="utf-8")
     assert "(max-width: 42rem)" in js
-    assert "details.filters" in js and "details.paste" in js and "blur" in js
+    assert "details.filters" in js and "details.paste" not in js and "blur" in js
 
 
 # --- the filters ------------------------------------------------------------

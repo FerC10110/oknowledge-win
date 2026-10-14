@@ -604,7 +604,7 @@ def test_the_nav_says_how_far_a_running_batch_has_got(setup, started):
 
     body = client.get("/categories").text
 
-    assert "<b>1/2</b>" in body
+    assert '<b class="mono">1/2</b>' in body
 
 
 def test_the_nav_counts_nothing_when_no_batch_is_running(setup):
@@ -612,7 +612,7 @@ def test_the_nav_counts_nothing_when_no_batch_is_running(setup):
 
     body = client.get("/categories").text
 
-    assert "<b>0/0</b>" not in body
+    assert '<b class="mono">0/0</b>' not in body
 
 
 # --- Clicking without losing the page -----------------------------------------

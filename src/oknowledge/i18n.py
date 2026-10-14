@@ -21,11 +21,17 @@ NATIVE_NAMES = {"en": "English", "es": "Español"}
 STRINGS = {
     "es": {
         "Library": "Biblioteca",
+        "Sections": "Secciones",
+        "CATEGORIES": "CATEGORÍAS",
+        "MARKS": "MARCAS",
+        "COLLECTIONS": "COLECCIONES",
+        "Marks": "Marcas",
+        "Collections": "Colecciones",
+        "Favorites": "Favoritos",
+        "Pinned": "Fijados",
         "Search": "Buscar",
-        "Search your library": "Buscá en tu biblioteca",
         "Categories": "Categorías",
         "Settings": "Ajustes",
-        "Marked %1": "Marcadas con %1",
         "Mark": "Marcar",
         "Another emoji": "Otro emoji",
         "Filters": "Filtros",
@@ -66,7 +72,6 @@ STRINGS = {
         "The vault could not be read": "No se pudo leer el vault",
         "Check that the folder exists, is mounted and is readable.":
             "Revisá que la carpeta exista, esté montada y se pueda leer.",
-        "Paste a link": "Pegá un link",
         "Leisure": "Ocio",
         "to watch": "por ver",
         "watching": "viendo",

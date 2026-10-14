@@ -63,16 +63,6 @@ def test_no_marks_nothing_in_the_nav(client):
     assert "/marked" not in nav(client.get("/").text)
 
 
-def test_the_marks_in_use_are_in_the_nav_most_used_first(client, cfg):
-    for link_id, mark in ((LINK, "🔥"), (CARD, "⭐"), (IDEA, "⭐")):
-        path, note = next(f for f in (find_note(cfg, link_id, s)
-                                      for s in (None, cfg.ocio, cfg.ideas)) if f)
-        note.mark = mark
-        write_note(cfg, note, "es", path=path)
-    links = re.findall(r'href="/marked\?mark=([^"]+)"', nav(client.get("/").text))
-    assert links == [quote("⭐"), quote("🔥")]
-
-
 @pytest.mark.parametrize("link_id", [LINK, CARD, IDEA])
 def test_a_mark_goes_on_a_link_a_card_and_an_idea(client, cfg, link_id):
     client.post(f"/item/{link_id}/mark", data={"mark": "⭐", "back": "/"})
@@ -138,11 +128,6 @@ def test_marked_leaves_out_the_other_marks(client):
     client.post(f"/item/{CARD}/mark", data={"mark": "⭐", "back": "/"})
     body = client.get("/marked", params={"mark": "⭐"}).text
     assert "The Terminator" in body and "WireGuard" not in body
-
-
-def test_the_mark_you_are_on_is_lit_in_the_nav(client):
-    client.post(f"/item/{CARD}/mark", data={"mark": "⭐", "back": "/"})
-    assert 'class="mark on"' in nav(client.get("/marked", params={"mark": "⭐"}).text)
 
 
 @pytest.mark.parametrize("mark", ["", "🦄"])

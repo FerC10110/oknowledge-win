@@ -115,14 +115,6 @@ def test_a_link_already_in_the_library_is_said_and_not_read_again(tmp_path, take
     assert "Uno" in body                        # and there it is
 
 
-def test_the_box_is_on_every_page(client):
-    for where in ("/", "/settings", "/retry", "/categories"):
-        body = client.get(where).text
-        assert 'action="/add"' in body, where
-        assert 'name="content" value="full"' in body, where
-        assert 'name="content" value="summary"' in body, where
-
-
 def test_the_box_has_its_own_line_on_a_phone():
     """The header already wraps at 40rem; the box is the widest thing in it,
     so it has to be told where to go rather than squeezed beside the search."""

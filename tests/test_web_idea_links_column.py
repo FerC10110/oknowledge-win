@@ -47,14 +47,14 @@ def page_of(cfg, idea, **params):
 def test_the_linked_links_are_cards_in_the_aside(cfg):
     stem = a_link(cfg, 1, "WireGuard")
     text = page_of(cfg, an_idea(cfg, related=[stem]))
-    aside = text[text.index('<aside class="idea-links'):text.index("</aside>")]
+    aside = text[text.index('<aside class="idea-links'):][:text[text.index('<aside class="idea-links'):].index("</aside>")]
     assert 'class="card"' in aside and "WireGuard" in aside
     assert f'name="use" value="{stem}" form="act-think" checked' in aside
     assert '/related/drop' in aside
 
 
 def aside_of(text):
-    return text[text.index('<aside class="idea-links'):text.index("</aside>")]
+    return text[text.index('<aside class="idea-links'):][:text[text.index('<aside class="idea-links'):].index("</aside>")]
 
 
 def test_the_aside_is_a_panel_with_two_tabs_search_first(cfg):

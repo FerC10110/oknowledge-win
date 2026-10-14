@@ -17,3 +17,40 @@ a:hover { color: var(--acc-hi); }
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-thumb { background: var(--b-input); border-radius: 4px; }
 .mono { font-family: var(--mono); }
+
+/* --- the shell -------------------------------------------------------- */
+body { background: #141519; }
+.app { display: grid; height: 100vh; grid-template-rows: minmax(0, 1fr); }
+.app.legacy { grid-template-columns: 216px minmax(0, 1fr); }
+.legacy-main { overflow-y: auto; min-height: 0; padding-top: 1.5rem; }
+
+.sidebar { border-right: 1px solid var(--b-div); padding: 18px 12px 14px;
+  display: flex; flex-direction: column; gap: 14px; min-height: 0; overflow-y: auto;
+  font-size: 14px; }
+.sidebar a { color: var(--t3); text-decoration: none; }
+.sidebar .logo { font-weight: 600; font-size: 16px; padding: 0 10px; color: var(--t1); }
+.sidebar nav { display: flex; flex-direction: column; gap: 2px; }
+.sidebar .section, .sidebar .filter { display: flex; align-items: center; gap: 10px;
+  padding: 8px 10px; border-radius: 8px; }
+.sidebar .filter { padding: 7px 10px; }
+.sidebar .section span, .sidebar .filter span:not(.emoji) { flex: 1; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sidebar .on { background: var(--s5); color: var(--t1); }
+.sidebar a:hover { background: var(--s5); }
+.sidebar .count { color: var(--t6); font-size: 12px; font-weight: 400; }
+.sidebar .dot, .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; flex: none; }
+.sidebar .group-title { font-size: 11px; letter-spacing: .08em; color: var(--t6);
+  padding: 0 10px 6px; margin: 0; }
+.sidebar .foot { margin-top: auto; font-size: 13px; }
+.sidebar .foot a { padding: 7px 10px; color: var(--t5); }
+
+.toast { position: fixed; top: 16px; left: 50%; transform: translateX(-50%);
+  z-index: 50; margin: 0; background: var(--t1); color: #141519; border-radius: 10px;
+  padding: 9px 14px; font-size: 13.5px; box-shadow: var(--shadow);
+  animation: toast-out .3s ease 2.2s forwards; }
+@keyframes toast-out { to { opacity: 0; visibility: hidden; } }
+
+@media (max-width: 60rem) {
+  .app, .app.legacy { display: block; height: auto; }
+  .sidebar { border-right: 0; border-bottom: 1px solid var(--b-div); }
+}

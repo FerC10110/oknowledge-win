@@ -130,7 +130,7 @@ def test_a_full_idea_is_said(cfg, client, link):
 def test_the_idea_shows_its_links_by_their_real_titles(cfg, client, link):
     idea = put(cfg, related=[link.stem])
     text = client.get(f"/item/{idea.id}").text
-    aside = text[text.index('<aside class="idea-links'):text.index("</aside>")]
+    aside = text[text.index('<aside class="idea-links'):][:text[text.index('<aside class="idea-links'):].index("</aside>")]
     assert f'href="/item/{LINK}" data-popup="/embed/{LINK}"' in aside
     assert ">WireGuard</a>" in aside
 

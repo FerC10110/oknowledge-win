@@ -8,7 +8,7 @@
   "use strict";
   var phone = window.matchMedia("(max-width: 42rem)");
   function fold(open) {
-    document.querySelectorAll("details.filters, details.paste").forEach(function (d) {
+    document.querySelectorAll("details.filters").forEach(function (d) {
       d.open = open;
     });
   }

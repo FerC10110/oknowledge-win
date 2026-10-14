@@ -10,49 +10,19 @@
 </head>
 <body class="{% block body_class %}{% endblock %}" data-close="{{ t('Close') }}"
       data-redo-failed="{{ t('It could not be analysed. Try again.') }}">
-  <header>
-    <a class="brand" href="/">oknowledge</a>
-    <form action="/search" method="get" role="search">
-      <input type="search" name="q" value="{{ query }}"
-             placeholder="{{ t('Search your library') }}" autofocus>
-    </form>
-    {# The box the bar panel is on Omarchy. Two buttons and not one: the
-       config's `default_content` is a preference, and this is a decision
-       about this link. Type, not url: a bare example.com/x is a link the
-       server takes, and the browser would refuse to send it. #}
-    <details class="paste" open>
-      <summary title="{{ t('Paste a link') }}" aria-label="{{ t('Paste a link') }}">＋</summary>
-      <form class="paste-form" action="/add" method="post">
-        <input type="text" inputmode="url" name="url" autocomplete="off"
-               placeholder="https://…" aria-label="{{ t('Paste a link') }}">
-        <button type="submit" name="content" value="full">{{ t('Full') }}</button>
-        <button type="submit" name="content" value="summary">{{ t('Summary') }}</button>
-      </form>
-    </details>
-    <nav>
-      <a href="/categories">{{ t('Categories') }}</a>
-      <a href="/ocio">{{ t('Leisure') }}</a>
-      <a href="/ideas">{{ t('Ideas') }}</a>
-      {# The count is here and not only on the page itself: a batch runs for an
-         hour behind whatever you are reading, and this is how you see it. #}
-      <a href="/retry">{{ t('Activity') }}{% if batch.running %}
-        <b>{{ batch.done }}/{{ batch.total }}</b>{% elif batch.busy %}
-        <b>{{ batch.busy|length }}</b>{% endif %}</a>
-      <a href="/settings">{{ t('Settings') }}</a>
-      {# Yours, most used first: one tap to everything you marked with it. #}
-      {% for mark, n in used_marks %}
-        <a href="/marked?mark={{ mark|urlencode }}" class="mark{% if active_mark == mark %} on{% endif %}"
-           title="{{ n }}" aria-label="{{ t('Marked %1', mark) }}">{{ mark }}</a>
-      {% endfor %}
-    </nav>
-  </header>
-  {% if unreadable %}
-    {# The folder in the title and not the text: a path is a line and a half
-       on a phone, and the count is what the notice is for. #}
-    <p class="quiet" title="{{ links_dir }}">{% if unreadable == 1 %}{{ t('1 note could not be read and is not shown') }}{% else %}{{ t('%1 notes could not be read and are not shown', unreadable) }}{% endif %}</p>
-  {% endif %}
-  {% if notice %}<p class="notice">{{ notice }}</p>{% endif %}
-  <main>{% block main %}{% endblock %}</main>
+  <div class="app {% block app_class %}legacy{% endblock %}">
+    {% include "sidebar.html" %}
+    {% block layout %}
+    <div class="legacy-main">
+      {% if unreadable %}
+        <p class="quiet" title="{{ links_dir }}">{% if unreadable == 1 %}{{ t('1 note could not be read and is not shown') }}{% else %}{{ t('%1 notes could not be read and are not shown', unreadable) }}{% endif %}</p>
+      {% endif %}
+      {% if notice and not toast %}<p class="notice">{{ notice }}</p>{% endif %}
+      <main>{% block main %}{% endblock %}</main>
+    </div>
+    {% endblock %}
+  </div>
+  {% if notice and toast %}<p class="notice toast" role="status">{{ notice }}</p>{% endif %}
   {# Not deferred: it has to fold the page before the first paint. #}
   <script src="/static/layout.js"></script>
   {% block scripts %}{% endblock %}
