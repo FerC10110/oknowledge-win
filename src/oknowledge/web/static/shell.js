@@ -46,6 +46,10 @@
   var asked = 0;
   function loadList(url, keepScroll) {
     var mine = ++asked;
+    // The pick this list was asked under. If the user picks another link
+    // before it lands, its sel (and the server's data-current) is the old
+    // one, and following it would undo their click.
+    var picked = shownAsked;
     var target = new URL(url, location.href);
     var body = document.getElementById("list-body");
     var top = body ? body.scrollTop : 0;
@@ -54,12 +58,22 @@
       .then(function (html) {
         if (mine !== asked) return;
         list.innerHTML = html;
+        var moved = picked !== shownAsked;
+        if (moved) {
+          var sel = here().searchParams.get("sel");
+          if (sel) target.searchParams.set("sel", sel); else target.searchParams.delete("sel");
+        }
         history.replaceState(null, "", target.pathname + target.search);
         if (keepScroll) document.getElementById("list-body").scrollTop = top;
         var items = document.getElementById("items");
-        var current = items ? items.dataset.current : "";
-        var shown = panel.querySelector("[data-panel]");
-        if (current && (!shown || shown.dataset.panel !== current)) loadPanel(current, true);
+        if (moved) {
+          var still = here().searchParams.get("sel");
+          if (still) markCurrent(still);
+        } else {
+          var current = items ? items.dataset.current : "";
+          var shown = panel.querySelector("[data-panel]");
+          if (current && (!shown || shown.dataset.panel !== current)) loadPanel(current, true);
+        }
         observe();
         watch();
       })
@@ -256,6 +270,7 @@
     if (!target.matches("form[data-inline]")) return;
     event.preventDefault();
     var data = new FormData(target, event.submitter || undefined);
+    var picked = shownAsked;            // see loadList: a pick since wins
     closeMenus();
     fetch(target.action, { method: "POST", body: data })
       .then(function (r) {
@@ -267,7 +282,7 @@
         var said = page.querySelector(".toast");
         toast(said ? said.textContent : "");
         var shown = panel.querySelector("[data-panel]");
-        if (shown) loadPanel(shown.dataset.panel, true);    // deleted: gone
+        if (shown && picked === shownAsked) loadPanel(shown.dataset.panel, true);    // deleted: gone
         loadList(here().href, true);
       })
       .catch(function () { toast(texts.saveFailed); });
@@ -287,8 +302,12 @@
             clearInterval(watched[id]);
             delete watched[id];
             toast(state.status === "failed" ? texts.failed : texts.done);
+            // What the user picked, not what is on screen: that is still the
+            // old panel while a newer pick is on its way.
             var shown = panel.querySelector("[data-panel]");
-            if (shown && shown.dataset.panel === id) loadPanel(id, true);
+            var items = document.getElementById("items");
+            if (shown && shown.dataset.panel === id && items &&
+                items.dataset.current === id) loadPanel(id, true);
             loadList(here().href, true);
           })
           .catch(function () { /* try again in three seconds */ });
