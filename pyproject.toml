@@ -38,4 +38,4 @@ where = ["src"]
 testpaths = ["tests"]
 
 [tool.setuptools.package-data]
-oknowledge = ["prompts/*.txt", "web/templates/*.html", "web/static/*"]
+oknowledge = ["prompts/*.txt", "web/templates/*.html", "web/static/*", "web/static/fonts/*"]

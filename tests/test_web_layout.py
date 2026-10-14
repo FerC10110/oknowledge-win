@@ -137,7 +137,7 @@ def test_on_a_touch_screen_the_actions_are_always_there():
 
 def test_focus_is_always_visible():
     assert ":focus-visible" in css() and "outline: 2px solid var(--focus)" in css()
-    assert css().count("--focus:") >= 2                       # light and dark
+    assert css().count("--focus:") == 1                       # dark only
 
 
 def test_the_unreadable_notice_keeps_the_path_out_of_sight(client, cfg):

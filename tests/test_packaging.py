@@ -88,6 +88,18 @@ def test_every_prompt_the_code_loads_is_declared_as_package_data():
     assert missing == [], f"loaded at runtime, shipped by nothing: {missing}"
 
 
+def test_every_static_file_is_declared_as_package_data():
+    """The fonts live in a subfolder, and `web/static/*` does not reach it."""
+    data = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    globs = data["tool"]["setuptools"]["package-data"]["oknowledge"]
+    package = ROOT / "src" / "oknowledge"
+
+    missing = [str(p) for p in (package / "web" / "static").rglob("*")
+               if p.is_file() and not shipped(p.relative_to(package).as_posix(), globs)]
+
+    assert missing == [], f"served at runtime, shipped by nothing: {missing}"
+
+
 # --- the browser's half, which Python never runs -----------------------------
 
 # Captured at import, before conftest's autouse fixture replaces them for every
