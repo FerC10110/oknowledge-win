@@ -71,14 +71,23 @@ def test_a_list_that_lands_after_another_pick_keeps_the_pick():
 def test_a_save_that_lands_after_another_pick_does_not_reload_the_old_panel():
     """The ★ on X, then a click on Y before Y's panel is back: the save must
     not reload X's panel over the user's pick (a second ★ would then toggle
-    X again instead of Y)."""
+    X again instead of Y). It asks what the user picked, not whether any
+    panel load happened since: two quick saves on X must both reload X."""
     body = between(SCRIPT.read_text(encoding="utf-8"), 'form[data-inline]', "// --- links being read")
-    assert "= shownAsked" in body
-    assert "=== shownAsked" in body
+    assert "stillPicked(shown.dataset.panel)" in body
+    assert "shownAsked" not in body
 
 
 def test_a_finished_analysis_reloads_the_panel_only_if_it_is_still_the_pick():
     """The poller compared against the panel on screen, which is still X while
     Y's panel is on its way; it has to ask what the user picked."""
     body = between(SCRIPT.read_text(encoding="utf-8"), "function watch", "observe();\n  watch();")
+    assert "stillPicked(id)" in body
+
+
+def test_with_no_list_on_screen_the_panel_is_still_the_pick():
+    """A search that matches nothing renders no #items; the panel on screen is
+    then the pick, so a finished analysis still reloads it."""
+    body = between(SCRIPT.read_text(encoding="utf-8"), "function stillPicked", "\n  }")
+    assert "!items" in body
     assert "dataset.current === id" in body

@@ -88,6 +88,14 @@
     if (items) items.dataset.current = id;
   }
 
+  // Whether `id` is still what the user picked. markCurrent sets the pick at
+  // once, while the panel on screen is the old one until the new one lands.
+  // With no list on screen (a search with no matches) the panel is the pick.
+  function stillPicked(id) {
+    var items = document.getElementById("items");
+    return !items || items.dataset.current === id;
+  }
+
   // `gone` is for a link that may have stopped existing while it was shown
   // (an analysis that failed): its 404 empties the panel instead of
   // reloading the page, which would wipe the toast that just said so.
@@ -270,7 +278,6 @@
     if (!target.matches("form[data-inline]")) return;
     event.preventDefault();
     var data = new FormData(target, event.submitter || undefined);
-    var picked = shownAsked;            // see loadList: a pick since wins
     closeMenus();
     fetch(target.action, { method: "POST", body: data })
       .then(function (r) {
@@ -282,7 +289,7 @@
         var said = page.querySelector(".toast");
         toast(said ? said.textContent : "");
         var shown = panel.querySelector("[data-panel]");
-        if (shown && picked === shownAsked) loadPanel(shown.dataset.panel, true);    // deleted: gone
+        if (shown && stillPicked(shown.dataset.panel)) loadPanel(shown.dataset.panel, true);    // deleted: gone
         loadList(here().href, true);
       })
       .catch(function () { toast(texts.saveFailed); });
@@ -305,9 +312,7 @@
             // What the user picked, not what is on screen: that is still the
             // old panel while a newer pick is on its way.
             var shown = panel.querySelector("[data-panel]");
-            var items = document.getElementById("items");
-            if (shown && shown.dataset.panel === id && items &&
-                items.dataset.current === id) loadPanel(id, true);
+            if (shown && shown.dataset.panel === id && stillPicked(id)) loadPanel(id, true);
             loadList(here().href, true);
           })
           .catch(function () { /* try again in three seconds */ });
