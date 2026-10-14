@@ -253,7 +253,7 @@ STRINGS = {
         "Analyse %1 links": "Analizar %1 links",
         # Toasts the library page shows without reloading (shell.js).
         "It could not be saved": "No se pudo guardar",
-        "Done: summary written": "Listo: resumen escrito",
+        "Done: summary written": "Listo: resumen generado",
         "The link could not be analysed": "No se pudo analizar el link",
         "Analysed so far: %1 of %2": "Analizados hasta ahora: %1 de %2",
         "Last run: %1 analysed of %2": "\u00daltima corrida: %1 analizados de %2",

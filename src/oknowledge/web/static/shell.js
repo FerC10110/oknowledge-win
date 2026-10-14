@@ -59,7 +59,7 @@
         var items = document.getElementById("items");
         var current = items ? items.dataset.current : "";
         var shown = panel.querySelector("[data-panel]");
-        if (current && (!shown || shown.dataset.panel !== current)) loadPanel(current);
+        if (current && (!shown || shown.dataset.panel !== current)) loadPanel(current, true);
         observe();
         watch();
       })
@@ -74,15 +74,41 @@
     if (items) items.dataset.current = id;
   }
 
-  function loadPanel(id) {
+  // `gone` is for a link that may have stopped existing while it was shown
+  // (an analysis that failed): its 404 empties the panel instead of
+  // reloading the page, which would wipe the toast that just said so.
+  var shownAsked = 0;
+  function loadPanel(id, gone) {
+    var mine = ++shownAsked;
     var url = here();
     url.searchParams.set("sel", id);
     history.replaceState(null, "", url.pathname + url.search);
     markCurrent(id);
     return fetch("/panel/" + encodeURIComponent(id) + url.search)
-      .then(function (r) { if (!r.ok) throw new Error(r.status); return r.text(); })
-      .then(function (html) { panel.innerHTML = html; })
-      .catch(function () { location.href = url.href; });
+      .then(function (r) {
+        if (gone && r.status === 404) return null;
+        if (!r.ok) throw new Error(r.status);
+        return r.text();
+      })
+      .then(function (html) {
+        if (mine !== shownAsked) return;      // a newer panel was asked for since
+        if (html === null) { emptyPanel(); return; }
+        panel.innerHTML = html;
+      })
+      .catch(function () { if (mine === shownAsked) location.href = url.href; });
+  }
+
+  function emptyPanel() {
+    var url = here();
+    url.searchParams.delete("sel");
+    history.replaceState(null, "", url.pathname + url.search);
+    list.querySelectorAll("li.item.on").forEach(function (li) { li.classList.remove("on"); });
+    var items = document.getElementById("items");
+    if (items) items.dataset.current = "";
+    var p = document.createElement("p");
+    p.className = "detail-empty";
+    p.textContent = panel.dataset.empty || "";
+    panel.replaceChildren(p);
   }
 
   function setActive(link) {
@@ -102,7 +128,11 @@
       loadPanel(link.dataset.sel);
     } else if (link.hasAttribute("data-view")) {
       try { localStorage.setItem(STORE, link.dataset.view); } catch (e) { /* private window */ }
-      loadList(link.href, true);
+      // From the URL as it is now, not the link's href: that carries the
+      // selection from when the list head was drawn.
+      var shape = here();
+      shape.searchParams.set("vista", link.dataset.view);
+      loadList(shape.href, true);
     } else if (link.hasAttribute("data-more")) {
       more(link);
     } else {
@@ -112,6 +142,7 @@
       var target = new URL(link.href, location.href);
       var vista = here().searchParams.get("vista");
       if (vista) target.searchParams.set("vista", vista);
+      target.searchParams.delete("hasta");       // a new list starts at its first chunk
       loadList(target.href);
     }
   });
@@ -148,7 +179,10 @@
     if (event.submitter && event.submitter.id === "save-link") return;   // a real POST
     event.preventDefault();
     if (saves(field.value)) {
-      form.requestSubmit(document.getElementById("save-link"));
+      // Not from inside this handler: a submission started while the form is
+      // still firing its submit event is ignored (HTML spec, "firing
+      // submission events"), so Enter would do nothing.
+      setTimeout(function () { form.requestSubmit(document.getElementById("save-link")); }, 0);
       return;
     }
     clearTimeout(timer);
@@ -175,9 +209,17 @@
         var box = document.createElement("div");
         box.innerHTML = html;
         var items = document.getElementById("items");
-        box.querySelectorAll("li.item").forEach(function (li) { items.appendChild(li); });
+        var added = box.querySelectorAll("li.item");
+        added.forEach(function (li) { items.appendChild(li); });
         var next = box.querySelector("a.more[data-more]");
         if (next) link.replaceWith(next); else link.remove();
+        // Remember how far the list goes, so a reload of the column (after an
+        // edit or a finished analysis) brings back as many and keeps the scroll.
+        var from = new URL(link.dataset.more, location.href).searchParams.get("desde");
+        var url = here();
+        url.searchParams.set("hasta", String((parseInt(from, 10) || 0) +
+                                             added.length));
+        history.replaceState(null, "", url.pathname + url.search);
         observe();
         watch();
       })
@@ -225,8 +267,8 @@
         var said = page.querySelector(".toast");
         toast(said ? said.textContent : "");
         var shown = panel.querySelector("[data-panel]");
+        if (shown) loadPanel(shown.dataset.panel, true);    // deleted: gone
         loadList(here().href, true);
-        if (shown) loadPanel(shown.dataset.panel);
       })
       .catch(function () { toast(texts.saveFailed); });
   });
@@ -245,9 +287,9 @@
             clearInterval(watched[id]);
             delete watched[id];
             toast(state.status === "failed" ? texts.failed : texts.done);
-            loadList(here().href, true);
             var shown = panel.querySelector("[data-panel]");
-            if (shown && shown.dataset.panel === id) loadPanel(id);
+            if (shown && shown.dataset.panel === id) loadPanel(id, true);
+            loadList(here().href, true);
           })
           .catch(function () { /* try again in three seconds */ });
       }, 3000);

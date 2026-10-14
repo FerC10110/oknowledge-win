@@ -27,7 +27,8 @@
   {% endif %}
   <div class="list" id="list">{% include "list.html" %}</div>
 </section>
-<section class="detail" id="panel" aria-label="{{ t('Detail') }}">
+<section class="detail" id="panel" aria-label="{{ t('Detail') }}"
+         data-empty="{{ t('Choose a link to read it here.') }}">
   {% if panel %}{% include "panel.html" %}{% else %}<p class="detail-empty">{{ t('Choose a link to read it here.') }}</p>{% endif %}
 </section>
 {% endblock %}
