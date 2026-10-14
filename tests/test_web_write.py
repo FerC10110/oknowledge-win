@@ -929,7 +929,10 @@ def test_a_settings_write_that_fails_does_not_switch_the_language_either(
                        data={"chain": ["ollama"], "ui_language": "es"}).text
 
     assert not config_path.exists()
-    assert "could not be saved" in body
+    # The <body> tag carries the words as a data attribute for shell.js's
+    # toast; what is shown is what follows it.
+    shown = re.sub(r"<body[^>]*>", "", body)
+    assert "could not be saved" in shown
     assert "Ajustes" not in body                   # not switched to Spanish
 
 
