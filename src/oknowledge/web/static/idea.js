@@ -158,8 +158,13 @@
   var bar = document.getElementById("idea-ai");
   var running = (bar && bar.dataset.running || "").split(" ").filter(Boolean);
   var polling = null;
+  // Each poll is numbered and only the newest answer counts: one that left
+  // before an action started (or that is overtaken by a newer one) does not
+  // know about it, and would say it ended.
+  var ticks = 0;
 
   function started(action) {
+    ticks += 1;                        // what is on its way predates this run
     if (running.indexOf(action) < 0) running.push(action);
     openTab(TAB_OF[action] || "resumen");
     refresh(["idea-ai", "idea-results"]);
@@ -190,6 +195,7 @@
   }
 
   function tick() {
+    var mine = ++ticks;
     fetch("/item/" + encodeURIComponent(id) + "/actions/state",
           { headers: { Accept: "application/json" } })
       .then(function (r) {
@@ -199,6 +205,7 @@
       })
       .then(function (state) {
         if (!state) return;
+        if (mine !== ticks) return;
         var ended = running.filter(function (a) { return state.running.indexOf(a) < 0; });
         var now = document.getElementById("idea-ai") || bar;
         ended.forEach(function (action) {

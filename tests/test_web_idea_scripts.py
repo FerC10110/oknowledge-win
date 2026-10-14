@@ -111,3 +111,33 @@ def test_the_links_search_is_live_and_keeps_only_the_newest_answer():
 
 def test_the_parts_come_from_the_server():
     assert "new DOMParser()" in IDEA and "fetch(location.href" in IDEA
+
+
+def test_a_landed_save_toasts_only_what_the_server_warns():
+    """Fix round 1: the server leaves the plain "Saved." out of the JSON; the
+    scripts toast the notice it does send (indexes-stale) and nothing of
+    their own -- the indicator is what says a save landed."""
+    assert "if (body.notice) toast(body.notice);" in AUTOSAVE
+    assert "if (body.notice && !form.dataset.runs) ok.toast(body.notice);" in IDEA
+    assert "texts.saved" not in AUTOSAVE and "dataset.saved" not in IDEA
+
+
+def test_leaving_the_page_sends_what_is_not_saved_yet():
+    """Fix round 1: closing the tab or going back within the second after the
+    last key still saves it, with a request that outlives the page, and not
+    twice when that text is already on its way."""
+    assert '"pagehide"' in AUTOSAVE and '"visibilitychange"' in AUTOSAVE
+    assert "keepalive: keep === true" in AUTOSAVE
+    leave = between(AUTOSAVE, "function leave", "function schedule")
+    assert "value === saved || value === outgoing" in leave
+    assert "flush(true)" in leave and "send(field.dataset.autosave, data, true)" in leave
+    assert 'addEventListener("blur", function () { flush(); })' in AUTOSAVE
+
+
+def test_only_the_newest_poll_answer_counts():
+    """Fix round 1: an answer that left before an action started, or that
+    arrives after a newer one, must not say that action ended."""
+    tick = between(IDEA, "function tick", "function gone")
+    assert "var mine = ++ticks;" in tick and "if (mine !== ticks) return;" in tick
+    started = between(IDEA, "function started", "function poll")
+    assert "ticks += 1;" in started

@@ -475,6 +475,14 @@ FAILURES = {"bad-category": 400, "bad-mark": 400, "bad-collection": 400,
 answered with when a script asked for JSON. Every other notice landed."""
 
 
+QUIET = {"saved"}
+"""The notices that only say a write landed. A script shows that with its
+indicator (spec §1), so its JSON leaves them out: a toast on every pause in
+the typing would cover the ones that matter. A form's redirect still says
+them, and every other notice of a write that landed (indexes-stale) is a
+warning the toast has to show."""
+
+
 def wants_json(request: Request) -> bool:
     """A script asking for the answer as data: the redesigned screens save in
     place and need to know how it went, not a page to go to (spec §1)."""
@@ -490,7 +498,7 @@ def answer(request: Request, where: str, notice: str = "", **params) -> Response
     if not wants_json(request):
         return see_other(where, notice=notice, **params)
     t = translator(ui_language())
-    text = NOTICES.get(notice)
+    text = None if notice in QUIET else NOTICES.get(notice)
     said = t(text, params.get("n", 0), params.get("m", 0)) if text else ""
     status = FAILURES.get(notice)
     if status is not None:

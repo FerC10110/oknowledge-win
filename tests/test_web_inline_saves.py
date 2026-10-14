@@ -79,9 +79,30 @@ def test_a_form_still_gets_a_redirect(client, path, data):
     assert client.post(path, data=data, follow_redirects=False).status_code == 303
 
 
-def test_the_json_says_what_the_page_would_have(client):
+def test_a_plain_save_carries_no_notice(client):
+    """The indicator says "Saved" (spec §1); a toast on every pause in the
+    typing would cover the ones that matter, like "Listo: Mejoras"."""
     assert client.post(f"/item/{CARD}/mine/state", data={"state": "done"},
-                       headers=JSON).json() == {"ok": True, "notice": "Saved."}
+                       headers=JSON).json() == {"ok": True, "notice": ""}
+
+
+def test_a_save_with_a_warning_still_says_it(client, monkeypatch):
+    """Landed, but the indexes are behind: that one the toast must say."""
+    from oknowledge.vault import IndexesStale
+
+    def stale(*args, **kwargs):
+        raise IndexesStale(True, OSError("read-only index"))
+    monkeypatch.setattr("oknowledge.web.app.update_note", stale)
+    body = client.post(f"/item/{CARD}/mine/state", data={"state": "done"},
+                       headers=JSON).json()
+    assert body["ok"] is True
+    assert "the indexes could not be rebuilt" in body["notice"]
+
+
+def test_a_form_still_hears_that_it_was_saved(client):
+    answer = client.post(f"/item/{CARD}/mine/state", data={"state": "done"},
+                         follow_redirects=False)
+    assert "notice=saved" in answer.headers["location"]
 
 
 def test_the_change_lands_either_way(client, cfg):
