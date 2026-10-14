@@ -1,0 +1,10 @@
+{# The favourite star, drawn rather than typed. Neither the page's fonts nor
+   Geist have U+2605, so a browser falls back to whatever fontconfig puts
+   first, and on this machine that is a colour emoji font that ignores CSS
+   `color`: the gold of a favourite never showed, and the panel's ★ button
+   looked the same on and off. A path in currentColor follows `color`
+   whatever fonts are installed. -#}
+<svg class="icon star-glyph" viewBox="0 0 16 16" width="1em" height="1em" aria-hidden="true" focusable="false">
+  <path d="M8 1L9.82 6.09L15.23 6.25L10.95 9.56L12.47 14.75L8 11.7L3.53 14.75L5.05 9.56L0.77 6.25L6.18 6.09Z"
+        fill="currentColor" stroke="currentColor" stroke-width=".6" stroke-linejoin="round"/>
+</svg>

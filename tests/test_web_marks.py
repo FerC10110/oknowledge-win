@@ -157,10 +157,35 @@ def test_the_picker_sends_you_back_where_you_were(client):
 def test_tapping_the_mark_you_have_takes_it_off(client):
     client.post(f"/item/{LINK}/mark", data={"mark": "⭐", "back": "/"})
     body = client.get(f"/panel/{LINK}").text
-    assert re.search(r'name="mark" value=""[^>]*aria-pressed="true"[^>]*>★', body)
+    assert re.search(r'name="mark" value=""[^>]*aria-pressed="true"[^>]*><svg class="icon star-glyph"', body)
 
 
 def test_the_picker_is_not_inside_the_popup_link(client):
     body = client.get("/ocio").text
     for block in re.findall(r'<a class="body".*?</a>', body, re.S):
         assert "/mark" not in block
+
+
+# The favourite star is drawn, not typed. No font the page names has U+2605,
+# so a browser falls back to whatever fontconfig puts first -- here a colour
+# emoji font that ignores CSS `color` -- and the gold of a favourite, the one
+# visible state of the panel's ★ button, never shows.
+STAR = re.compile(r'<svg class="icon star-glyph"[^>]*>.*?fill="currentColor".*?</svg>', re.S)
+
+
+def test_the_panel_star_is_drawn_so_its_colour_can_say_favourite(client):
+    for mark in ("", "⭐"):
+        client.post(f"/item/{LINK}/mark", data={"mark": mark, "back": "/"})
+        body = client.get(f"/panel/{LINK}").text
+        button = re.search(r'<button name="mark" value="⭐?"[^>]*class="btn icon star[^"]*".*?</button>',
+                           body, re.S).group(0)
+        assert STAR.search(button)
+        assert "★" not in button
+
+
+def test_the_card_flag_of_a_favourite_is_drawn(client):
+    client.post(f"/item/{LINK}/mark", data={"mark": "⭐", "back": "/"})
+    card = re.search(rf'id="card-{LINK}".*?</li>', client.get("/").text, re.S).group(0)
+    flag = re.search(r'<span class="flag fav"[^>]*>.*?</span>', card, re.S).group(0)
+    assert STAR.search(flag)
+    assert "★" not in flag

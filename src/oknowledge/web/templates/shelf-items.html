@@ -8,7 +8,7 @@
     <span class="thumb" style="background: {{ note.category|tint }}">
       {% if note.cover %}<img src="/cover/{{ note.id|slug }}" alt="" loading="lazy">{% endif %}
       {% if note.source %}<span class="domain mono">{{ note.source }}</span>{% endif %}
-      {% if note.mark %}<span class="flag{% if note.mark == '⭐' %} fav{% endif %}">{{ '★' if note.mark == '⭐' else note.mark }}</span>{% endif %}
+      {% if note.mark %}<span class="flag{% if note.mark == '⭐' %} fav{% endif %}">{% if note.mark == '⭐' %}{% include "icon-star.html" %}{% else %}{{ note.mark }}{% endif %}</span>{% endif %}
     </span>
     <span class="text">
       <span class="title" dir="auto">{{ note.title }}</span>

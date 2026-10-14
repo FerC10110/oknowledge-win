@@ -100,7 +100,7 @@ def test_a_card_shows_category_colour_domain_and_favourite(client):
     card = re.search(r'id="card-a1".*?</li>', body, re.S).group(0)
     assert "oklch(0.74 0.09 265)" in card       # the Redes dot
     assert "e.com" in card
-    assert "★" in card
+    assert re.search(r'<span class="flag fav"><svg class="icon star-glyph"', card)
     assert "4 Oct" in card
 
 

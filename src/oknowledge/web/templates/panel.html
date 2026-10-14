@@ -100,7 +100,7 @@
   <form method="post" action="/item/{{ note.id|slug }}/mark" data-inline class="push">
     <input type="hidden" name="back" value="{{ back }}">
     <button name="mark" value="{{ '' if note.mark == '⭐' else '⭐' }}" class="btn icon star{% if note.mark == '⭐' %} on{% endif %}"
-            aria-pressed="{{ 'true' if note.mark == '⭐' else 'false' }}" aria-label="{{ t('Favorite') }}" title="{{ t('Favorite') }}">★</button>
+            aria-pressed="{{ 'true' if note.mark == '⭐' else 'false' }}" aria-label="{{ t('Favorite') }}" title="{{ t('Favorite') }}">{% include "icon-star.html" %}</button>
   </form>
   <details class="menu up more">
     <summary class="btn icon" aria-label="{{ t('More') }}" title="{{ t('More') }}">⋯</summary>
