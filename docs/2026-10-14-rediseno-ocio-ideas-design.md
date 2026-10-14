@@ -175,7 +175,7 @@ Grid `216px | 1fr | 460px`, alto fijo. Parámetros: `tipo`, `estado`, `q`,
 la lista abre el primero.
 
 **Centro.**
-- Campo: "Buscá en Ocio o pegá un link de IMDb, MyAnimeList, Goodreads…".
+- Campo: "Buscá en Ocio o pegá un link de IMDb u Open Library".
   Texto filtra en vivo (título, autor, etiquetas) con `/ocio/lista`; a la
   derecha **Buscar en catálogos ↵**. Prefijo de `cards.wanted` o link de
   catálogo: **Guardar ↵** y Enter guarda directo, como hoy.
@@ -238,7 +238,7 @@ ordena.", "se guarda sola", "Resumen", "¿Ya existe?", "Mejoras", "Ampliación",
 "Todavía no se lo pediste.", "Regenerar todo con la IA", "Borrar idea", "Links
 de esta idea", "Buscá en tus %1 links para sumar", "VINCULADOS", "PUEDEN
 SERVIR", "RESULTADOS", "+ Sumar", "Nueva idea", "Buscá en Ocio o pegá un link de
-IMDb, MyAnimeList, Goodreads…", "%1 fichas sin reescribir", "Reescribir",
+IMDb u Open Library", "%1 fichas sin reescribir", "Reescribir",
 "Recientes", "Por ver", "Viendo", "Vista", "Por leer", "Leyendo", "Leído",
 "Reescribir la ficha", "Cambiar tipo", "Abrir en %1", "La ficha está como vino
 de la fuente (en inglés).", "Reescribir en español", "Reescribiendo…", "DE QUÉ

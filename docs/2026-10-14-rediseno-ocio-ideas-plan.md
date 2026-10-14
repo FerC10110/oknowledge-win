@@ -3610,7 +3610,7 @@ def test_the_field_says_what_it_takes(client):
     body = client.get("/ocio").text
     form = re.search(r'<form[^>]*id="unified"[^>]*>', body).group(0)
     assert 'action="/ocio"' in form and 'data-mode="ocio"' in form
-    assert ('placeholder="Search Leisure or paste a link from IMDb, MyAnimeList, Goodreads…"'
+    assert ('placeholder="Search Leisure or paste a link from IMDb or Open Library"'
             in body)
 
 
@@ -4025,8 +4025,8 @@ In `app.py` import from `.shelf_view` `CardView, KIND_ONE, CARD_DOTS, SORTS, car
         data-mode="ocio" data-save-prefixes="{{ save_prefixes }}">
     <button type="submit" class="default-submit" tabindex="-1" aria-hidden="true"></button>
     <input type="text" name="q" id="field-q" value="{{ view.q }}" autocomplete="off"
-           aria-label="{{ t('Search Leisure or paste a link from IMDb, MyAnimeList, Goodreads…') }}"
-           placeholder="{{ t('Search Leisure or paste a link from IMDb, MyAnimeList, Goodreads…') }}">
+           aria-label="{{ t('Search Leisure or paste a link from IMDb or Open Library') }}"
+           placeholder="{{ t('Search Leisure or paste a link from IMDb or Open Library') }}">
     {% for name in ('tipo', 'estado') %}{% if view[name] %}<input type="hidden" name="{{ name }}" value="{{ view[name] }}">{% endif %}{% endfor %}
     {% if view.orden != 'recientes' %}<input type="hidden" name="orden" value="{{ view.orden }}">{% endif %}
     <span class="save">
@@ -4107,7 +4107,7 @@ Append to `app.css` (`Ocio.dc.html`: grid `repeat(auto-fill, minmax(168px, 1fr))
 | %1 cards not rewritten | %1 fichas sin reescribir |
 | Rewrite | Reescribir |
 | Rewriting… | Reescribiendo… |
-| Search Leisure or paste a link from IMDb, MyAnimeList, Goodreads… | Buscá en Ocio o pegá un link de IMDb, MyAnimeList, Goodreads… |
+| Search Leisure or paste a link from IMDb or Open Library | Buscá en Ocio o pegá un link de IMDb u Open Library |
 | Choose a card to see it here. | Elegí una ficha para verla acá. |
 | Nothing in Leisure yet | Todavía no hay nada en Ocio |
 | Type a title in the box above and search the catalogs. | Escribí un título en el campo de arriba y buscalo en los catálogos. |
@@ -5736,7 +5736,7 @@ IDEA_SCREEN = ["← Ideas", "creada 13 oct", "Guardando…", "Guardado", "PEDILE
 
 IDEAS_LIST = ["Nueva idea", "Buscá en tus ideas", "ESTADO", "descartada"]
 
-OCIO = ["Buscá en Ocio o pegá un link de IMDb, MyAnimeList, Goodreads…",
+OCIO = ["Buscá en Ocio o pegá un link de IMDb u Open Library",
         "2 fichas sin reescribir", "Reescribir", "Recientes", "Por ver", "Viendo", "Vista",
         "Reescribir la ficha", "Cambiar tipo", "Abrir en imdb.com",
         "La ficha está como vino de la fuente (en inglés).", "Reescribir en español",
