@@ -282,3 +282,24 @@ a.more { display: block; text-align: center; margin: 16px 0; color: var(--t5); f
 .links-title { display: flex; justify-content: space-between; align-items: baseline; margin: 0;
   font-size: 15px; font-weight: 600; color: var(--t1); }
 .links-title b { font-size: 12px; font-weight: 400; color: var(--t6); }
+.links-search input { width: 100%; height: 36px; padding: 0 12px; border-radius: 9px;
+  border: 1px solid var(--b-input); background: var(--s2); color: var(--t1); font: inherit;
+  font-size: 13px; outline: 0; }
+.links-scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 8px 20px 20px; }
+.links-label { margin: 14px 0 8px; font-size: 11px; letter-spacing: .08em; color: var(--t6); }
+.links-empty { margin: 0; font-size: 13px; color: var(--t6); }
+.rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 10px;
+  background: var(--s2); }
+.row .dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+.row-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.row-text a, .row-title { color: var(--t1); text-decoration: none; font-size: 13.5px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row .domain { font-size: 11px; color: var(--t6); }
+.row form { margin: 0; }
+.row .x { background: none; border: 0; color: var(--t6); cursor: pointer; font-size: 12px; }
+.row.gone { opacity: .5; }
+.row.add { background: none; border: 1px dashed #2a2b32; }
+.row .add { background: none; border: 0; color: var(--acc); font: inherit; font-size: 12.5px;
+  cursor: pointer; white-space: nowrap; }
+.row.gone .row-text { font-size: 12px; color: var(--t5); }

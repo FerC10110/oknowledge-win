@@ -1,0 +1,52 @@
+{# The body of the column beside an idea: rendered in the screen, and
+   fetched alone by idea.js as you type and after each add or remove. #}
+<div id="idea-links-body" data-linked="{{ related|length }}">
+  <p class="links-label">{{ t('LINKED') }}</p>
+  {% if related %}
+    <ul class="rows">
+      {% for stem, link in related %}
+        <li class="row{% if not link %} gone{% endif %}">
+          <span class="dot" style="background: {{ (link.category if link else '')|dot }}"></span>
+          <span class="row-text">
+            {% if link %}<a href="/?sel={{ link.id|slug }}" dir="auto">{{ link.title or link.url }}</a>
+            <span class="domain mono">{{ link.source }}</span>
+            {% else %}<span class="mono">{{ stem }}</span>{% endif %}
+          </span>
+          <form method="post" action="/item/{{ idea_id|slug }}/related/drop" data-json data-links>
+            <input type="hidden" name="stem" value="{{ stem }}">
+            <button class="x" aria-label="{{ t('Remove') }}" title="{{ t('Remove') }}">✕</button>
+          </form>
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p class="links-empty">{{ t('No linked links yet') }}</p>
+  {% endif %}
+  {% if searched %}
+    <p class="links-label">{{ t('RESULTS') }}</p>
+    {% set offered = found %}
+  {% else %}
+    <p class="links-label">{{ t('MAY HELP') }}</p>
+    {% set offered = serve %}
+  {% endif %}
+  {% if offered %}
+    <ul class="rows">
+      {% for link in offered %}
+        <li class="row add">
+          <span class="row-text">
+            <span class="row-title" dir="auto">{{ link.title or link.url }}</span>
+            <span class="domain mono">{{ link.source }}</span>
+          </span>
+          <form method="post" action="/item/{{ link.id|slug }}/ideas" data-json data-links>
+            <input type="hidden" name="idea" value="{{ idea_id }}">
+            <input type="hidden" name="back" value="idea">
+            <input type="hidden" name="q" value="{{ q }}">
+            <button class="add">{{ t('+ Add') }}</button>
+          </form>
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p class="links-empty">{{ t('Nothing matches') if searched else t('Nothing in common yet') }}</p>
+  {% endif %}
+</div>

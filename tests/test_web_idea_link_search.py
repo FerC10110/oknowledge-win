@@ -1,5 +1,7 @@
 """The search box beside an idea: your links, as you type, minus the linked ones."""
 
+import re
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -44,34 +46,37 @@ def search(cfg, idea, q):
     return TestClient(create_app(cfg)).get(f"/item/{idea.id}/buscar-links", params={"q": q})
 
 
+def rows(text):
+    return re.findall(r'<li class="row add">', text)
+
+
 def test_it_finds_by_title_without_accents(cfg):
     a_link(cfg, 1, "Túnel WireGuard")
     reply = search(cfg, an_idea(cfg), "tunel")
     assert reply.status_code == 200
-    assert "Túnel WireGuard" in reply.text
-    assert 'class="card"' in reply.text
-    assert 'data-popup="/embed/l00000000001"' in reply.text
+    assert '<div id="idea-links-body"' in reply.text
+    assert "Túnel WireGuard" in reply.text and len(rows(reply.text)) == 1
 
 
-def test_linked_links_are_left_out(cfg):
+def test_linked_links_are_left_out_of_the_results(cfg):
     stem = a_link(cfg, 1, "WireGuard")
     a_link(cfg, 2, "WireGuard rápido")
     reply = search(cfg, an_idea(cfg, related=[stem]), "wireguard")
-    assert "WireGuard rápido" in reply.text
-    assert ">WireGuard<" not in reply.text
+    results = reply.text[reply.text.index("RESULTS"):]
+    assert "WireGuard rápido" in results and ">WireGuard<" not in results
 
 
 def test_at_most_twelve(cfg):
     for n in range(1, 16):
         a_link(cfg, n, f"VPN {n}")
-    assert search(cfg, an_idea(cfg), "vpn").text.count('class="card"') == 12
+    assert len(rows(search(cfg, an_idea(cfg), "vpn").text)) == 12
 
 
 @pytest.mark.parametrize("q", ["", "v", "   ", "#", "#a", "a b"])
-def test_too_little_to_search_is_empty(cfg, q):
+def test_too_little_to_search_shows_what_may_help(cfg, q):
     a_link(cfg, 1, "VPN")
     reply = search(cfg, an_idea(cfg), q)
-    assert reply.status_code == 200 and 'class="card"' not in reply.text
+    assert reply.status_code == 200 and "RESULTS" not in reply.text
 
 
 def test_nothing_found_says_so(cfg):
@@ -98,11 +103,11 @@ def test_adding_goes_back_to_the_search(cfg):
     reply = TestClient(create_app(cfg)).post(
         "/item/l00000000001/ideas", data={"idea": idea.id, "back": "idea", "q": "wire"},
         follow_redirects=False)
-    assert reply.headers["location"] == f"/item/{idea.id}?notice=saved&q=wire"
+    assert reply.headers["location"] == f"/ideas/{idea.id}?q=wire&notice=saved"
 
 
-def test_the_idea_page_shows_results_without_javascript(cfg):
+def test_the_screen_shows_results_without_javascript(cfg):
     a_link(cfg, 1, "WireGuard")
     idea = an_idea(cfg)
-    page = TestClient(create_app(cfg)).get(f"/item/{idea.id}", params={"q": "wire"}).text
+    page = TestClient(create_app(cfg)).get(f"/ideas/{idea.id}", params={"q": "wire"}).text
     assert 'action="/item/l00000000001/ideas"' in page

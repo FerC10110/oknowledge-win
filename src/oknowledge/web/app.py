@@ -40,7 +40,7 @@ from ..ai.providers import PROVIDERS
 from ..ai.providers import find as find_provider
 from ..config import CONFIG_PATH, CONTENT_MODES, ENGINE_NAMES, MENTION_MODES, Config
 from ..config import save as save_config
-from ..idea_actions import SCOPES
+from ..idea_actions import SCOPES, may_serve
 from ..ideas import IdeaFull, add_related, drop_related, new_idea
 from ..i18n import LANGUAGES, NATIVE_NAMES, translator
 from ..marks import clean_mark, rank_marks
@@ -934,10 +934,7 @@ def create_app(cfg: Config) -> FastAPI:
         idea = ideas.by_id(link_id)
         if idea is None:
             raise HTTPException(status_code=404, detail="no such idea")
-        library.refresh()
-        searched, found = links_for(idea, q)
-        return page(request, "idea-link-results.html", idea_id=link_id, q=q,
-                    searched=searched, found=found)
+        return page(request, "idea-links.html", note=idea, **links_context(idea, q))
 
     @app.get("/item/{link_id}", response_class=HTMLResponse)
     def item(request: Request, link_id: str, q: str = ""):
@@ -1425,18 +1422,17 @@ def create_app(cfg: Config) -> FastAPI:
         if entry is None:
             raise HTTPException(status_code=404, detail="no such link")
         stem = entry.path.stem
-        home = item_url(idea) if back == "idea" else item_url(link_id)
-        # Added from the idea's own search: back to the same query, so the
-        # next result is one click away too.
-        again = q if back == "idea" else ""
+        # Added from the idea's own screen: back to it with the same query,
+        # so the next result is one click away too.
+        home = idea_url(idea, q=q) if back == "idea" else item_url(link_id)
         try:
             result = edit(idea, lambda cfg, language: add_related(
                 cfg, idea, stem, language), "saved", "indexes-stale", shelves=ideas)
         except IdeaFull:
-            return answer(request, home, notice="idea-full", q=again)
+            return answer(request, home, "idea-full")
         if result.notice == MISSING:
             return answer(request, item_url(link_id), notice="no-such-idea")
-        return answer(request, home, notice=result.notice, q=again)
+        return answer(request, home, result.notice)
 
     @app.post("/item/{link_id}/related/drop")
     def leave_idea(request: Request, link_id: str, stem: str = Form("")):
@@ -1446,7 +1442,7 @@ def create_app(cfg: Config) -> FastAPI:
             cfg, link_id, stem, language), "saved", "indexes-stale", shelves=ideas)
         if result.notice == MISSING:
             raise HTTPException(status_code=404, detail="no such idea")
-        return answer(request, item_url(link_id), notice=result.notice)
+        return answer(request, idea_url(link_id), result.notice)
 
     def rewrite(live: Config, card: str) -> None:
         """The background half of a card's rewrite: run it, then say how it
@@ -2018,6 +2014,20 @@ def create_app(cfg: Config) -> FastAPI:
                     idea_tags=ideas.tags(), unreadable_ideas=ideas.unreadable,
                     STATES=IDEA_STATE_ORDER, STATE_WORDS=IDEA_STATE_WORDS)
 
+    def links_context(note, q: str) -> dict:
+        """The column beside an idea (spec 2). The rows that may help are
+        ranked without asking anybody: words and tags in common."""
+        library.refresh()
+        by_stem = {entry.path.stem: entry.note for entry in library.entries}
+        searched, found = links_for(note, q)
+        # library.entries is newest first; may_serve() wants the vault's
+        # order, oldest first.
+        pool = [(entry.path, entry.note) for entry in reversed(library.entries)]
+        return {"idea_id": note.id, "q": q, "searched": searched, "found": found,
+                "related": [(stem, by_stem.get(stem)) for stem in note.related],
+                "serve": [] if searched else [link for _, link in may_serve(note, pool)],
+                "library_total": len(library.entries)}
+
     def idea_context(note, pestana: str, alcance: str, back: str, q: str) -> dict:
         """What an idea's screen shows (spec §2)."""
         tab, scope, home = tab_of(pestana), scope_of(alcance), ideas_back(back)
@@ -2026,6 +2036,7 @@ def create_app(cfg: Config) -> FastAPI:
         present = {entry.path.stem for entry in library.entries}
         params = {"pestana": tab, "alcance": scope, "back": home, "q": q}
         return {
+            **links_context(note, q),
             "note": note, "tab": tab, "scope": scope, "back": home, "q": q,
             "url": lambda **changes: idea_url(note.id, **{**params, **changes}),
             "running": running, "failed": failed,

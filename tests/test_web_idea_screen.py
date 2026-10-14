@@ -177,6 +177,15 @@ def test_without_a_searcher_already_out_there_is_off_with_the_reason(tmp_path):
     assert 'title="No engine in your chain searches the web' in button
 
 
+def test_the_empty_already_out_there_tab_says_why_it_is_off(tmp_path):
+    cfg = make(tmp_path, chain=("ollama",))
+    body = screen(cfg, put(cfg, actions={}), "?pestana=existe")
+    pane = part(body, 'data-pane="existe"', 'data-pane="mejoras"')
+    button = re.search(r"<button[^>]*>", pane).group(0)
+    assert "disabled" in button
+    assert 'title="No engine in your chain searches the web' in button
+
+
 def test_a_running_action_is_off_and_said(cfg):
     note = put(cfg)
     app = create_app(cfg)

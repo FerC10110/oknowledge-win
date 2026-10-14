@@ -94,6 +94,15 @@
 <aside class="links-column" aria-label="{{ t('Links of this idea') }}">
   <div class="links-head">
     <p class="links-title"><span>{{ t('Links of this idea') }}</span><b class="mono" id="idea-links-count">{{ note.related|length }}</b></p>
+    <form method="get" action="/ideas/{{ note.id|slug }}" class="links-search" role="search">
+      {% if tab != 'resumen' %}<input type="hidden" name="pestana" value="{{ tab }}">{% endif %}
+      {% if scope != 'vinculados' %}<input type="hidden" name="alcance" value="{{ scope }}">{% endif %}
+      <input type="search" name="q" id="links-q" value="{{ q }}" autocomplete="off"
+             aria-label="{{ t('Search your %1 links to add', library_total) }}"
+             placeholder="{{ t('Search your %1 links to add', library_total) }}"
+             data-results="/item/{{ note.id|slug }}/buscar-links">
+    </form>
   </div>
+  <div class="links-scroll">{% include "idea-links.html" %}</div>
 </aside>
 {% endblock %}

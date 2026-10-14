@@ -229,7 +229,7 @@ def test_add_from_the_idea_goes_back_to_the_idea(cfg):
     reply = TestClient(create_app(cfg)).post(
         f"/item/{LINK}/ideas", data={"idea": note.id, "back": "idea"},
         follow_redirects=False)
-    assert reply.headers["location"].startswith(f"/item/{note.id}")
+    assert reply.headers["location"].startswith(f"/ideas/{note.id}")
     assert find_note(cfg, note.id, shelf=cfg.ideas)[1].related == [path.stem]
 
 

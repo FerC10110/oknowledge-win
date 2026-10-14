@@ -585,6 +585,13 @@ STRINGS = {
         "Done: %1": "Listo: %1",
         "Failed: %1": "Falló: %1",
         "Links of this idea": "Links de esta idea",
+        "LINKED": "VINCULADOS",
+        "MAY HELP": "PUEDEN SERVIR",
+        "RESULTS": "RESULTADOS",
+        "+ Add": "+ Sumar",
+        "No linked links yet": "Todavía no vinculaste links",
+        "Nothing in common yet": "Nada en común todavía",
+        "Search your %1 links to add": "Buscá en tus %1 links para sumar",
     },
 }
 

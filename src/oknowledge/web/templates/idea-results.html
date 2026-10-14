@@ -37,7 +37,7 @@
         <form method="post" action="/item/{{ note.id|slug }}/actions/{{ action }}" data-json data-runs="{{ action }}">
           <input type="hidden" name="alcance" value="{{ scope }}">
           {% for one, label in AI_BUTTONS if one == action %}
-            <button class="btn primary"{% if action in running or (action == 'exists' and not searchable) %} disabled{% endif %}>{{ t(label) }}</button>
+            {% set blocked = action == 'exists' and not searchable %}<button class="btn primary"{% if action in running or blocked %} disabled{% endif %}{% if blocked %} title="{{ t('No engine in your chain searches the web: opencode or the Anthropic API do.') }}"{% endif %}>{{ t(label) }}</button>
           {% endfor %}
         </form>
       </div>
