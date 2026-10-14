@@ -54,7 +54,7 @@ def test_a_pasted_link_is_taken_and_the_page_comes_back_at_once(client, taken):
 
     assert taken == [("https://e.com/x", "full")]
     assert "Reading that link" in body
-    assert "Nothing saved yet" in body          # the library, not a dead end
+    assert 'class="item pending on"' in body    # the library, with the link being read on top
 
 
 def test_the_two_buttons_are_the_two_ways_to_save(client, taken):

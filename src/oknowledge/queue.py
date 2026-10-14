@@ -214,6 +214,20 @@ class Queue:
         finally:
             os.close(fd)                    # closing releases anything we took
 
+    def busy(self) -> list[QueueEntry]:
+        """Pending entries some live process holds now: the ones really being
+        worked on. A pending entry nobody holds is owed work, not work."""
+        found = []
+        for entry in self.entries():
+            if entry.status != "pending":
+                continue
+            try:
+                if self.held(entry.id):
+                    found.append(entry)
+            except OSError:
+                continue
+        return found
+
     @contextmanager
     def lock(self, link_id: str):
         """Hold an exclusive lock on a link for the with block.

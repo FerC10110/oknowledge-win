@@ -437,3 +437,12 @@ def test_a_step_of_nonsense_does_not_strand_the_link(tmp_path):
 
     assert entry is not None
     assert entry.step == ""
+
+
+def test_busy_lists_only_the_links_someone_holds(tmp_path):
+    q = Queue(tmp_path)
+    q.enqueue("aaaa1111", "https://a.com", "full")
+    q.enqueue("bbbb2222", "https://b.com", "full")          # pending, nobody holds it
+    with q.lock("aaaa1111"):
+        assert [e.id for e in q.busy()] == ["aaaa1111"]
+    assert q.busy() == []

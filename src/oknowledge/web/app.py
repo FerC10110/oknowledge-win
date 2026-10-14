@@ -13,6 +13,7 @@ import dataclasses
 import datetime as dt
 import logging
 import re
+import time
 import unicodedata
 from importlib.resources import files
 from pathlib import Path
@@ -468,13 +469,9 @@ IDEA_SEARCH_LIMIT = 12
 """Results beside an idea: enough to choose from, few enough to fit beside it."""
 
 
-def links_in_analysis() -> dict[str, str]:
-    """{id: url} of the links being analysed right now.
-
-    A module-level seam so the panel's "being read" state can be tested
-    before the queue feeds it (Task 6 fills this in from the queue).
-    """
-    return {}
+FRESH_SECONDS = 120
+"""How long a link just pasted counts as being read before the queue has an
+entry for it: the background task that enqueues it starts after the answer."""
 
 
 def item_url(link_id: str) -> str:
@@ -753,9 +750,22 @@ def create_app(cfg: Config) -> FastAPI:
             return page(request, "notfound.html", status_code=404)
         return await http_exception_handler(request, exc)
 
+    fresh: dict[str, tuple[str, float]] = {}
+
     def analyzing() -> dict[str, str]:
-        """{id: url} of the links being analysed right now. Task 6."""
-        return links_in_analysis()
+        """{id: url} of the links being read now, newest first."""
+        q = Queue()
+        try:
+            found = {e.id: e.url for e in q.busy()}
+        except (OSError, ValueError):
+            found = {}
+        now = time.monotonic()
+        for key, (url, at) in list(fresh.items()):
+            if now - at > FRESH_SECONDS:
+                fresh.pop(key, None)
+            elif key not in found and q.get(key) is None:
+                found = {key: url, **found}
+        return found
 
     def listing(view: View, working: dict[str, str]) -> dict:
         notes = choose(library, view)
@@ -1638,6 +1648,8 @@ def create_app(cfg: Config) -> FastAPI:
         q = Queue()
         try:
             entry = q.get(link_id)
+            if entry is None and link_id in analyzing():
+                return JSONResponse({"working": True, "status": "pending"})
             working = entry is not None and (entry.status == "pending"
                                              or q.held(link_id))
         except (OSError, ValueError):
@@ -2002,8 +2014,10 @@ def create_app(cfg: Config) -> FastAPI:
         # After the response, not before it: see fetch(). The trace goes to
         # the same list the Reprocessing page draws, so one pasted link can be
         # watched there like any other work.
+        new = link_id(clean)
+        fresh[new] = (clean, time.monotonic())
         background.add_task(fetch, current["cfg"], clean, mode, trace=progress.note)
-        return see_other("/", notice="reading")
+        return see_other("/", sel=new, notice="reading")
 
     @app.post("/retry")
     def start_batch(background: BackgroundTasks, debug: str = Form("")):

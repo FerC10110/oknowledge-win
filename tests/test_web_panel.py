@@ -151,11 +151,12 @@ def test_the_more_menu_lists_every_mark_with_the_current_one_on(client, cfg):
     assert re.search(r'<button name="mark" value="⭐" class="on"', more)
 
 
-def test_while_the_ai_reads_it_the_panel_holds_only_the_title(client, monkeypatch):
-    # The seam the queue fills in (Task 6): {id: url} of the links being read.
-    monkeypatch.setattr("oknowledge.web.app.links_in_analysis",
-                        lambda: {"a1": "https://wireguard.com/a1"})
-    body = panel(client, "a1")
+def test_while_the_ai_reads_it_the_panel_holds_only_the_title(client):
+    from oknowledge.queue import Queue
+    q = Queue()
+    q.enqueue("a1", "https://wireguard.com/a1", "full")
+    with q.lock("a1"):
+        body = panel(client, "a1")
     assert '<h1 dir="auto">WireGuard simple</h1>' in body
     assert "The AI is reading the link…" in body and '<div class="skeleton">' in body
     assert 'name="add"' not in body.split('<div class="detail-bar">')[0]

@@ -154,7 +154,8 @@ def test_add_takes_the_link_from_the_unified_field(client, monkeypatch):
     answer = client.post("/add", data={"q": "https://nuevo.com/x", "content": "full"},
                          follow_redirects=False)
     assert answer.status_code == 303
-    assert "notice=reading" in answer.headers["location"]
+    assert answer.headers["location"].endswith("&notice=reading")
+    assert answer.headers["location"].startswith("/?sel=")
 
 
 def test_the_list_fragment_is_the_column_alone(client):
