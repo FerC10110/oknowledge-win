@@ -400,3 +400,28 @@ def test_a_phone_card_keeps_a_long_domain_on_one_line_and_clamps_a_long_word():
                  "max-width: calc(100% - 16px)"):
         assert rule in domain, rule
     assert re.search(r"\.tiles \.title \{[^}]*overflow-wrap: anywhere", phone)
+
+
+# --- Task 6: the layer and an idea's screen (spec §6.2, §7) ---------------------------------
+
+def test_the_open_detail_covers_the_screen_above_the_tabs():
+    phone = block(static("app.css"), PHONE)
+    rule = re.search(r"\.detail\[data-open\] \{[^}]*\}", phone).group(0)
+    for part in ("position: fixed;", "inset: 0;", "z-index: 40;", "background: #141519;",
+                 "padding-top: env(safe-area-inset-top);"):
+        assert part in rule, part
+    assert '.detail[aria-busy="true"] > :not(.detail-back) { visibility: hidden; }' in phone
+
+
+def test_long_words_wrap_inside_the_detail():
+    phone = block(static("app.css"), PHONE)
+    assert re.search(r"\.detail h1, \.detail \.where[^{]*\{ overflow-wrap: anywhere; \}", phone)
+    assert ".detail pre { max-width: 100%; overflow-x: auto; }" in phone
+
+
+def test_an_idea_scrolls_as_a_page_with_its_rows_scrolling_sideways():
+    phone = block(static("app.css"), PHONE)
+    assert re.search(r"\.idea-ai \{[^}]*overflow-x: auto;", phone)
+    assert ".idea-ai .label { display: none; }" in phone
+    assert re.search(r"\.idea-text textarea \{[^}]*min-height: 40dvh;[^}]*font-size: 16px;", phone)
+    assert re.search(r"\.idea-results \.tabs \{[^}]*overflow-x: auto;", phone)

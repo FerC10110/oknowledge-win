@@ -650,6 +650,72 @@ html:not(.js) .js-only { display: none !important; }
   #list:not(.keyed) .rows .item.on { background: none; }
   #list:not(.keyed) .tiles .item.on { border-color: var(--b-card); }
   #list:not(.keyed) .poster.on .art { border-color: transparent; }
+  /* §6 the detail: a layer over the whole screen while the URL names a
+     pick. The tabs stay under it; the toast (z 50) stays over it. */
+  .detail[data-open] { position: fixed; inset: 0; z-index: 40; display: flex;
+    flex-direction: column; background: #141519; padding-top: env(safe-area-inset-top); }
+  /* A tapped note on its way: not the last one's words meanwhile (Ruling 15). */
+  .detail[aria-busy="true"] > :not(.detail-back) { visibility: hidden; }
+  .detail-back { display: flex; flex: none; align-items: center; min-height: 44px; padding: 0 16px;
+    font-size: 14px; color: var(--acc); text-decoration: none; }
+  .detail-scroll, .detail-scroll.card, .detail-scroll.candidates { padding: 12px 16px 24px; gap: 16px; }
+  .detail h1 { font-size: 22px; }
+  .detail h1, .detail .where, .detail .body, .detail li, .detail a { overflow-wrap: anywhere; }
+  .detail pre { max-width: 100%; overflow-x: auto; }
+  .meta-row { flex-wrap: wrap; }
+  .meta-row .chip-menu > summary { position: relative; }
+  .meta-row .chip-menu > summary::after { content: ""; position: absolute; inset: -10px 0; }
+  .detail-bar { flex: none; flex-wrap: wrap; padding: 10px 16px max(10px, env(safe-area-inset-bottom)); }
+  .detail .btn { height: 44px; }
+  .detail .btn.icon { width: 44px; }
+  .detail .chips .chip button { position: relative; min-width: 32px; }
+  .detail .chips .chip button::after { content: ""; position: absolute; inset: -14px 0; }
+  .detail .tag-new input { min-height: 44px; font-size: 16px; }
+  /* Ocio's card: state and ⋯ on one row, the stars on the next. */
+  .card-top { flex: none; flex-wrap: wrap; gap: 8px; padding: 10px 16px; }
+  .card-top .seg button, .card-top .seg a { display: flex; align-items: center; min-height: 44px; }
+  .card-top details.more { order: 2; margin-left: auto; }
+  /* The ⋯ menu's rows are touch targets too (spec §12). */
+  .card-top .menu-list button, .card-top .menu-list summary { min-height: 44px; }
+  .card-top .stars.big { order: 3; flex-basis: 100%; }
+  .stars.big button, .idea-controls .stars button { display: inline-flex; align-items: center;
+    justify-content: center; width: 44px; height: 44px; }
+  .card-head { grid-template-columns: 88px minmax(0, 1fr); }
+  .detail .card-head h1 { font-size: 20px; }
+  .candidate { min-width: 0; }
+
+  /* §7 an idea: one column that scrolls as a page. */
+  .idea-main { min-height: auto; }
+  .idea-head { padding: 12px 16px; }
+  .idea-title-row { flex-direction: column; align-items: stretch; gap: 10px; }
+  .idea-title input { font-size: 22px; text-overflow: ellipsis; }
+  .idea-controls { flex-wrap: wrap; gap: 8px; max-width: 100%; }
+  .idea-controls .seg { max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+  .idea-controls .seg button { min-height: 44px; }
+  .idea-head .tag-new input { min-height: 44px; font-size: 16px; }
+  /* The AI bar scrolls sideways; what is running drops to a row of its own
+     (Ruling 22). */
+  .idea-ai { display: grid; grid-auto-flow: column; grid-auto-columns: max-content;
+    align-items: center; gap: 8px; overflow-x: auto; scrollbar-width: none; padding: 10px 16px; }
+  .idea-ai > *:not(.working), .idea-ai > form > * { grid-row: 1; }
+  .idea-ai .label { display: none; }
+  .ai-btn, .idea-ai .scope > summary { min-height: 44px; }
+  .idea-ai .working { grid-row: 2; grid-column: 1; width: 0; margin: 0; white-space: nowrap;
+    position: sticky; left: 16px; }
+  .idea-ai .working:empty { display: none; }
+  .idea-body { display: flex; flex-direction: column; }
+  .idea-text { padding: 16px; border-right: 0; }
+  .idea-text textarea { min-height: 40dvh; font-size: 16px; }
+  .idea-results { padding: 16px; }
+  .idea-results .tabs { overflow-x: auto; scrollbar-width: none; }
+  .idea-results .tabs a { flex: none; display: flex; align-items: center; min-height: 44px;
+    padding: 0; white-space: nowrap; }
+  .links-column { min-height: auto; border-left: 0; border-top: 1px solid var(--b-div); }
+  .links-head { padding: 16px 16px 0; }
+  .links-search input { height: 44px; font-size: 16px; }
+  .links-scroll { overflow: visible; padding: 8px 16px 16px; }
+  .links-column .row { min-height: 44px; }
+  .links-column .row .x, .links-column .row .add { min-width: 44px; min-height: 44px; }
 } /* end of the phone */
 
 /* A phone on its side, a tablet: the same column, wider grids (§1, §5). */
