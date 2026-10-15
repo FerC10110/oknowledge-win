@@ -14,10 +14,10 @@
     {% for name in ('tipo', 'estado') %}{% if view[name] %}<input type="hidden" name="{{ name }}" value="{{ view[name] }}">{% endif %}{% endfor %}
     {% if view.orden != 'recientes' %}<input type="hidden" name="orden" value="{{ view.orden }}">{% endif %}
     <span class="save">
-      <button type="submit" class="btn primary" formmethod="post" formaction="/add" id="save-link">{{ t('Save') }} ↵</button>
+      <button type="submit" class="btn primary" formmethod="post" formaction="/add" id="save-link">{{ t('Save') }}<span class="enter-hint" aria-hidden="true">&nbsp;↵</span></button>
     </span>
     <span class="find">
-      <button type="submit" class="btn primary" formmethod="get" formaction="/ocio/buscar" id="catalog-search">{{ t('Search the catalogs') }} ↵</button>
+      <button type="submit" class="btn primary" formmethod="get" formaction="/ocio/buscar" id="catalog-search">{{ t('Search the catalogs') }}<span class="enter-hint" aria-hidden="true">&nbsp;↵</span></button>
     </span>
     <kbd class="hint mono">/</kbd>
   </form>
@@ -28,7 +28,7 @@
   <div class="list" id="list" data-source="/ocio/lista">{% include "ocio-list.html" %}</div>
   {% with bulk_section = 'ocio' %}{% include "bulk-bar.html" %}{% endwith %}
 </section>
-<section class="detail" id="panel" aria-label="{{ t('Detail') }}"
+<section class="detail" id="panel"{% if catalog or (view.sel and view.sel == current) %} data-open{% endif %} aria-label="{{ t('Detail') }}"
          data-empty="{{ t('Choose a card to see it here.') }}">
   {% if catalog %}{% include "catalog-panel.html" %}{% elif panel %}{% include "card-panel.html" %}{% else %}<p class="detail-empty">{{ t('Choose a card to see it here.') }}</p>{% endif %}
 </section>

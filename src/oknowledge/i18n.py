@@ -36,6 +36,7 @@ STRINGS = {
         "List": "Lista",
         "Cards": "Tarjetas",
         "Detail": "Detalle",
+        "Back to %1": "Volver a %1",
         "Choose a link to read it here.": "Elegí un link para leerlo acá.",
         "Analysing…": "Analizando…",
         "No category": "Sin categoría",

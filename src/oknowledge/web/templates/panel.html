@@ -1,3 +1,4 @@
+{% with back_to = 'Library' %}{% include "detail-back.html" %}{% endwith %}
 <div class="detail-scroll" data-panel="{{ panel_id }}">
 {% if note is none %}
   <h1 dir="auto">{{ pending_url }}</h1>
@@ -88,7 +89,7 @@
 </div>
 {% if note is not none %}
 <div class="detail-bar">
-  {% if note.url is web_url %}<a class="btn primary" href="{{ note.url }}" target="_blank" rel="noreferrer" data-open>{{ t('Open original') }} ↵</a>{% endif %}
+  {% if note.url is web_url %}<a class="btn primary" href="{{ note.url }}" target="_blank" rel="noreferrer" data-open>{{ t('Open original') }}<span class="enter-hint" aria-hidden="true">&nbsp;↵</span></a>{% endif %}
   {% if idea_choices %}
     <details class="menu up">
       <summary class="btn">{{ t('To an idea') }} ▾</summary>

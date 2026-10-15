@@ -237,3 +237,80 @@ def test_the_lit_chip_is_brought_into_view_without_moving_the_page():
 
 def test_the_row_is_not_drawn_on_a_desktop():
     assert ".chip-row { display: none; }" in static("app.css")
+
+
+# --- Task 4: the detail's markup (spec §6.1) and the ↵ hints (spec §4) ----------------------
+
+@pytest.fixture
+def no_catalogs(monkeypatch):
+    monkeypatch.setattr("oknowledge.catalog.cinemeta.search", lambda kind, query, via="": ([], ""))
+    monkeypatch.setattr("oknowledge.catalog.openlibrary.search", lambda kind, query, via="": ([], ""))
+
+
+def panel_tag(body):
+    return re.search(r'<section class="detail" id="panel"[^>]*>', body).group(0)
+
+
+@pytest.mark.parametrize("path, opened", [
+    ("/?sel=a1", True), ("/?cat=Cocina&sel=b2", True), ("/", False), ("/?sel=zzz", False),
+    ("/?cat=Cocina&sel=a1", False),          # a1 is not in Cocina: the first one is shown, shut
+    (f"/ocio?sel={CARD}", True), ("/ocio", False), ("/ocio?buscar=Dune&catalogo=movie", True)])
+def test_the_detail_is_open_when_the_url_names_the_pick_shown(client, no_catalogs, path, opened):
+    assert (" data-open" in panel_tag(client.get(path).text)) is opened
+
+
+def back(text):
+    return re.search(r'<a class="detail-back"[^>]*>[^<]*</a>', text).group(0)
+
+
+def test_the_library_panel_starts_with_its_way_back(client):
+    body = client.get("/?cat=Redes&sel=a1&vista=lista").text
+    panel = body[body.index('id="panel"'):]
+    assert panel.index('class="detail-back"') < panel.index("data-panel=")
+    link = back(panel)
+    assert 'href="/?cat=Redes&amp;vista=lista"' in link
+    assert " data-back" in link and 'aria-label="Back to Library"' in link
+    assert link.endswith(">← Library</a>")
+
+
+def test_a_panel_fetched_alone_goes_back_to_the_list_it_came_from(client):
+    link = back(client.get("/panel/a1?cat=Redes&sel=a1").text)
+    assert 'href="/?cat=Redes"' in link and "← Library" in link
+
+
+def test_a_card_panel_goes_back_to_ocio(client):
+    link = back(client.get(f"/panel/{CARD}?tipo=movie&sel={CARD}").text)
+    assert 'href="/ocio?tipo=movie"' in link and "← Leisure" in link
+    body = client.get(f"/ocio?sel={CARD}").text
+    assert "← Leisure" in back(body[body.index('id="panel"'):])
+
+
+def test_the_catalogs_go_back_to_the_grid(client, no_catalogs):
+    assert 'href="/ocio?tipo=series"' in back(client.get("/ocio/candidatos?q=Dune&tipo=movie&grid=series").text)
+    assert 'href="/ocio"' in back(client.get("/ocio/candidatos?q=Dune&tipo=movie").text)
+
+
+def test_a_link_being_analysed_has_its_way_back_too():
+    """panel_context's first return (no note yet) carries list_url as well."""
+    app = WEB.joinpath("app.py").read_text(encoding="utf-8")
+    head = app.index("def panel_context")
+    body = app[head:app.index("def card_context", head)]
+    assert body.count('"list_url": view.url(sel="")') == 2
+
+
+HINT = '<span class="enter-hint" aria-hidden="true">&nbsp;↵</span>'
+
+
+@pytest.mark.parametrize("path, words", [("/", "Save"), ("/ocio", "Save"),
+                                         ("/ocio", "Search the catalogs"), ("/ideas", "New idea"),
+                                         ("/?sel=a1", "Open original")])
+def test_the_enter_hints_are_spans_a_finger_does_not_see(client, path, words):
+    body = client.get(path).text
+    assert f"{words}{HINT}" in body
+    assert f"{words} ↵" not in body
+
+
+def test_neither_the_hint_nor_the_way_back_moves_the_desktop():
+    css = static("app.css")
+    assert ".btn:has(> .enter-hint) { gap: 0; }" in css
+    assert ".detail-back { display: none; }" in css

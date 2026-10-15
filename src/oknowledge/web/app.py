@@ -928,7 +928,8 @@ def create_app(cfg: Config) -> FastAPI:
         if entry is None:
             url = working.get(link_id)
             return None if url is None else {"note": None, "panel_id": link_id,
-                                             "pending_url": url, "reading": True}
+                                             "pending_url": url, "reading": True,
+                                             "list_url": view.url(sel="")}
         note = read_full(entry)
         ideas.refresh()
         return {"note": note, "panel_id": link_id, "reading": link_id in working,
@@ -936,7 +937,9 @@ def create_app(cfg: Config) -> FastAPI:
                 # Your ideas, the dropped ones left out: the relation is
                 # noticed while reading the link, so this is where it is made.
                 "idea_choices": [(n.id, n.title) for n in ideas.notes if n.state != "dropped"],
-                "back": view.url(sel=link_id)}
+                "back": view.url(sel=link_id),
+                # The phone's "← Biblioteca" (docs/2026-10-15-rediseno-celular-design.md §6.1).
+                "list_url": view.url(sel="")}
 
     def card_context(card_id: str, view) -> dict | None:
         """What a card's panel shows (spec §3), or None for no such card."""
@@ -949,6 +952,7 @@ def create_app(cfg: Config) -> FastAPI:
         return {"note": note, "panel_id": card_id, "card": True,
                 "words": words_for(note.type), "rewriting": "describe" in running,
                 "rewrite_failed": failed.get("describe", ""), "back": view.url(sel=card_id),
+                "list_url": view.url(sel=""),
                 "KIND_ONE": KIND_ONE, "KIND_NAMES": KIND_NAMES, "CARD_DOTS": CARD_DOTS}
 
     @app.get("/", response_class=HTMLResponse)
@@ -2258,6 +2262,7 @@ def create_app(cfg: Config) -> FastAPI:
         if not query:
             return None
         kind = tipo if tipo in cards.KINDS else "movie"
+        back = f"/ocio?tipo={grid}" if grid else "/ocio"
         ref = cards.reference(query)
         if ref:
             one = Candidate(ref=ref, kind=kind, via=catalog_type_for(kind), title=query)
@@ -2269,13 +2274,14 @@ def create_app(cfg: Config) -> FastAPI:
                                     rating=full.rating, poster=full.poster,
                                     people=full.people)]
             return {"query_text": query, "kind": kind, "candidates": named, "failed": "",
-                    "KIND_ONE": KIND_ONE, "grid": grid}
+                    "KIND_ONE": KIND_ONE, "grid": grid, "list_url": back}
         found, failed = ask_catalogs(kind, query, year)
         # The reason travels even when there are rows; the panel shows it
         # only when there are none, because one of the two catalogs being
         # down while the other answers is not a failure anybody reads about.
         return {"query_text": query, "kind": kind, "candidates": found[:cards.MOST],
-                "failed": failed, "KIND_ONE": KIND_ONE, "grid": grid}
+                "failed": failed, "KIND_ONE": KIND_ONE, "grid": grid,
+                "list_url": back}
 
     @app.get("/ocio/candidatos", response_class=HTMLResponse)
     def catalog_candidates(request: Request, q: str = "", tipo: str = "", year: str = "",

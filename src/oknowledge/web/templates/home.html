@@ -18,7 +18,7 @@
         <label><input type="radio" name="content" value="full"{% if default_content == 'full' %} checked{% endif %}><span>{{ t('Full') }}</span></label>
         <label><input type="radio" name="content" value="summary"{% if default_content == 'summary' %} checked{% endif %}><span>{{ t('Summary') }}</span></label>
       </span>
-      <button type="submit" class="btn primary" formmethod="post" formaction="/add" id="save-link">{{ t('Save') }} ↵</button>
+      <button type="submit" class="btn primary" formmethod="post" formaction="/add" id="save-link">{{ t('Save') }}<span class="enter-hint" aria-hidden="true">&nbsp;↵</span></button>
     </span>
     <kbd class="hint mono">/</kbd>
   </form>
@@ -29,7 +29,7 @@
   <div class="list" id="list">{% include "list.html" %}</div>
   {% with bulk_section = 'links' %}{% include "bulk-bar.html" %}{% endwith %}
 </section>
-<section class="detail" id="panel" aria-label="{{ t('Detail') }}"
+<section class="detail" id="panel"{% if view.sel and view.sel == current %} data-open{% endif %} aria-label="{{ t('Detail') }}"
          data-empty="{{ t('Choose a link to read it here.') }}">
   {% if panel %}{% include "panel.html" %}{% else %}<p class="detail-empty">{{ t('Choose a link to read it here.') }}</p>{% endif %}
 </section>

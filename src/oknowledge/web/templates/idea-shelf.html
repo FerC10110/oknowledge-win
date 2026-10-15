@@ -13,7 +13,7 @@
     {% if view.estado %}<input type="hidden" name="estado" value="{{ view.estado }}">{% endif %}
     {% if view.vista == 'lista' %}<input type="hidden" name="vista" value="lista">{% endif %}
     <span class="save">
-      <button type="submit" class="btn primary" formmethod="post" formaction="/ideas/guardar" id="save-link">{{ t('New idea') }} ↵</button>
+      <button type="submit" class="btn primary" formmethod="post" formaction="/ideas/guardar" id="save-link">{{ t('New idea') }}<span class="enter-hint" aria-hidden="true">&nbsp;↵</span></button>
     </span>
     <kbd class="hint mono">/</kbd>
   </form>

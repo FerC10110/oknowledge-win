@@ -1,0 +1,5 @@
+{# The phone's way back from the detail (docs/2026-10-15-rediseno-celular-design.md
+   §6.1). Not drawn on a desktop. The words come from the panel that
+   includes it (`back_to`), the href from `list_url`. Without JavaScript it
+   is a plain link to the list; shell.js makes it the browser's back. #}
+<a class="detail-back" href="{{ list_url }}" data-back aria-label="{{ t('Back to %1', t(back_to)) }}">← {{ t(back_to) }}</a>

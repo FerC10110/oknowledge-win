@@ -49,7 +49,7 @@ def test_the_field_searches_and_offers_a_new_idea(cfg, client):
     assert 'action="/ideas"' in form and 'data-mode="ideas"' in form
     assert 'placeholder="Search your ideas"' in body
     button = re.search(r'<button[^>]*id="save-link"[^>]*>(.*?)</button>', body, re.S)
-    assert 'formaction="/ideas/guardar"' in button.group(0) and "New idea ↵" in button.group(1)
+    assert 'formaction="/ideas/guardar"' in button.group(0) and 'New idea<span class="enter-hint" aria-hidden="true">&nbsp;↵</span>' in button.group(1)
 
 
 def test_with_text_in_the_field_the_new_idea_button_shows(cfg, client):

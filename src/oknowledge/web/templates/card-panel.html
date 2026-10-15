@@ -2,6 +2,7 @@
    scrolls. Every write is a form that works alone; shell.js posts it in
    place and autosave.js saves the note as you type. #}
 {% set kind_one = KIND_ONE.get(note.type, '') %}
+{% with back_to = 'Leisure' %}{% include "detail-back.html" %}{% endwith %}
 <div class="card-top">
   <form method="post" action="/item/{{ note.id|slug }}/mine/state" class="seg" data-inline>
     {% for state, word in words.items() %}<button name="state" value="{{ state }}" class="{% if note.state == state %}on{% endif %}">{{ t(word) }}</button>{% endfor %}

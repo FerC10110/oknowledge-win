@@ -62,7 +62,7 @@ def test_the_field_offers_the_catalogs(client):
     body = client.get("/ocio").text
     button = re.search(r'<button[^>]*id="catalog-search"[^>]*>(.*?)</button>', body, re.S)
     assert 'formaction="/ocio/buscar"' in button.group(0)
-    assert "Search the catalogs ↵" in button.group(1)
+    assert 'Search the catalogs<span class="enter-hint" aria-hidden="true">&nbsp;↵</span>' in button.group(1)
     assert '<input type="hidden" name="en" value="ocio">' in body
 
 

@@ -554,3 +554,7 @@ html:not(.js) .js-only { display: none !important; }
    display: none keeps them out of the grid. */
 .topbar, .tabbar { display: none; }
 .chip-row { display: none; }
+
+.detail-back { display: none; }
+/* A ↵ hint is a span (spec §4): no gap may open between it and its words. */
+.btn:has(> .enter-hint) { gap: 0; }

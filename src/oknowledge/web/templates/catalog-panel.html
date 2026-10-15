@@ -1,6 +1,7 @@
 {# The catalogs' answers in Ocio's panel (spec §3). Nothing here writes but
    each row's Save, a POST. The posters are the catalog's, on its server:
    nothing is saved yet, so there is no local file to show. #}
+{% with back_to = 'Leisure' %}{% include "detail-back.html" %}{% endwith %}
 <div class="card-top">
   <nav class="seg" aria-label="{{ t('Type') }}">
     {% for one in ('movie', 'series', 'anime', 'book') %}<a href="/ocio?buscar={{ query_text|urlencode }}&amp;catalogo={{ one }}{% if grid %}&amp;tipo={{ grid }}{% endif %}" data-kind="{{ one }}" class="{% if one == kind %}on{% endif %}">{{ t(KIND_ONE[one]) }}</a>{% endfor %}
