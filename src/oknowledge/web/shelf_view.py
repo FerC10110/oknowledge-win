@@ -148,6 +148,9 @@ _WATCH = {"pending": "To watch", "doing": "Watching", "done": "Watched"}
 _READ = {"pending": "To read", "doing": "Reading", "done": "Read"}
 CARD_WORDS = {"movie": _WATCH, "series": _WATCH, "anime": _WATCH, "book": _READ}
 CARD_DOTS = {"pending": "#6d6f78", "doing": "#a9b4de", "done": "#8fc29a"}
+CARD_CHIP = {"pending": "#c9cbd1", "doing": "#a9b4de", "done": "#8fc29a"}
+"""The poster's state chip, in words coloured by state (Ocio.dc.html's
+statusColor): to watch is the light grey, not the dot's dim one."""
 SORTS = (("recientes", "Recent"), ("titulo", "Title"), ("anio", "Year"),
          ("estrellas", "Your stars"))
 _SORT_KEYS = {key for key, _ in SORTS}

@@ -71,7 +71,7 @@ from .library_view import (
 )
 from .index import Library, read_full, terms
 from .markup import section_cards
-from .shelf_view import (AI_BUTTONS, CARD_DOTS, IDEA_DOTS, IDEA_WORDS, KIND_NAMES, KIND_ONE,
+from .shelf_view import (AI_BUTTONS, CARD_CHIP, CARD_DOTS, IDEA_DOTS, IDEA_WORDS, KIND_NAMES, KIND_ONE,
                          SECTION_NAMES,
                          SORTS, TAB_OF, TABS, WORKING, CardView, IdeaView, card_filters,
                          catalog_name, choose_cards, choose_ideas, excerpt, idea_filters,
@@ -867,8 +867,8 @@ def create_app(cfg: Config) -> FastAPI:
     templates.env.tests["search_link"] = is_search_url
     # A card whose cover file is gone is drawn as one with no cover: its
     # title over the kind's colour, never a broken image.
-    templates.env.tests["drawn_cover"] = lambda note: cover_file(
-        note, shelf.shelf.dir, cfg.attachments_dir) is not None
+    templates.env.tests["drawn_cover"] = lambda note, on="ocio": cover_file(
+        note, cfg.shelf(on).dir, cfg.attachments_dir) is not None
     templates.env.filters["web_domain"] = web_domain
     # The engines there is an icon for. A name outside this never reaches an
     # include: `engine:` is frontmatter and frontmatter is typed by hand.
@@ -2256,7 +2256,7 @@ def create_app(cfg: Config) -> FastAPI:
                 "current": view.sel if view.sel in ids else (ids[0] if ids else ""),
                 "unrewritten": len(left),
                 "rewriting_all": bool(left) and all(i in running for i in left),
-                "busy": running, "KIND_ONE": KIND_ONE, "CARD_DOTS": CARD_DOTS,
+                "busy": running, "KIND_ONE": KIND_ONE, "CARD_DOTS": CARD_DOTS, "CARD_CHIP": CARD_CHIP,
                 "SORTS": SORTS, "words_for": words_for}
 
     @app.get("/ocio", response_class=HTMLResponse)

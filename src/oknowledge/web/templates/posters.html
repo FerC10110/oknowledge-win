@@ -1,6 +1,6 @@
 {# One card in Ocio's grid (spec §3, Ocio.dc.html): the cover, or the kind's
    colour with the title on it; the kind's chip on the left, the state's on
-   the right, in words alone; under it the title and "year · stars ·
+   the right, in words coloured by state; under it the title and "year · stars ·
    catalog rating", the stars given and not the five (each part only if it
    exists). A cover whose file is gone is drawn as no cover. #}
 {% macro poster(note, view, current, busy) -%}
@@ -15,7 +15,7 @@
       {% if note is drawn_cover %}<img src="/cover/{{ note.id|slug }}" alt="" loading="lazy">
       {% else %}<span class="fill-title" dir="auto">{{ note.title }}</span>{% endif %}
       {% if note.type in KIND_ONE %}<span class="chip kind">{{ t(KIND_ONE[note.type]) }}</span>{% endif %}
-      {% if note.state in words %}<span class="chip state">{{ t(words[note.state]) }}</span>{% endif %}
+      {% if note.state in words %}<span class="chip state" style="color: {{ CARD_CHIP[note.state] }}">{{ t(words[note.state]) }}</span>{% endif %}
     </span>
     <span class="title" dir="auto">{{ note.title }}</span>
     <span class="meta">

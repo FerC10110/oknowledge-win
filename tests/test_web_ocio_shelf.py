@@ -88,7 +88,7 @@ def test_a_poster_with_a_cover_and_its_chips(cfg, client):
     item = grid(client.get("/ocio").text)
     assert f'<img src="/cover/{note.id}"' in item
     assert '<span class="chip kind">Movie</span>' in item
-    assert '<span class="chip state">' in item and "Watched" in item
+    assert '<span class="chip state"' in item and "Watched" in item
     assert "1979" in item and "IMDb 8.5" in item
     assert item.count('class="star on"') == 4
 
@@ -112,7 +112,7 @@ def test_a_kind_nobody_knows_gets_the_neutral_fill(cfg, client):
 
 def test_no_state_no_state_chip(cfg, client):
     put(cfg, 1, "Alien")
-    assert '<span class="chip state">' not in grid(client.get("/ocio").text)
+    assert '<span class="chip state"' not in grid(client.get("/ocio").text)
 
 
 def test_the_first_card_is_selected_and_an_unknown_sel_too(cfg, client):
@@ -276,7 +276,7 @@ def test_the_page_draws_the_groups_once(cfg, client):
 
 def test_the_state_chip_is_text_only(cfg, client):
     put(cfg, 1, "Alien", state="done")
-    chip = re.search(r'<span class="chip state">(.*?)</span>', grid(client.get("/ocio").text)).group(1)
+    chip = re.search(r'<span class="chip state"[^>]*>(.*?)</span>', grid(client.get("/ocio").text)).group(1)
     assert chip == "Watched"
 
 
@@ -323,3 +323,11 @@ def test_each_group_names_the_parameter_it_changes(cfg, client):
     assert body.count('class="chip-group" data-apart data-param="estado"') == 1
     column = client.get("/ocio/lista").text
     assert 'data-apart data-param="tipo"' in column and 'data-apart data-param="estado"' in column
+
+
+@pytest.mark.parametrize("state, color", [("done", "#8fc29a"), ("doing", "#a9b4de"),
+                                          ("pending", "#c9cbd1")])
+def test_the_state_chip_text_takes_the_state_s_colour(cfg, client, state, color):
+    """Review M-3: Ocio.dc.html's statusColor, on the text."""
+    put(cfg, 1, "Alien", state=state)
+    assert f'<span class="chip state" style="color: {color}">' in grid(client.get("/ocio").text)
