@@ -32,7 +32,7 @@
      data-done-as="{{ t('Done: card rewritten') }}" data-failed-as="{{ t('The card could not be rewritten') }}">
   <div class="card-head">
     <span class="art" style="background: {{ note.type|poster_fill }}">
-      {% if note.cover %}<img src="/cover/{{ note.id|slug }}" alt="">{% endif %}
+      {% if note is drawn_cover %}<img src="/cover/{{ note.id|slug }}" alt="">{% endif %}
     </span>
     <div class="card-facts">
       <p class="kind-line">{% if kind_one %}{{ t(kind_one) }} · {% endif %}{{ note.source }}</p>
@@ -43,7 +43,9 @@
         {%- if note.length %}<span class="chip">{{ note.length }}</span>{% endif -%}
         {%- if note.rating %}<span class="chip mono">{{ note.source|catalog_name }} ★ {{ note.rating }}</span>{% endif -%}
       </p>
-      {% if note.url is web_url %}<a class="btn primary" href="{{ note.url }}" target="_blank" rel="noreferrer" data-open>{{ t('Open in %1', note.source) }} ↗</a>{% endif %}
+      {#- The link's own site; a URL that is not the web is shown, not linked. #}
+      {% if note.url is web_url %}<a class="btn primary" href="{{ note.url }}" target="_blank" rel="noreferrer" data-open>{{ t('Open in %1', note.url|web_domain(note.source)) }} ↗</a>
+      {% elif note.url %}<p class="url-text mono" dir="ltr">{{ note.url }}</p>{% endif %}
     </div>
   </div>
   {% if not note.engine %}

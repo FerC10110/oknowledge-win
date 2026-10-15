@@ -81,6 +81,8 @@ def test_the_order_comes_from_the_url(cfg, client):
 
 
 def test_a_poster_with_a_cover_and_its_chips(cfg, client):
+    cfg.attachments_dir.mkdir(parents=True, exist_ok=True)      # a cover is drawn if its file is there
+    (cfg.attachments_dir / "a.jpg").write_bytes(b"\xff\xd8\xff")
     note = put(cfg, 1, "Alien", cover="../attachments/a.jpg", state="done", score=4,
                published="1979-05-25", rating="8.5")
     item = grid(client.get("/ocio").text)
@@ -268,3 +270,43 @@ def test_more_of_the_column_does_not_bring_the_sidebar(cfg, client):
 def test_the_page_draws_the_groups_once(cfg, client):
     put(cfg, 1, "Alien")
     assert "side-filters" not in client.get("/ocio").text
+
+
+# --- polish (docs/2026-10-14-rediseno-ocio-ideas-pendientes.md, Ocio) -------------------
+
+def test_the_state_chip_is_text_only(cfg, client):
+    put(cfg, 1, "Alien", state="done")
+    chip = re.search(r'<span class="chip state">(.*?)</span>', grid(client.get("/ocio").text)).group(1)
+    assert chip == "Watched"
+
+
+def test_under_the_poster_year_the_stars_given_and_the_rating(cfg, client):
+    put(cfg, 1, "Alien", score=3, published="1979-05-25", rating="8.5")
+    meta = re.search(r'<span class="meta">(.*?)</span>\s*</a>', grid(client.get("/ocio").text),
+                     re.S).group(1)
+    assert meta.index("1979") < meta.index("stars-shown") < meta.index("IMDb 8.5")
+    # As the design: the stars given, not five with the rest dimmed.
+    assert meta.count('class="star on"') == 3 and 'class="star"' not in meta
+    assert '<span class="rating">IMDb 8.5</span>' in meta
+
+
+def test_only_the_parts_that_exist_are_under_the_poster(cfg, client):
+    put(cfg, 1, "Alien", score=0, published=None, rating="")
+    meta = re.search(r'<span class="meta">(.*?)</span>\s*</a>', grid(client.get("/ocio").text),
+                     re.S).group(1)
+    assert meta.strip() == ""
+
+
+def test_a_cover_whose_file_is_missing_is_the_gradient_with_the_title(cfg, client):
+    put(cfg, 1, "Alien", cover="../attachments/gone.jpg")
+    item = grid(client.get("/ocio").text)
+    assert "<img" not in item
+    assert '<span class="fill-title" dir="auto">Alien</span>' in item
+
+
+def test_a_cover_whose_file_is_there_is_drawn(cfg, client):
+    cfg.attachments_dir.mkdir(parents=True, exist_ok=True)
+    (cfg.attachments_dir / "a.jpg").write_bytes(b"\xff\xd8\xff")
+    note = put(cfg, 1, "Alien", cover="../attachments/a.jpg")
+    item = grid(client.get("/ocio").text)
+    assert f'<img src="/cover/{note.id}"' in item and "fill-title" not in item

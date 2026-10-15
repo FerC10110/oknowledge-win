@@ -9,17 +9,8 @@ en `2026-10-14-rediseno-biblioteca-pendientes.md`.
 ## Ocio
 
 - Cambiar el orden mientras se busca vacía el campo pero deja `q` en la URL.
-- Sin JS, "Buscar en catálogos" pierde `estado` y `orden`.
 - Un click en ESTADO menos de ~100 ms después de uno en TIPO usa los links
   viejos y pierde el `tipo` (gana la última lista, y la barra la acompaña).
-- El chip de estado del póster tiene un punto de color; el diseño muestra
-  sólo texto.
-- Debajo del póster sale sólo las estrellas; el diseño muestra año · estrellas
-  · nota de IMDb.
-- Una ficha con `cover` cuyo archivo falta muestra el degradado sin título.
-- "Abrir en" usa `note.source` y no el dominio del link: con la fuente vacía
-  dice "Abrir en  ↗". Una URL que no es http desaparece en vez de mostrarse
-  como texto.
 - La barra lateral mide 216 px (la spec) y en el diseño ~200 px.
 
 ## Panel y autoguardado

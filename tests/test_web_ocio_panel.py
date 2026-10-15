@@ -97,6 +97,8 @@ def test_the_more_menu(cfg, client):
 
 
 def test_the_head_poster_kind_title_and_chips(cfg, client):
+    cfg.attachments_dir.mkdir(parents=True, exist_ok=True)      # a cover is drawn if its file is there
+    (cfg.attachments_dir / "t.jpg").write_bytes(b"\xff\xd8\xff")
     put(cfg, cover="../attachments/t.jpg")
     body = panel(client)
     assert f'<img src="/cover/{CARD}"' in body
@@ -122,7 +124,8 @@ def test_a_url_that_is_not_the_web_is_never_a_link(cfg, client):
     put(cfg, url="javascript:alert(1)")
     body = panel(client)
     assert "data-panel=" in body             # the card was drawn: not a vacuous pass
-    assert "javascript:" not in body
+    # Shown as text (polish: a URL that is not the web is not hidden), never an href.
+    assert 'href="javascript:' not in body and "data-open" not in body
 
 
 def test_a_rewritten_card_has_no_notice(cfg, client):
@@ -263,3 +266,28 @@ def test_one_series_is_a_serie_in_spanish(cfg):
     shelf = client.get("/ocio").text
     assert '<span class="chip kind">Serie</span>' in shelf
     assert ">Series<" in shelf
+
+
+# --- polish (docs/2026-10-14-rediseno-ocio-ideas-pendientes.md, Ocio) -------------------
+
+def test_open_in_names_the_link_s_domain_not_the_source(cfg, client):
+    put(cfg, url="https://www.goodreads.com/book/show/1", source="")
+    assert "Open in goodreads.com ↗" in panel(client)
+
+
+def test_open_in_falls_back_to_the_source(cfg, client):
+    put(cfg, url="https:///nohost", source="imdb.com")
+    assert "Open in imdb.com ↗" in panel(client)
+
+
+def test_a_url_that_is_not_the_web_is_shown_as_text(cfg, client):
+    put(cfg, url="ftp://files.example.com/terminator")
+    body = panel(client)
+    assert 'href="ftp:' not in body
+    assert '<p class="url-text mono" dir="ltr">ftp://files.example.com/terminator</p>' in body
+
+
+def test_a_missing_cover_file_draws_no_broken_image(cfg, client):
+    put(cfg, cover="../attachments/gone.jpg")
+    head = panel(client).split("<h1", 1)[0]
+    assert "<img" not in head

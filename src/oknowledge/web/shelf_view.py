@@ -9,7 +9,7 @@ import dataclasses
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass
-from urllib.parse import quote, urlencode
+from urllib.parse import quote, urlencode, urlsplit
 
 from .. import cards
 from ..idea_actions import SCOPES
@@ -173,6 +173,16 @@ def kind_dot(kind: str) -> str:
 
 def catalog_name(source: str) -> str:
     return CATALOGS.get(source, source)
+
+
+def web_domain(url: str, fallback: str = "") -> str:
+    """The site a link is on, as "Abrir en {dominio}" names it: its host
+    without "www.", or `fallback` when the URL has none."""
+    try:
+        host = urlsplit(str(url or "")).hostname or ""
+    except ValueError:
+        host = ""
+    return host.removeprefix("www.") or fallback
 
 
 def year_of(note) -> int | None:

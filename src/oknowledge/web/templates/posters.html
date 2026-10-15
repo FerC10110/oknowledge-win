@@ -1,6 +1,8 @@
 {# One card in Ocio's grid (spec §3, Ocio.dc.html): the cover, or the kind's
    colour with the title on it; the kind's chip on the left, the state's on
-   the right; under it the title and "year · stars · catalog rating". #}
+   the right, in words alone; under it the title and "year · stars ·
+   catalog rating", the stars given and not the five (each part only if it
+   exists). A cover whose file is gone is drawn as no cover. #}
 {% macro poster(note, view, current, busy) -%}
 {% set words = words_for(note.type) %}
 <li class="item poster{% if note.id == current %} on{% endif %}" id="card-{{ note.id }}"
@@ -10,17 +12,17 @@
   {%- endif %}
   <a class="hit" href="{{ view.url(sel=note.id) }}" data-sel="{{ note.id }}">
     <span class="art" style="background: {{ note.type|poster_fill }}">
-      {% if note.cover %}<img src="/cover/{{ note.id|slug }}" alt="" loading="lazy">
+      {% if note is drawn_cover %}<img src="/cover/{{ note.id|slug }}" alt="" loading="lazy">
       {% else %}<span class="fill-title" dir="auto">{{ note.title }}</span>{% endif %}
       {% if note.type in KIND_ONE %}<span class="chip kind">{{ t(KIND_ONE[note.type]) }}</span>{% endif %}
-      {% if note.state in words %}<span class="chip state"><i class="dot" style="background: {{ CARD_DOTS[note.state] }}"></i>{{ t(words[note.state]) }}</span>{% endif %}
+      {% if note.state in words %}<span class="chip state">{{ t(words[note.state]) }}</span>{% endif %}
     </span>
     <span class="title" dir="auto">{{ note.title }}</span>
     <span class="meta">
       {%- set year = (note.published or '')[:4] -%}
       {%- if year|length == 4 and year.isdigit() %}<span>{{ year }}</span>{% endif -%}
-      {%- if note.score %}<span class="stars-shown" aria-label="{{ [note.score, 5]|min }}/5">{% for n in range(1, 6) %}<i class="star{% if n <= note.score %} on{% endif %}">{% include "icon-star.html" %}</i>{% endfor %}</span>{% endif -%}
-      {%- if note.rating %}<span>{{ note.source|catalog_name }} {{ note.rating }}</span>{% endif -%}
+      {%- if note.score %}<span class="stars-shown" aria-label="{{ [note.score, 5]|min }}/5">{% for n in range(1, [note.score, 5]|min + 1) %}<i class="star on">{% include "icon-star.html" %}</i>{% endfor %}</span>{% endif -%}
+      {%- if note.rating %}<span class="rating">{{ note.source|catalog_name }} {{ note.rating }}</span>{% endif -%}
     </span>
   </a>
 </li>

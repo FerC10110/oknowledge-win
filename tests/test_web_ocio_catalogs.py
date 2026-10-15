@@ -256,3 +256,10 @@ def test_a_search_from_ocio_s_field_keeps_estado_and_orden(client, text, locatio
     answer = client.post("/add", data={"q": text, "en": "ocio", "estado": "pending",
                                        "orden": "titulo"}, follow_redirects=False)
     assert answer.headers["location"] == location
+
+
+def test_the_kind_links_of_a_search_keep_estado_orden_and_q_without_javascript(client, asked):
+    body = client.get("/ocio?q=dune&estado=pending&orden=titulo&buscar=dune&catalogo=movie").text
+    link = re.search(r'<a href="([^"]*)" data-kind="book"', body).group(1)
+    assert link == ("/ocio?estado=pending&amp;q=dune&amp;orden=titulo"
+                    "&amp;buscar=dune&amp;catalogo=book")

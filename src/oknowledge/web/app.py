@@ -73,7 +73,7 @@ from .shelf_view import (AI_BUTTONS, CARD_DOTS, IDEA_DOTS, IDEA_WORDS, KIND_NAME
                          SECTION_NAMES,
                          SORTS, TAB_OF, TABS, WORKING, CardView, IdeaView, card_filters,
                          catalog_name, choose_cards, choose_ideas, excerpt, idea_filters,
-                         idea_url, poster_fill, scope_of, tab_of, words_for)
+                         idea_url, poster_fill, scope_of, tab_of, web_domain, words_for)
 from .working import Working
 
 WEB = files("oknowledge").joinpath("web")
@@ -387,6 +387,24 @@ def is_web_url(url: str) -> bool:
     refusing to link it must not mean hiding it, because a link is never lost.
     """
     return str(url).lower().startswith(("http://", "https://"))
+
+
+def cover_file(note, folder: Path, attachments: Path) -> Path | None:
+    """The image a note's `cover` names, or None when there is none to show.
+
+    `cover` comes from frontmatter the user can edit: untrusted input. It is
+    relative to the folder the note is in, which is the shelf's -- a card's
+    "../attachments/x.png" starts from ocio/, not links/ -- and must land in
+    the attachments, be an image, and be there."""
+    if not note.cover:
+        return None
+    try:
+        path = (folder / note.cover).resolve()
+        inside = attachments.resolve() in path.parents
+        usable = inside and path.suffix.lower() in IMAGE_TYPES and path.is_file()
+    except (OSError, ValueError):
+        usable = False
+    return path if usable else None
 
 
 def count(request: Request, key: str) -> int:
@@ -830,6 +848,11 @@ def create_app(cfg: Config) -> FastAPI:
     templates.env.filters["paragraphs"] = paragraphs
     templates.env.tests["web_url"] = is_web_url
     templates.env.tests["search_link"] = is_search_url
+    # A card whose cover file is gone is drawn as one with no cover: its
+    # title over the kind's colour, never a broken image.
+    templates.env.tests["drawn_cover"] = lambda note: cover_file(
+        note, shelf.shelf.dir, cfg.attachments_dir) is not None
+    templates.env.filters["web_domain"] = web_domain
     # The engines there is an icon for. A name outside this never reaches an
     # include: `engine:` is frontmatter and frontmatter is typed by hand.
     templates.env.globals["engines"] = ENGINE_ICONS
@@ -1089,16 +1112,8 @@ def create_app(cfg: Config) -> FastAPI:
         note = entry.note if entry is not None else None
         if note is None or not note.cover:
             raise HTTPException(status_code=404, detail="no cover")
-        # note.cover comes from frontmatter the user can edit: untrusted input.
-        try:
-            # Relative to the folder the note is in, which is the shelf's:
-            # a card's "../attachments/x.png" starts from ocio/, not links/.
-            path = (where.dir / note.cover).resolve()
-            inside = cfg.attachments_dir.resolve() in path.parents
-            usable = inside and path.suffix.lower() in IMAGE_TYPES and path.is_file()
-        except (OSError, ValueError):
-            usable = False
-        if not usable:
+        path = cover_file(note, where.dir, cfg.attachments_dir)
+        if path is None:
             raise HTTPException(status_code=404, detail="no cover")
         return FileResponse(path, media_type=IMAGE_TYPES[path.suffix.lower()],
                             headers={"X-Content-Type-Options": "nosniff"})
