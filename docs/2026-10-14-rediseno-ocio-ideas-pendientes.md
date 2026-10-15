@@ -35,8 +35,6 @@ en `2026-10-14-rediseno-biblioteca-pendientes.md`.
   navegar con JS.
 - "+ etiqueta" pierde el foco después de Enter. El título que propone la IA
   espera mientras el campo de título vacío tiene el foco.
-- Una falla de `complete()` con la idea borrada a mitad dice "the model did
-  not answer".
 
 ## Biblioteca
 

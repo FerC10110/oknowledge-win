@@ -273,3 +273,27 @@ def test_a_naming_that_fails_is_remembered(cfg, monkeypatch):
     app = create_app(cfg)
     TestClient(app).post(f"/item/{note.id}/describe")
     assert set(app.state.working.of(note.id)[1]) == {"complete"}
+
+
+def test_a_naming_that_fails_keeps_the_reason_it_gave(cfg, monkeypatch):
+    """Polish: an idea deleted while the model named it is not "the model did
+    not answer"; the step's own reason is what is remembered."""
+    from oknowledge.trace import Step
+
+    def gone_meanwhile(cfg, idea, trace=None):
+        trace(Step(link=idea, name="complete", state="fail", seconds=1.0,
+                   detail="the idea is no longer there"))
+        return False
+    monkeypatch.setattr("oknowledge.web.app.complete_idea", gone_meanwhile)
+    note = put(cfg)
+    app = create_app(cfg)
+    TestClient(app).post(f"/item/{note.id}/describe")
+    assert app.state.working.of(note.id)[1] == {"complete": "the idea is no longer there"}
+
+
+def test_a_naming_that_fails_without_a_reason_says_the_model_did_not_answer(cfg, monkeypatch):
+    monkeypatch.setattr("oknowledge.web.app.complete_idea", lambda cfg, idea, trace=None: False)
+    note = put(cfg)
+    app = create_app(cfg)
+    TestClient(app).post(f"/item/{note.id}/describe")
+    assert app.state.working.of(note.id)[1] == {"complete": "the model did not answer"}

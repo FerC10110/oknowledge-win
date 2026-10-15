@@ -1768,9 +1768,17 @@ def create_app(cfg: Config) -> FastAPI:
         points. Watched under "complete" like an action, so the screen can
         wait for the title (spec 2.2)."""
         problem: str | None = "it stopped before it could say why"
+        failures: list[str] = []
+
+        def heard(step) -> None:
+            progress.note(step)
+            if step.state == "fail" and step.detail:
+                failures.append(step.detail)
         try:
-            problem = (None if complete_idea(live, idea, trace=progress.note)
-                       else "the model did not answer")
+            # The step's own reason when it gave one (the idea was deleted
+            # meanwhile, the file was locked), as a card's rewrite says it.
+            problem = (None if complete_idea(live, idea, trace=heard)
+                       else failures[-1] if failures else "the model did not answer")
         except Exception as error:        # a background task has nowhere to raise to
             problem = str(error) or type(error).__name__
         finally:
