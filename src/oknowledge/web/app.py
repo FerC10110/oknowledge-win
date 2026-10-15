@@ -2062,6 +2062,13 @@ def create_app(cfg: Config) -> FastAPI:
             context={"t": translator(language), "lang": language,
                      "batch": progress.snapshot(), **settings_context(tab)})
 
+    # Settings' writes, one at a time: each reads the config, changes its
+    # pane and writes it back. And the newest rev each page's pane wrote
+    # (final review M-1): a save the page gave up on can still run late, and
+    # must not put back older values over that pane's newer save.
+    settings_lock = threading.Lock()
+    settings_revisions: OrderedDict[tuple[str, str], float] = OrderedDict()
+
     @app.post("/settings")
     def save_settings(request: Request, chain: list[str] = Form([]), language: str = Form(""),
                       default_content: str = Form(""), mentions: str = Form(""),
@@ -2070,11 +2077,32 @@ def create_app(cfg: Config) -> FastAPI:
                       opencode_model: str | None = Form(None),
                       ollama_model: str | None = Form(None),
                       api_model: str | None = Form(None), api_provider: str = Form(""),
-                      tab: str = Form(""), sent: frozenset[str] = Depends(sent_fields)):
+                      tab: str = Form(""), rev: str | None = Form(None),
+                      page: str | None = Form(None),
+                      sent: frozenset[str] = Depends(sent_fields)):
         """One pane of Settings (spec §3.1). A field that does not arrive keeps
         what is saved: each pane is its own form and sends only its fields. An
         empty model box that does arrive still clears that model."""
         where = settings_url(tab)
+        number = revision(rev)
+        key = (page or "", tab)
+        with settings_lock:
+            if number is not None and number <= settings_revisions.get(key, -math.inf):
+                return answer(request, where, extra={"stale": True})
+            result, written = write_settings(request, where, sent, chain, language, default_content,
+                                    mentions, batch, interface, opencode_model, ollama_model,
+                                    api_model, api_provider)
+            if number is not None and written:      # a refused write leaves no mark
+                settings_revisions[key] = number
+                settings_revisions.move_to_end(key)
+                while len(settings_revisions) > REVISIONS_KEPT:
+                    settings_revisions.popitem(last=False)
+            return result
+
+    def write_settings(request, where, sent, chain, language, default_content, mentions, batch,
+                       interface, opencode_model, ollama_model, api_model, api_provider):
+        """save_settings()'s write, under its lock: the answer, and whether
+        the config was written."""
         saved = current["cfg"]
         engines = {name: dict(options) for name, options in saved.engines.items()}
         for name, raw in (("opencode", opencode_model), ("ollama", ollama_model),
@@ -2116,12 +2144,12 @@ def create_app(cfg: Config) -> FastAPI:
             # The old file is still there, untouched: save() writes atomically
             # and backs up before it writes.
             log.warning("the config could not be saved: %s", error)
-            return answer(request, where, "settings-failed")
+            return answer(request, where, "settings-failed"), False
         current["cfg"] = updated
         # The interface language is in the config here: a change of it is
         # what makes the page reload to redraw itself in the other language.
         changed = updated.ui_language != saved.ui_language
-        return answer(request, where, "saved", reload=changed or None)
+        return answer(request, where, "saved", reload=changed or None), True
 
     @app.get("/item/{link_id}/state")
     def link_state(link_id: str):

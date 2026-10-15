@@ -160,7 +160,11 @@ global.location = {
 };
 global.history = { state: null, replaceState() {} };
 global.confirm = () => true;
-global.FormData = function (form) { return Object.assign({}, form && form.payload); };
+global.FormData = function (form) {
+  const data = Object.assign({}, form && form.payload);
+  Object.defineProperty(data, "set", { value(k, v) { this[k] = v; } });
+  return data;
+};
 
 // --- the server: every answer is the scenario's -------------------------------------
 const fetches = [];
@@ -522,3 +526,43 @@ out.beforeBack = out.reloads;
 leave(); await settle();
 """, categories=["Redes"])
     assert out["beforeBack"] == 0 and out["reloads"] == 1
+
+
+# --- final review M-1: a pane's saves are ordered on the server, per page ---------------------
+
+def test_each_pane_save_carries_the_pages_id_and_a_rising_rev(tmp_path):
+    out = run(tmp_path, OPEN + """
+const form = root.parts.form;
+form.fire("change");
+sends[0].answer({}); await settle();
+form.payload = { tab: "motores", opencode_model: "m2" }; form.fire("change");
+out.sent = sends.map((s) => [s.data.page, Number(s.data.rev)]);
+""")
+    (page1, rev1), (page2, rev2) = out["sent"]
+    assert page1 and page1 == page2 and len(page1) >= 8 and rev2 > rev1
+
+
+def test_a_late_success_does_not_clear_a_newer_saves_failure(tmp_path):
+    """The first save timed out, the next one of the pane failed, then the
+    first landed late: what is on screen is still not saved."""
+    out = run(tmp_path, """
+const root = pageRoot;
+root.parts.form.fire("change");
+tick(); await settle();
+root.parts.form.payload = { tab: "motores", opencode_model: "m2" };
+root.parts.form.fire("change"); await settle();
+sends[1].refuse("NOPE"); await settle();
+sends[0].answer({}); await settle();
+clickClose(root); await settle();
+""", page=True)
+    assert out["navigated"] is None and out["toasts"][-1] == "NOPE"
+
+
+def test_a_stale_answer_to_the_panes_newest_save_is_a_failure(tmp_path):
+    out = run(tmp_path, """
+const root = pageRoot;
+root.parts.form.fire("change");
+sends[0].answer({ stale: true }); await settle();
+clickClose(root); await settle();
+""", page=True)
+    assert out["toasts"][0] == "SAVE FAILED" and out["navigated"] is None

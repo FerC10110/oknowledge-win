@@ -160,7 +160,7 @@ const root = {
 global.window = global;
 global.location = { href: "/settings", pathname: "/settings" };
 global.history = { replaceState() {} };
-global.FormData = function () { return { model: "nuevo" }; };
+global.FormData = function () { return { model: "nuevo", set() {} }; };
 global.document = {
   body: { dataset: {} }, activeElement: null,
   getElementById: () => null,
@@ -209,3 +209,45 @@ def closing(tmp_path_factory):
 def test_the_pages_close_waits_for_a_save_still_out(closing):
     assert closing["whileSaving"] == [True, "/settings"]
     assert closing["saved"] == "/"
+
+
+# --- final review M-1: a pane's save that ran late does not land over its newer one ---------
+
+def test_a_panes_older_save_from_the_same_page_is_stale_and_not_written(client, tmp_path):
+    client.post("/settings", data={"opencode_model": "a/new", "tab": "motores",
+                                   "rev": "2000", "page": "p1"}, headers=JSON)
+    late = client.post("/settings", data={"opencode_model": "a/old", "tab": "motores",
+                                          "rev": "1000", "page": "p1"}, headers=JSON)
+    assert late.status_code == 200 and late.json()["stale"] is True
+    assert saved(tmp_path).engines["opencode"]["model"] == "a/new"
+
+
+def test_another_pages_settings_save_is_written_whatever_its_revision(client, tmp_path):
+    client.post("/settings", data={"opencode_model": "a/one", "tab": "motores",
+                                   "rev": "9000", "page": "p1"}, headers=JSON)
+    other = client.post("/settings", data={"opencode_model": "a/two", "tab": "motores",
+                                           "rev": "10", "page": "p2"}, headers=JSON)
+    assert "stale" not in other.json()
+    assert saved(tmp_path).engines["opencode"]["model"] == "a/two"
+
+
+def test_each_pane_has_its_own_order(client, tmp_path):
+    client.post("/settings", data={"opencode_model": "a/one", "tab": "motores",
+                                   "rev": "9000", "page": "p1"}, headers=JSON)
+    other = client.post("/settings", data={"batch": "7", "tab": "idioma",
+                                           "rev": "10", "page": "p1"}, headers=JSON)
+    assert "stale" not in other.json() and saved(tmp_path).batch == 7
+
+
+def test_a_settings_save_that_was_not_written_does_not_count(client, tmp_path, monkeypatch):
+    from oknowledge.config import save as real_save
+
+    def boom(*args, **kwargs):
+        raise OSError(13, "Permission denied")
+    monkeypatch.setattr("oknowledge.web.app.save_config", boom)
+    client.post("/settings", data={"batch": "9", "tab": "idioma", "rev": "50", "page": "p1"},
+                headers=JSON)
+    monkeypatch.setattr("oknowledge.web.app.save_config", real_save)
+    older = client.post("/settings", data={"batch": "4", "tab": "idioma", "rev": "40",
+                                           "page": "p1"}, headers=JSON)
+    assert "stale" not in older.json() and saved(tmp_path).batch == 4

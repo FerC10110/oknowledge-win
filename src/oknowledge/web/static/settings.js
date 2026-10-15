@@ -11,6 +11,16 @@
   var renamesOut = [];        // every rename sent since the modal opened: each true if it moved notes
   var opening = 0;            // the modal's last load: an older one landing late is dropped
   var SAVE_MS = 15000;        // a save with no answer by then has failed
+  // This page's id and its revs, sent with every pane's save: the server
+  // writes a pane only if no newer save of that pane from this page landed
+  // first, so a save that timed out and runs late cannot put older values
+  // back (final review M-1). Another page's saves are never compared.
+  var PAGE = (function () {
+    try { if (window.crypto && crypto.randomUUID) return crypto.randomUUID(); } catch (e) { /* below */ }
+    return Date.now().toString(36) + Math.random().toString(36).slice(2) +
+           Math.random().toString(36).slice(2);
+  })();
+  var lastRev = 0;
 
   // Forms whose last save failed, with what was said (the page's ✕ says it
   // again instead of leaving, once).
@@ -101,6 +111,7 @@
     var busy = false;
     var again = false;
     var lastSent = "";
+    var newest = 0;             // the rev of this pane's newest save
     function save() {
       if (busy) { again = true; return; }
       busy = true;
@@ -112,16 +123,30 @@
       var payload = new URLSearchParams(data).toString();
       if (payload === lastSent) { done(); return; }
       lastSent = payload;
+      lastRev = Math.max(Date.now(), lastRev + 1);
+      var rev = newest = lastRev;
+      data.set("rev", String(rev));
+      data.set("page", PAGE);
       var sent = ok.send(form.getAttribute("action"), data);
       within(sent)
-        .then(saved)
+        .then(function (body) {
+          // Stale for the pane's newest save: nothing newer of ours landed,
+          // and this was not written either.
+          if (body.stale) { var error = new Error(texts.saveFailed || ""); throw error; }
+          saved(body);
+        })
         .catch(function (error) {
           lastSent = "";
           failed(form, error.message);
           toast(error.message);
           // Timed out, it may still land: then it saved after all (the
-          // error goes, and a new interface language still reloads).
-          if (error.late) sent.then(saved, function () {});
+          // error goes, and a new interface language still reloads) --
+          // unless a newer save of the pane went since: what that one
+          // said stands, and a stale answer wrote nothing.
+          if (error.late) {
+            sent.then(function (body) { if (!body.stale && rev === newest) saved(body); },
+                      function () {});
+          }
         })
         .then(done);
     }
