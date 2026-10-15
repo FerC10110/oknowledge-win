@@ -190,3 +190,16 @@ def test_a_title_from_a_catalogue_cannot_inject_markup(client, fake_catalog):
     body = client.get("/ocio/candidatos?tipo=movie&q=x").text
     assert "<script>alert(1)</script>" not in body
     assert "&lt;script&gt;" in body
+
+
+# --- batch G: what the pendientes listed as untested ------------------------------
+
+@pytest.mark.parametrize("path", ["/ocio/candidatos?tipo=movie&q=", "/ocio?buscar="])
+def test_the_search_you_typed_cannot_inject_markup(client, fake_catalog, path):
+    """The words searched are echoed ("Looking for …", the kind links, the
+    field): what was typed is text, never markup."""
+    fake_catalog(search=[candidate("Alien")])
+    body = client.get(path + "%3Cscript%3Ealert(1)%3C%2Fscript%3E").text
+    assert "Alien" in body
+    assert "<script>alert(1)</script>" not in body
+    assert "&lt;script&gt;alert(1)&lt;/script&gt;" in body

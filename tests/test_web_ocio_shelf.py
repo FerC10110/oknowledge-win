@@ -331,3 +331,17 @@ def test_the_state_chip_text_takes_the_state_s_colour(cfg, client, state, color)
     """Review M-3: Ocio.dc.html's statusColor, on the text."""
     put(cfg, 1, "Alien", state=state)
     assert f'<span class="chip state" style="color: {color}">' in grid(client.get("/ocio").text)
+
+
+# --- batch G: what the pendientes listed as untested ------------------------------
+
+def test_all_shows_every_card_of_every_kind_and_state(cfg, client):
+    for n, (kind, state) in enumerate((("movie", ""), ("series", "doing"), ("anime", "done"),
+                                       ("book", "pending")), 1):
+        put(cfg, n, f"Ficha {n}", kind=kind, state=state)
+    rebuild_indexes(cfg, "es", shelf=cfg.ocio)
+    every = grid(client.get("/ocio").text)
+    assert [n for n in range(1, 5) if f'id="card-c{n:011d}"' in every] == [1, 2, 3, 4]
+    # And a kind is only that kind: All is not the same list by accident.
+    books = grid(client.get("/ocio?tipo=book").text)
+    assert [n for n in range(1, 5) if f'id="card-c{n:011d}"' in books] == [4]

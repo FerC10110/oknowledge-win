@@ -356,3 +356,30 @@ def test_a_revision_that_is_not_a_number_is_ignored(cfg, client):
     client.post(f"/item/{CARD}/mine/note", data={"my_note": "B", "rev": "9"}, headers=JSON)
     client.post(f"/item/{CARD}/mine/note", data={"my_note": "C", "rev": "x"}, headers=JSON)
     assert note_on_disk(cfg) == "C"
+
+
+# --- batch G: what the pendientes listed as untested ------------------------------
+
+def test_an_idea_has_no_kind_to_change(cfg, client):
+    from oknowledge.ideas import new_idea
+    idea = new_idea("Una vpn.", "VPN", "2026-10-13", "2026-10-13T00:00:00.000001+00:00")
+    write_note(cfg, idea, "es", path=note_path(cfg, idea, shelf=cfg.ideas))
+    rebuild_indexes(cfg, "es", shelf=cfg.ideas)
+    before = note_path(cfg, idea, shelf=cfg.ideas).read_bytes()
+    answer = client.post(f"/item/{idea.id}/kind", data={"kind": "movie"},
+                         headers={"Accept": "application/json"})
+    assert answer.status_code == 404 and answer.json()["ok"] is False
+    assert note_path(cfg, idea, shelf=cfg.ideas).read_bytes() == before
+
+
+def test_deleting_a_card_answers_json_with_its_undo(cfg, client):
+    put(cfg)
+    answer = client.post(f"/item/{CARD}/delete", headers={"Accept": "application/json"})
+    body = answer.json()
+    assert answer.status_code == 200
+    assert body["ok"] is True and body["notice"] == "Deleted"
+    assert isinstance(body.get("undo"), str) and body["undo"]
+    assert find_note(cfg, CARD, cfg.ocio) is None
+    # The token brings it back.
+    client.post(f"/undo/{body['undo']}", headers={"Accept": "application/json"})
+    assert find_note(cfg, CARD, cfg.ocio)[1].title == "The Terminator"

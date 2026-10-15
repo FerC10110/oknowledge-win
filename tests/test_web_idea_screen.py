@@ -296,3 +296,38 @@ def test_regenerating_comes_back_to_the_screen(cfg, monkeypatch):
 
 def test_the_notice_is_a_toast(cfg):
     assert '<span class="toast-text">' in screen(cfg, put(cfg), "?notice=thinking")
+
+
+# --- batch G: what the pendientes listed as untested ------------------------------
+
+def test_with_a_searcher_already_out_there_is_on(cfg):
+    ai = bar(screen(cfg, put(cfg)))
+    button = re.search(r'actions/exists".*?(<button[^>]*>)', ai, re.S).group(1)
+    assert "disabled" not in button and "title=" not in button
+
+
+def test_a_link_or_a_card_is_not_an_idea_s_screen(cfg):
+    from oknowledge.web.app import create_app as build
+    link = Note(id="l00000000001", url="https://wireguard.com", title="WireGuard",
+                category="Redes", tags=[], type="article", source="wireguard.com",
+                saved="2026-10-10", summary="Una vpn.")
+    write_note(cfg, link, "es")
+    card = Note(id="c00000000001", url="https://www.imdb.com/title/tt1", title="Dune",
+                category="Películas", tags=[], type="movie", source="imdb.com",
+                saved="2026-10-02", summary="s", engine="")
+    write_note(cfg, card, "es", path=note_path(cfg, card, shelf=cfg.ocio))
+    for shelf in (cfg.links, cfg.ocio):
+        rebuild_indexes(cfg, "es", shelf=shelf)
+    client = TestClient(build(cfg))
+    for id in (link.id, card.id):
+        answer = client.get(f"/ideas/{id}")
+        assert answer.status_code == 404, id
+        assert "Dune" not in answer.text and "Una vpn." not in answer.text
+
+
+@pytest.mark.parametrize("path", ["/ideas/../x", "/ideas/..%2Fx", "/ideas/..%2F..%2Fconfig",
+                                  "/ideas/%2E%2E"])
+def test_a_path_that_climbs_out_of_the_ideas_is_a_404(cfg, path):
+    put(cfg)
+    answer = TestClient(create_app(cfg)).get(path)
+    assert answer.status_code == 404

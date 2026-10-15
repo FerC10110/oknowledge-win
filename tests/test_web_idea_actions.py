@@ -297,3 +297,58 @@ def test_a_naming_that_fails_without_a_reason_says_the_model_did_not_answer(cfg,
     app = create_app(cfg)
     TestClient(app).post(f"/item/{note.id}/describe")
     assert app.state.working.of(note.id)[1] == {"complete": "the model did not answer"}
+
+
+# --- batch G: what the pendientes listed as untested ------------------------------
+
+JSON = {"Accept": "application/json"}
+
+
+def test_a_busy_idea_answers_409_in_json(cfg):
+    from oknowledge.web.app import link_lock
+    a_link(cfg)
+    note = put(cfg)
+    with link_lock(note.id):
+        reply = TestClient(create_app(cfg)).post(f"/item/{LINK}/ideas", data={"idea": note.id},
+                                                 headers=JSON)
+    assert reply.status_code == 409
+    assert reply.json()["ok"] is False
+    assert reply.json()["error"].startswith("An analysis is running")
+    assert find_note(cfg, note.id, shelf=cfg.ideas)[1].related == []
+
+
+def test_exists_without_a_searcher_answers_409_in_json(tmp_path, ran):
+    cfg = make(tmp_path, chain=("ollama",))
+    note = put(cfg)
+    reply = TestClient(create_app(cfg)).post(f"/item/{note.id}/actions/exists", headers=JSON)
+    assert reply.status_code == 409
+    assert reply.json()["error"].startswith("No engine in your chain searches the web")
+    assert ran[0] == []
+
+
+def test_from_the_idea_s_screen_the_sixteenth_link_lands_and_the_seventeenth_is_refused(cfg):
+    path = a_link(cfg)
+    other = write_note(cfg, Note(id="l00000000002", url="https://tailscale.com", title="Tailscale",
+                                 category="Redes", tags=[], type="article", source="tailscale.com",
+                                 saved="2026-10-11", summary="Otra vpn."), "es")
+    rebuild_indexes(cfg, "es")
+    note = put(cfg, related=[f"n{i}" for i in range(15)])
+    client = TestClient(create_app(cfg))
+    landed = client.post(f"/item/{LINK}/ideas", data={"idea": note.id, "back": "idea", "q": "vpn"},
+                         follow_redirects=False)
+    assert landed.headers["location"].startswith(f"/ideas/{note.id}")
+    assert "notice=idea-full" not in landed.headers["location"]
+    assert len(find_note(cfg, note.id, shelf=cfg.ideas)[1].related) == 16
+    refused = client.post("/item/l00000000002/ideas",
+                          data={"idea": note.id, "back": "idea", "q": "vpn"},
+                          follow_redirects=False)
+    where = refused.headers["location"]
+    # Back to the idea, with its search, and not to the link.
+    assert where.startswith(f"/ideas/{note.id}") and "q=vpn" in where
+    assert "notice=idea-full" in where
+    held = find_note(cfg, note.id, shelf=cfg.ideas)[1].related
+    assert len(held) == 16 and path.stem in held and other.stem not in held
+    in_json = client.post("/item/l00000000002/ideas", data={"idea": note.id, "back": "idea"},
+                          headers=JSON)
+    assert in_json.status_code == 409
+    assert in_json.json()["error"] == "That idea already has 16 links. Take one off before adding another."
