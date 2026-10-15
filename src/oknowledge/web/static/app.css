@@ -431,3 +431,53 @@ a.more { display: block; text-align: center; margin: 16px 0; color: var(--t5); f
 .candidate .meta { display: flex; gap: 6px; font-size: 12px; color: var(--t5); }
 .candidate .meta > * + *::before { content: "·"; margin-right: 6px; }
 .candidate form { margin: 0; }
+
+/* --- delivery 3: what needs JavaScript, and the keys ------------------- */
+html:not(.js) .js-only { display: none !important; }
+.key { display: inline-block; min-width: 16px; padding: 0 4px; border: 1px solid var(--b-input);
+  border-radius: 4px; font-size: 10px; line-height: 16px; text-align: center; color: var(--t6); }
+.sidebar .foot { display: flex; flex-direction: column; gap: 2px; }
+.sidebar .foot-link { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: 8px;
+  color: var(--t5); background: none; border: 0; font: inherit; font-size: 13px; text-align: left;
+  cursor: pointer; text-decoration: none; }
+.sidebar .foot-link:hover { background: var(--s5); color: var(--t1); }
+.sidebar .foot-link b { margin-left: auto; color: var(--t6); font-weight: 400; font-size: 12px; }
+
+/* --- Settings (spec §3.1; handoff §4) ----------------------------------- */
+.settings-body { display: flex; flex-direction: column; min-height: 0;
+  line-height: normal; font-size: 13.5px; color: var(--t2); }
+.settings-head { display: flex; align-items: flex-start; justify-content: space-between;
+  padding: 18px 24px 0; }
+.settings-title { font-size: 17px; font-weight: 600; margin: 0; color: var(--t1); }
+.settings-note { font-size: 12px; color: #6d6f78; margin: 4px 0 0; }
+.settings-tabs { display: flex; gap: 20px; padding: 14px 24px 0; border-bottom: 1px solid var(--b-input); }
+.settings-tabs a { padding: 0 0 10px; margin-bottom: -1px; color: var(--t5); text-decoration: none;
+  border-bottom: 2px solid transparent; }
+.settings-tabs a.on { color: var(--t1); border-bottom-color: #e7e7ea; }
+.settings-scroll { flex: 1; min-height: 0; overflow-y: auto; }
+.settings-pane { display: flex; flex-direction: column; gap: 18px; padding: 20px 24px; }
+.settings-pane[hidden] { display: none; }
+.settings-pane form[data-settings] { display: flex; flex-direction: column; gap: 18px; }
+.settings-hint, .setting-hint { font-size: 12px; color: #6d6f78; margin: 0; }
+.settings-sub { font-size: 13px; font-weight: 500; color: var(--t1); margin: 0; }
+.settings-pane input:not([type=checkbox]):not([type=radio]):not([type=file]),
+.settings-pane select { background: #141519; border: 1px solid var(--b-input); border-radius: 8px;
+  color: var(--t1); padding: 7px 10px; font: inherit; font-size: 13px; min-width: 0; }
+.settings-pane .engine-row { display: grid; grid-template-columns: 20px 90px minmax(0, 1fr) auto;
+  align-items: center; gap: 10px; padding: 0; }
+.settings-pane .engine-tools { display: flex; align-items: center; gap: 8px; }
+.link-button { background: none; border: 0; padding: 0; color: var(--acc); font: inherit;
+  font-size: 12.5px; cursor: pointer; }
+.link-button:hover { color: var(--acc-hi); }
+.setting { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.setting-name { margin: 0; color: var(--t1); }
+.settings-pane .seg { background: #141519; }
+.batch-box { width: 60px; }
+.drop { position: relative; border: 1.5px dashed #33353e; border-radius: 12px; padding: 30px;
+  text-align: center; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.drop.over { border-color: var(--b-sel); background: var(--s2); }
+.drop-title { margin: 0; color: var(--t1); font-weight: 500; }
+.drop-file { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.cat-rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.cat-row { display: grid; grid-template-columns: 8px minmax(0, 1fr) auto auto; align-items: center; gap: 10px; }
+.where summary { cursor: pointer; color: var(--t5); font-size: 12.5px; }

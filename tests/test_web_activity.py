@@ -82,8 +82,9 @@ def test_the_page_is_about_all_ai_activity(cfg):
     assert "Links waiting to be analysed" in body
 
 
-def test_the_nav_calls_it_activity(cfg):
-    assert '<a href="/retry">Activity' in TestClient(create_app(cfg)).get("/").text
+def test_the_nav_reaches_activity_through_settings(cfg):
+    body = TestClient(create_app(cfg)).get("/settings?tab=importar").text
+    assert 'href="/retry"' in body
 
 
 def test_an_idea_action_names_what_it_did_and_on_which_idea(cfg, idea):

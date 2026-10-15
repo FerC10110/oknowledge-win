@@ -650,7 +650,7 @@ def test_the_box_shows_the_saved_list(client):
 
 
 def test_the_page_says_the_models_are_tried_in_order(client):
-    assert "tried in order" in client.get("/settings").text
+    assert "used in order, top to bottom" in client.get("/settings").text
 
 
 def test_picking_from_the_list_adds_and_saves_by_script(client):

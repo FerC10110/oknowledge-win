@@ -6,6 +6,9 @@
 // file everything stays open, which is how the pages were before it.
 (function () {
   "use strict";
+  // What only works with JavaScript (checkboxes, key hints, "Atajos") is
+  // drawn hidden and shown by this class (spec §1).
+  document.documentElement.classList.add("js");
   var phone = window.matchMedia("(max-width: 42rem)");
   function fold(open) {
     document.querySelectorAll("details.filters").forEach(function (d) {

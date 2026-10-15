@@ -1755,10 +1755,10 @@ def create_app(cfg: Config) -> FastAPI:
         return JSONResponse({"running": sorted(running), "failed": sorted(failed),
                              "title": note.title})
 
-    @app.get("/categories", response_class=HTMLResponse)
-    def category_page(request: Request):
-        library.refresh()
-        return page(request, "categories.html")
+    @app.get("/categories")
+    def category_page():
+        """Renaming lives in Settings now (spec §3.1): an old bookmark lands there."""
+        return RedirectResponse("/settings?tab=categorias", status_code=303)
 
     @app.post("/categories/rename")
     def rename(request: Request, old: str = Form(...), new: str = Form(...)):
@@ -1855,45 +1855,56 @@ def create_app(cfg: Config) -> FastAPI:
         return {"file": where, "exists": where.exists(),
                 "exposed": env.exposed(config_file())}
 
-    @app.get("/settings", response_class=HTMLResponse)
-    def settings_page(request: Request):
+    def settings_context(tab: str) -> dict:
+        """What Settings draws, on the page and in the modal (spec §3.1): one
+        function, so the two cannot drift apart."""
         saved = current["cfg"]
+        library.refresh()
         order = [name for name in saved.chain if name in WEB_ENGINES]
         order += [name for name in WEB_ENGINES if name not in order]
         waiting = len(owed(Queue())[0])
         api = saved.engines.get("api", {})
         known = find_provider(str(api.get("provider", "anthropic")))
-        return page(request, "settings.html", cfg=saved, ui=saved.ui_language,
-                    engines=order, config_path=config_file(),
-                    # The whole table, every row a choice: the addresses are
-                    # the point. Picking a provider should teach you what you
-                    # are pointing at, and tell you where its key comes from
-                    # before you have saved anything.
-                    providers=PROVIDERS,
-                    picked=known.id if known else "",
-                    keys=provider_keys(),
-                    # A provider somebody wrote by hand that this does not
-                    # know. Said out loud rather than quietly unticked.
-                    stranger="" if known else str(api.get("provider", "")),
-                    by_hand=str(api.get("base_url", "")),
-                    key=env_file_state(),
-                    # So the page can stop talking about chmod on a system
-                    # where the mode decides nothing. Not inside `key`: it is
-                    # a fact about the machine, not about the key.
-                    windows=places.WINDOWS,
-                    # Read from disk, never asked for here: three engines with
-                    # their timeouts is up to twelve seconds to open a page,
-                    # and the slow case -- a server that is down -- is the
-                    # common one.
-                    models=read_models(),
-                    # What the Procesar button would do, which is the saved
-                    # size unless fewer links than that are left.
-                    owed=waiting, size=min(saved.batch, waiting),
-                    # Both language pickers are built from this one order. They
-                    # used to be written out by hand and had drifted into
-                    # opposite orders, which is a way to pick English while
-                    # meaning Spanish.
-                    languages=LANGUAGES, language_names=NATIVE_NAMES)
+        return {"tab": tab if tab in dict(SETTINGS_TABS) else "motores",
+                "tabs": SETTINGS_TABS, "cfg": saved, "ui": saved.ui_language,
+                "engines": order, "config_path": config_file(),
+                # The whole table, every row a choice: the addresses are the
+                # point. Picking a provider should teach you what you are
+                # pointing at, and where its key comes from.
+                "providers": PROVIDERS, "picked": known.id if known else "",
+                "keys": provider_keys(),
+                # A provider somebody wrote by hand that this does not know.
+                # Said out loud rather than quietly unticked.
+                "stranger": "" if known else str(api.get("provider", "")),
+                "by_hand": str(api.get("base_url", "")), "key": env_file_state(),
+                # So the page can stop talking about chmod on a system where
+                # the mode decides nothing. Not inside `key`: it is a fact
+                # about the machine, not about the key.
+                "windows": places.WINDOWS,
+                # Read from disk, never asked for here: three engines with
+                # their timeouts is up to twelve seconds to open Settings, and
+                # the slow case -- a server that is down -- is the common one.
+                "models": read_models(),
+                # What "Analizar" would do: the saved size unless fewer links
+                # than that are left.
+                "owed": waiting, "size": min(saved.batch, waiting),
+                # Both language pickers are built from this one order (they
+                # once drifted into opposite orders).
+                "languages": LANGUAGES, "language_names": NATIVE_NAMES,
+                "categories": library.categories()}
+
+    @app.get("/settings", response_class=HTMLResponse)
+    def settings_page(request: Request, tab: str = ""):
+        return page(request, "settings.html", **settings_context(tab))
+
+    @app.get("/settings/panel", response_class=HTMLResponse)
+    def settings_panel(request: Request, tab: str = ""):
+        """Settings without the page around it, for the modal (spec §3.1)."""
+        language = current["cfg"].ui_language
+        return templates.TemplateResponse(
+            request=request, name="settings-body.html",
+            context={"t": translator(language), "lang": language,
+                     "batch": progress.snapshot(), **settings_context(tab)})
 
     @app.post("/settings")
     def save_settings(request: Request, chain: list[str] = Form([]), language: str = Form(""),

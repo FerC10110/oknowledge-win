@@ -37,7 +37,7 @@ def test_every_page_has_the_sidebar(client, path):
     body = client.get(path).text
     side = sidebar(body)
     assert 'href="/"' in side and 'href="/ocio"' in side and 'href="/ideas"' in side
-    assert 'href="/settings"' in side and 'href="/categories"' in side and 'href="/retry"' in side
+    assert 'href="/settings"' in side and 'href="/categories"' not in side and 'href="/retry"' not in side
 
 
 def test_the_old_header_is_gone(client):

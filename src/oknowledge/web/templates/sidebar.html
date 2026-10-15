@@ -8,7 +8,7 @@
     {% for key, href, name in (("links", "/", t("Library")), ("ocio", "/ocio", t("Leisure")), ("ideas", "/ideas", t("Ideas"))) %}
       <a href="{{ href }}" class="section{% if side.section == key %} on{% endif %}"
          {% if side.section == key %}aria-current="page"{% endif %}>
-        <span>{{ name }}</span><b class="count mono">{{ side.counts[key] }}</b></a>
+        <span>{{ name }}</span><b class="count mono">{{ side.counts[key] }}</b><kbd class="key mono js-only">{{ loop.index }}</kbd></a>
     {% endfor %}
   </nav>
   {% if groups is defined and groups %}
@@ -42,8 +42,7 @@
   {% endif %}
   {% include "sidebar-filters.html" %}
   <nav class="foot">
-    <a href="/categories">{{ t('Categories') }}</a>
-    <a href="/retry">{{ t('Activity') }}{% if batch.running %} <b class="mono">{{ batch.done }}/{{ batch.total }}</b>{% elif batch.busy %} <b class="mono">{{ batch.busy|length }}</b>{% endif %}</a>
-    <a href="/settings">{{ t('Settings') }}</a>
+    <button type="button" class="foot-link js-only" data-modal="keys">{{ t('Shortcuts') }} <kbd class="key mono">?</kbd></button>
+    <a href="/settings" class="foot-link" data-modal="settings">{{ t('Settings') }}{% if batch.running %} <b class="mono">{{ batch.done }}/{{ batch.total }}</b>{% elif batch.busy %} <b class="mono">{{ batch.busy|length }}</b>{% endif %}</a>
   </nav>
 </aside>

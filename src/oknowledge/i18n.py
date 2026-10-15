@@ -74,7 +74,6 @@ STRINGS = {
         "Delete": "Borrar",
         "Reprocess": "Reprocesar",
         "Rename": "Renombrar",
-        "Merge into": "Fusionar con",
         "Save": "Guardar",
         "Engines": "Motores",
         "Language and saving": "Idioma y guardado",
@@ -241,8 +240,6 @@ STRINGS = {
         "Activity": "Actividad",
         "Add a model": "Agregar un modelo",
         "Add a model…": "Agregar un modelo…",
-        "Several models go by comma and are tried in order: if one fails, the next one is asked before the next engine. Picking one from the list adds it at the end and saves.":
-            "Podés poner varios modelos separados por coma: se prueban en orden y, si uno falla, se pide al siguiente antes de pasar al otro motor. Elegir uno de la lista lo agrega al final y guarda.",
         "AI activity": "Actividad de IA",
         "In progress": "En curso",
         "History": "Historial",
@@ -262,7 +259,6 @@ STRINGS = {
         "Improve the idea": "Mejorar la idea",
         "Expand the idea": "Ampliar la idea",
         "Find links for the idea": "Buscar links para la idea",
-        "Analyse the links that are waiting": "Analizar los links que esperan",
         "Waiting to be analysed: %1": "Esperando an\u00e1lisis: %1",
         "Analyse 1 link": "Analizar 1 link",
 
@@ -288,15 +284,6 @@ STRINGS = {
         "Every link has been analysed.": "Todos los links est\u00e1n analizados.",
         "Links to analyse at a time": "Links a analizar por vez",
         "How many": "Cu\u00e1ntos",
-        "What the button at the end of this page processes each time. "
-        "Save first: the button uses the saved number.":
-            "Lo que procesa cada vez el bot\u00f3n del final de esta p\u00e1gina. "
-            "Guard\u00e1 primero: el bot\u00f3n usa el n\u00famero guardado.",
-        "As many as the box above says, newest first. Each one is a model "
-        "call, so it takes a while and it runs in the background.":
-            "Tantos como diga la casilla de arriba, los m\u00e1s nuevos primero. "
-            "Cada uno es una llamada al modelo, as\u00ed que tarda un rato y "
-            "corre en segundo plano.",
         "Reading that link now. It shows up in the library when it is done.":
             "Leyendo ese link. Aparece en la biblioteca cuando termina.",
         "You already have that link.": "Ese link ya lo tenés.",
@@ -359,10 +346,6 @@ STRINGS = {
 
         # Importing a WhatsApp export from the browser.
         "Import a WhatsApp export": "Importar un export de WhatsApp",
-        "Turns the links people shared in a chat into notes, "
-        "with the date each one was sent.":
-            "Convierte en notas los links que compartieron en un chat, "
-            "con la fecha en que se mandó cada uno.",
         "In WhatsApp: open the chat, Export chat, Without media. "
         "Give it the .zip or the .txt inside it.":
             "En WhatsApp: abrí el chat, Exportar chat, Sin archivos. "
@@ -443,12 +426,6 @@ STRINGS = {
         "over the list.":
             "config.toml manda este motor a %1 a mano, y esa dirección gana "
             "sobre la lista.",
-        "What is marked in use is what is saved, not what the box shows: save "
-        "first. The key itself never goes in config.toml -- this page rewrites "
-        "that file.":
-            "Lo que dice en uso es lo que está guardado, no lo que muestra la "
-            "lista: guardá primero. La key nunca va en config.toml, porque "
-            "esta página reescribe ese archivo.",
         # What each one costs. The rows live in ai/providers.py.
         "Free coding models that rotate, and no card to sign up. Where "
         "the opencode engine already goes, by API instead of by command.":
@@ -506,12 +483,6 @@ STRINGS = {
             "carpeta.",
         "Find models": "Buscar modelos",
         "Looked up %1": "Consultado el %1",
-        "Looking for models asks that engine and reloads this page, so save "
-        "anything you have typed first. A list from a month ago is still a "
-        "list: the date beside each button says which.":
-            "Buscar modelos consulta ese motor y recarga esta página, así que "
-            "guardá antes lo que hayas escrito. Una lista de hace un mes "
-            "sigue siendo una lista: la fecha al lado de cada botón dice cuál.",
         "%1 models found. They are in the list beside each box.":
             "Se encontraron %1 modelos. Están en la lista al lado de cada campo.",
         "No models could be listed. The engine may not be installed, running "
@@ -560,22 +531,34 @@ STRINGS = {
             "La nota se movió a la carpeta trash de tu vault, pero no se "
             "pudieron rehacer los índices. Corré `oknowledge reindex` cuando "
             "la carpeta vuelva a ser escribible.",
-        "Renaming into a category that already exists merges the two.":
-            "Si el nombre nuevo ya existe, las dos categorías se fusionan.",
         "Saving rewrites %1 from scratch: your comments, your formatting and "
         "any key oknowledge does not read are not kept. The file it replaces "
         "is copied to config.toml.bak first.":
             "Guardar reescribe %1 de cero: tus comentarios, tu formato y "
             "cualquier clave que oknowledge no lea no se conservan. El archivo "
             "que reemplaza se copia antes a config.toml.bak.",
-        "Priority runs top to bottom. An engine that is not checked is not used. "
-        "To change the order, edit the file by hand.":
-            "La prioridad va de arriba hacia abajo. El motor que no esté tildado "
-            "no se usa. Para cambiar el orden, editá el archivo a mano.",
         "Mentions of a video": "Menciones de un video",
-        "Tools and companies": "Herramientas y empresas",
-        "Everything named": "Todo lo nombrado",
-        "Only what it discusses": "Sólo lo que discute",
+        # Settings in panes, and the sidebar's foot (delivery 3, spec §3, §7).
+        "The changes save themselves": "Los cambios se guardan solos",
+        "They are used in order, top to bottom. You can put several models "
+        "separated by commas.":
+            "Se usan en orden, de arriba hacia abajo. Podés poner varios modelos "
+            "separados por coma.",
+        "Where is this saved?": "¿Dónde se guarda esto?",
+        "Changing it reloads the page": "Cambiarlo recarga la página",
+        "What is marked when you paste a link": "Lo que se marca al pegar un link",
+        "Tools": "Herramientas",
+        "How many each batch takes": "Cuántos procesa cada tanda",
+        "Drop the WhatsApp export here": "Soltá acá el export de WhatsApp",
+        "Choose file": "Elegir archivo",
+        "Links waiting for analysis: %1": "Links esperando análisis: %1",
+        "Analysing: %1/%2": "Analizando: %1/%2",
+        "See activity": "Ver actividad",
+        "If you rename to one that already exists, they merge.":
+            "Si renombrás a una que ya existe, se unen.",
+        "Merge «%1» into «%2»?": "¿Unir «%1» con «%2»?",
+        "Shortcuts": "Atajos",
+        "Only what it discusses": "Sólo lo discutido",
         "created %1": "creada %1",
         "Saving…": "Guardando…",
         "ASK THE AI": "PEDILE A LA IA",

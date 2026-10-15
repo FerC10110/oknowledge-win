@@ -1,0 +1,195 @@
+{# Settings (spec §3.1): the page /settings and the modal draw this same
+   fragment. Four panes; only the one in `tab` is shown. Without JavaScript
+   the tabs are links that reload and each form keeps its Save button;
+   settings.js switches panes in place and saves every change. #}
+<div class="settings-body" data-settings-root>
+  <header class="settings-head">
+    <div>
+      <h1 class="settings-title">{{ t('Settings') }}</h1>
+      <p class="settings-note">{{ t('The changes save themselves') }}</p>
+    </div>
+    <a class="btn icon settings-close" href="/" data-close aria-label="{{ t('Close') }}" title="{{ t('Close') }}">✕</a>
+  </header>
+  <nav class="settings-tabs" aria-label="{{ t('Settings') }}">
+    {%- for key, label in tabs %}
+    <a href="/settings?tab={{ key }}" data-settings-tab="{{ key }}" class="{% if key == tab %}on{% endif %}"{% if key == tab %} aria-current="page"{% endif %}>{{ t(label) }}</a>
+    {%- endfor %}
+  </nav>
+  <div class="settings-scroll">
+
+  <section class="settings-pane" data-settings-pane="motores"{% if tab != 'motores' %} hidden{% endif %}>
+    <form action="/settings" method="post" data-settings>
+      <input type="hidden" name="tab" value="motores">
+      <p class="settings-hint">{{ t('They are used in order, top to bottom. You can put several models separated by commas.') }}</p>
+      {% for name in engines %}
+        <div class="row engine-row">
+          <input type="checkbox" name="chain" value="{{ name }}" id="chain-{{ name }}"{% if name in cfg.chain %} checked{% endif %}>
+          <label for="chain-{{ name }}" class="engine-name mono">{{ name }}</label>
+          {# A box and not a <select>: an engine that is not installed, not
+             running or behind somebody else's gateway cannot be asked, and
+             that must not be the day you cannot name your model. It holds
+             the models in the order they are tried, by comma. #}
+          <input name="{{ name }}_model" placeholder="model" class="model-box"
+                 aria-label="{{ name }} model"
+                 value="{{ cfg.engines.get(name, {}).get('model', '') }}">
+          <span class="engine-tools">
+            {# What the engine said it has, as a picker that adds to the box
+               and saves. Hidden until settings.js shows it. #}
+            {% if models.get(name, {}).get('found') %}
+              <select class="add-model" data-for="{{ name }}_model" aria-label="{{ t('Add a model') }}" hidden>
+                <option value="">{{ t('Add a model…') }}</option>
+                {% for found in models[name]['found'] %}<option value="{{ found }}">{{ found }}</option>{% endfor %}
+              </select>
+            {% endif %}
+            {# Its own form, declared after this one: a form cannot nest, and
+               this press must not save the box half-typed. #}
+            <button type="submit" form="find-{{ name }}" class="link-button">{{ t('Find models') }}</button>
+            {% if models.get(name, {}).get('at') %}<span class="meta">{{ t('Looked up %1', models[name]['at']) }}</span>{% endif %}
+          </span>
+        </div>
+      {% endfor %}
+      {# Outside the api block: who else can read the .env matters whatever
+         engine is ticked (spec §3.1, "sigue siempre visible"). #}
+      {% if key.exposed %}
+        <p class="warn-block">{{ t('Anyone else with an account on this machine can read %1. Make it yours alone with chmod 600.', key.file) }}</p>
+      {% elif windows and key.exists %}
+        {# No chmod talk on Windows: the mode decides nothing there and the
+           check that would warn about it is off. What is left to say is the
+           thing the reader can act on -- which file, and what guards it. #}
+        <p class="meta">{{ t('The key is in %1, which is as private as the folder it sits in.', key.file) }}</p>
+      {% endif %}
+      {# Shown only while the api box above is ticked, by a CSS rule on the
+         form: the providers mean nothing to the other engines. #}
+      <div class="api-only">
+      <h2 class="settings-sub">{{ t('Who the api engine talks to') }}</h2>
+      {% if 'api' not in cfg.chain %}
+        <p class="meta">{{ t('The api engine is not ticked above, so none of this is in use yet.') }}</p>
+      {% endif %}
+      {% if stranger %}
+        <p class="meta">{{ t('config.toml names a provider this list does not have: %1. Saving will not replace it.', stranger) }}</p>
+      {% endif %}
+      {% if by_hand %}
+        <p class="meta">{{ t('config.toml sends this engine to %1 by hand, and that address wins over the list.', by_hand) }}</p>
+      {% endif %}
+      <ul class="providers">
+        {% for p in providers %}
+          <li>
+            {# The radio, the name and the detail are three children of the
+               row and not nested: `:checked ~` only reaches a sibling. #}
+            <input type="radio" name="api_provider" value="{{ p.id }}"
+                   id="provider-{{ p.id }}"{% if p.id == picked %} checked{% endif %}>
+            <label class="who" for="provider-{{ p.id }}"><b>{{ p.label }}</b>{% if p.id == picked %}<span class="tag">{{ t('in use') }}</span>{% endif %}{% if p.free %}<span class="tag">{{ t('free key') }}</span>{% endif %}</label>
+            <div class="detail">
+              <code>{{ p.url }}</code>
+              <p class="meta">{{ keys[p.id].name }} · <a href="{{ p.console }}" target="_blank" rel="noreferrer">{{ t('get a key') }}</a>{% if p.note %} · {{ t(p.note) }}{% endif %}</p>
+              {% if keys[p.id].ok %}
+                <p class="meta">{{ t('The key for %1 is in place.', keys[p.id].name) }}</p>
+              {% else %}
+                <p class="warn-block">{{ t('There is no key yet. Paste %1=… into %2', keys[p.id].name, key.file) }}
+                  {% if not key.exists %}
+                    <button type="submit" form="make-env-{{ p.id }}">{{ t('Create that file') }}</button>
+                  {% endif %}
+                </p>
+              {% endif %}
+            </div>
+          </li>
+        {% endfor %}
+      </ul>
+      </div>
+      <details class="where">
+        <summary>{{ t('Where is this saved?') }}</summary>
+        <p class="meta mono">{{ config_path }}</p>
+        <p class="meta">{{ t('Saving rewrites %1 from scratch: your comments, your formatting and any key oknowledge does not read are not kept. The file it replaces is copied to config.toml.bak first.', config_path) }}</p>
+      </details>
+      <p data-nojs><button type="submit" class="btn">{{ t('Save') }}</button></p>
+    </form>
+    {% for name in engines %}
+      <form id="find-{{ name }}" action="/settings/models/{{ name }}" method="post" data-settings-action></form>
+    {% endfor %}
+    {% if not key.exists %}
+      {% for p in providers %}
+        <form id="make-env-{{ p.id }}" action="/settings/env" method="post" data-settings-action><input type="hidden" name="provider" value="{{ p.id }}"></form>
+      {% endfor %}
+    {% endif %}
+  </section>
+
+  <section class="settings-pane" data-settings-pane="idioma"{% if tab != 'idioma' %} hidden{% endif %}>
+    <form action="/settings" method="post" data-settings class="settings-rows">
+      <input type="hidden" name="tab" value="idioma">
+      <div class="setting">
+        <div><p class="setting-name">{{ t('Summary language') }}</p></div>
+        <span class="seg">{% for code in languages %}<label><input type="radio" name="language" value="{{ code }}"{% if cfg.language == code %} checked{% endif %}><span>{{ language_names[code] }}</span></label>{% endfor %}</span>
+      </div>
+      <div class="setting">
+        <div><p class="setting-name">{{ t('Interface language') }}</p>
+          <p class="setting-hint">{{ t('Changing it reloads the page') }}</p></div>
+        <span class="seg">{% for code in languages %}<label><input type="radio" name="ui_language" value="{{ code }}"{% if ui == code %} checked{% endif %}><span>{{ language_names[code] }}</span></label>{% endfor %}</span>
+      </div>
+      <div class="setting">
+        <div><p class="setting-name">{{ t('Keep by default') }}</p>
+          <p class="setting-hint">{{ t('What is marked when you paste a link') }}</p></div>
+        <span class="seg">{% for value, label in (('full', t('Full')), ('summary', t('Summary'))) %}<label><input type="radio" name="default_content" value="{{ value }}"{% if cfg.default_content == value %} checked{% endif %}><span>{{ label }}</span></label>{% endfor %}</span>
+      </div>
+      <div class="setting">
+        <div><p class="setting-name">{{ t('Mentions of a video') }}</p></div>
+        <span class="seg">{% for value, label in (('tools', t('Tools')), ('all', t('All')), ('discussed', t('Only what it discusses'))) %}<label><input type="radio" name="mentions" value="{{ value }}"{% if cfg.mentions == value %} checked{% endif %}><span>{{ label }}</span></label>{% endfor %}</span>
+      </div>
+      <div class="setting">
+        <div><p class="setting-name">{{ t('Links to analyse at a time') }}</p>
+          <p class="setting-hint">{{ t('How many each batch takes') }}</p></div>
+        <input type="number" name="batch" min="1" step="1" value="{{ cfg.batch }}" class="batch-box mono"
+               aria-label="{{ t('Links to analyse at a time') }}">
+      </div>
+      <p data-nojs><button type="submit" class="btn">{{ t('Save') }}</button></p>
+    </form>
+  </section>
+
+  <section class="settings-pane" data-settings-pane="importar"{% if tab != 'importar' %} hidden{% endif %}>
+    {# The /import form of import.html: the preview and the confirmation
+       stay on that page (spec "¿Importar WhatsApp desde el modal?"). #}
+    <form action="/import" method="post" enctype="multipart/form-data" class="drop" data-settings-drop>
+      <p class="drop-title">{{ t('Drop the WhatsApp export here') }}</p>
+      <p class="meta">{{ t('In WhatsApp: open the chat, Export chat, Without media. Give it the .zip or the .txt inside it.') }}</p>
+      <label class="btn">{{ t('Choose file') }}<input type="file" name="file" accept=".txt,.zip,text/plain,application/zip" required class="drop-file"></label>
+      <button type="submit" class="btn" data-nojs>{{ t('Read it') }}</button>
+    </form>
+    <div class="setting">
+      <p class="setting-name">{{ t('Links waiting for analysis: %1', owed) }}</p>
+      {% if batch.running %}
+        <span class="mono">{{ t('Analysing: %1/%2', batch.done, batch.total) }}</span>
+      {% elif owed %}
+        <form action="/retry" method="post" data-settings-action>
+          <button type="submit" class="btn">{% if size == 1 %}{{ t('Analyse 1 link') }}{% else %}{{ t('Analyse %1 links', size) }}{% endif %}</button>
+        </form>
+      {% else %}
+        <span class="meta">{{ t('Every link has been analysed.') }}</span>
+      {% endif %}
+    </div>
+    <p><a href="/retry">{{ t('See activity') }} →</a></p>
+  </section>
+
+  <section class="settings-pane" data-settings-pane="categorias"{% if tab != 'categorias' %} hidden{% endif %}
+           data-merge="{{ t('Merge «%1» into «%2»?') }}">
+    {% if categories %}
+      <ul class="cat-rows">
+        {% for name, count in categories.items() %}
+          <li>
+            <form action="/categories/rename" method="post" class="cat-row" data-settings-rename>
+              <i class="dot" style="background: {{ name|dot }}"></i>
+              <input type="hidden" name="old" value="{{ name }}">
+              <input name="new" value="{{ name }}" required autocomplete="off"
+                     aria-label="{{ t('Rename') }}: {{ name }}">
+              <b class="count mono">{{ count }}</b>
+              <button type="submit" class="btn" data-nojs>{{ t('Save') }}</button>
+            </form>
+          </li>
+        {% endfor %}
+      </ul>
+      <p class="settings-hint">{{ t('If you rename to one that already exists, they merge.') }}</p>
+    {% else %}
+      <p class="empty">{{ t('Nothing saved yet') }}</p>
+    {% endif %}
+  </section>
+
+  </div>
+</div>

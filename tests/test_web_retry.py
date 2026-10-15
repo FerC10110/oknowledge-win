@@ -265,7 +265,7 @@ def test_settings_says_how_many_links_are_waiting(setup):
 
     body = client.get("/settings").text
 
-    assert "Waiting to be analysed: 4" in body
+    assert "Links waiting for analysis: 4" in body
 
 
 def test_saving_the_batch_size_keeps_it(setup):
@@ -430,10 +430,9 @@ def test_a_search_with_nothing_to_search_for_is_not_a_destination(cards, monkeyp
     assert answer.headers["location"] == "/item/waiting?notice=queued"
 
 
-@pytest.mark.parametrize("path", ["/", "/settings", "/categories", "/retry"])
-def test_every_page_links_to_the_batch(setup, path):
-    """It was reachable from Settings alone, which is a page nobody opens to
-    check on a run that takes an hour."""
+@pytest.mark.parametrize("path", ["/settings", "/settings/panel?tab=importar"])
+def test_activity_is_reached_from_settings(setup, path):
+    """It left the sidebar (spec §7): Settings → Import links it."""
     cfg, client = setup
 
     assert 'href="/retry"' in client.get(path).text
