@@ -1,59 +1,18 @@
-// The phone layout: what the CSS cannot do by itself.
+// What has to run before the first paint, on every page.
 //
-// A <details> drawn open cannot be closed by a stylesheet, so on a narrow
-// screen this closes the filters and the paste box, and keeps the search
-// box from pulling the keyboard up the moment a page opens. Without this
-// file everything stays open, which is how the pages were before it.
+// The class `js` shows what only works with JavaScript (checkboxes, key
+// hints, "Seleccionar"), which is drawn hidden. The phone is CSS now
+// (docs/2026-10-15-rediseno-celular-design.md §13); the one breakpoint the
+// scripts share is app.js's oknowledge.phone().
 (function () {
   "use strict";
-  // What only works with JavaScript (checkboxes, key hints, "Atajos") is
-  // drawn hidden and shown by this class (spec §1).
   document.documentElement.classList.add("js");
-  var phone = window.matchMedia("(max-width: 42rem)");
-  function fold(open) {
-    document.querySelectorAll("details.filters").forEach(function (d) {
-      d.open = open;
-    });
-  }
-  function settle() {
-    if (!phone.matches) return;
-    fold(false);
-    letGo();
-  }
-  // The browser focuses an autofocus box when it gets round to it, which
-  // can be after this has run: let go again once the page has loaded.
-  function letGo() {
-    var search = document.querySelector("header input[type=search]");
-    if (search) {
-      search.removeAttribute("autofocus");
-      if (document.activeElement === search) search.blur();
-    }
-  }
-  window.addEventListener("load", function () { if (phone.matches) letGo(); });
-  // And whenever it does it: the first focus the box gets before anybody
-  // has touched the page is the browser's, not the user's.
-  var touched = false;
-  document.addEventListener("pointerdown", function () { touched = true; },
-                            { capture: true, once: true });
-  var box = document.querySelector("header input[type=search]");
-  if (box) {
-    box.addEventListener("focus", function () {
-      if (!touched && phone.matches) box.blur();
-    }, { once: true });
-  }
-  // Now and not on DOMContentLoaded: this file is the last thing in <body>,
-  // so what it folds is already there, and waiting showed it open first.
-  settle();
-  // Turned sideways into a wide screen: nothing may stay hidden behind a
-  // summary the desktop layout does not draw.
-  phone.addEventListener("change", function (event) {
-    if (!event.matches) fold(true);
-  });
   // A notice is said once, and its Deshacer is offered once. Left in the URL,
-  // a reload would say it again.
+  // a reload would say it again. The entry keeps its state: it may be a
+  // layer's (docs/2026-10-15-rediseno-celular-design.md §6.3).
   var said = new URL(location.href);
   if (said.searchParams.has("notice") || said.searchParams.has("undo")) {
     ["notice", "n", "m", "undo"].forEach(function (name) { said.searchParams.delete(name); });
-    history.replaceState(null, "", said.pathname + said.search + said.hash);
+    history.replaceState(history.state, "", said.pathname + said.search + said.hash);
   }
 })();

@@ -53,10 +53,17 @@ def test_every_page_loads_the_layout_script(client):
     assert '<script src="/static/layout.js"></script>' in client.get("/").text
 
 
-def test_the_layout_script_closes_and_unfocuses_on_a_phone():
+def test_the_layout_script_has_no_phone_of_its_own():
+    """Delivery 4 (docs/2026-10-15-rediseno-celular-design.md §13): the
+    folding of details.filters and the search box's autofocus went with the
+    old header. The phone is CSS now, and app.js's oknowledge.phone()."""
     js = WEB.joinpath("static", "layout.js").read_text(encoding="utf-8")
-    assert "(max-width: 42rem)" in js
-    assert "details.filters" in js and "details.paste" not in js and "blur" in js
+    for gone in ("details.filters", "matchMedia", "autofocus", '"pointerdown"', ".blur("):
+        assert gone not in js, gone
+    assert 'classList.add("js")' in js
+    assert '["notice", "n", "m", "undo"]' in js
+    # The entry may be a layer's (Ruling 11): its state is kept.
+    assert "history.replaceState(history.state," in js
 
 
 # --- touch, focus, notices --------------------------------------------------
@@ -84,18 +91,8 @@ def test_each_engine_is_one_compact_row(client):
     assert body.count('class="row engine-row"') == 3
 
 
-def test_the_search_box_is_let_go_after_the_browser_focuses_it():
-    js = WEB.joinpath("static", "layout.js").read_text(encoding="utf-8")
-    assert 'addEventListener("load"' in js
-
-
-def test_a_focus_nobody_asked_for_is_dropped_but_a_tap_is_not():
-    js = WEB.joinpath("static", "layout.js").read_text(encoding="utf-8")
-    assert '"pointerdown"' in js and '"focus"' in js
-
-
-def test_the_filters_fold_before_the_first_paint():
-    """At the end of <body> the page is still loading, but everything it
-    folds is already there: waiting for DOMContentLoaded showed them open."""
+def test_the_js_class_is_set_before_the_first_paint():
+    """At the end of <body>'s head the page is still loading: waiting for
+    DOMContentLoaded would draw the JavaScript-only parts hidden first."""
     js = WEB.joinpath("static", "layout.js").read_text(encoding="utf-8")
     assert 'addEventListener("DOMContentLoaded"' not in js
