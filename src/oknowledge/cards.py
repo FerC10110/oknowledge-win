@@ -50,10 +50,13 @@ _IMDB = re.compile(r"^tt\d{7,8}$")
 _OPENLIBRARY = re.compile(r"^OL\d+W$", re.IGNORECASE)
 
 
-_IMDB_LINK = re.compile(r"https?://(?:www\.|m\.)?imdb\.com/title/(tt\d{7,})(?:[/?#].*)?",
+# The id, then nothing but a slash, a query or a fragment: a page under the
+# title ("/reviews") or text after it is not the card. Open Library's own
+# links carry the title's slug after the id, so one such segment is allowed.
+_IMDB_LINK = re.compile(r"https?://(?:www\.|m\.)?imdb\.com/title/(tt\d{7,8})/?(?:[?#].*)?",
                         re.IGNORECASE)
-_OPENLIBRARY_LINK = re.compile(r"https?://(?:www\.)?openlibrary\.org/works/(OL\d+W)(?:[/?#].*)?",
-                               re.IGNORECASE)
+_OPENLIBRARY_LINK = re.compile(r"https?://(?:www\.)?openlibrary\.org/works/(OL\d+W)"
+                               r"(?:/[\w.%-]+)?/?(?:[?#].*)?", re.IGNORECASE)
 
 
 @dataclass(frozen=True)

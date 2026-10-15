@@ -20,7 +20,6 @@ en `2026-10-14-rediseno-biblioteca-pendientes.md`.
 - "Abrir en" usa `note.source` y no el dominio del link: con la fuente vacía
   dice "Abrir en  ↗". Una URL que no es http desaparece en vez de mostrarse
   como texto.
-- `from_link` acepta basura al final del link.
 - La barra lateral mide 216 px (la spec) y en el diseño ~200 px.
 
 ## Panel y autoguardado

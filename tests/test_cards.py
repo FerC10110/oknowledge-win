@@ -112,3 +112,30 @@ def test_any_other_link_or_text_is_not_a_catalog_link():
     for text in ("https://myanimelist.net/anime/1", "https://www.goodreads.com/book/show/1",
                  "https://imdb.com/name/nm0000116", "Terminator", ""):
         assert from_link(text) is None
+
+
+# --- polish: a catalog link is its id and nothing after it but a query or fragment ---
+
+@pytest.mark.parametrize("text", [
+    "https://www.imdb.com/title/tt0088247/garbage",
+    "https://www.imdb.com/title/tt0088247/reviews?x=1",
+    "https://www.imdb.com/title/tt008824712345/",
+    "https://openlibrary.org/works/OL893414W/Dune/editions",
+    "https://openlibrary.org/works/OL893414W.json",
+])
+def test_a_catalog_link_with_garbage_after_the_id_is_not_a_card(text):
+    assert from_link(text) is None
+
+
+@pytest.mark.parametrize("text, query", [
+    ("https://www.imdb.com/title/tt0088247", "tt0088247"),
+    ("https://www.imdb.com/title/tt0088247/", "tt0088247"),
+    ("https://www.imdb.com/title/tt0088247/?ref_=x#top", "tt0088247"),
+    ("https://www.imdb.com/title/tt0088247#top", "tt0088247"),
+    ("https://www.imdb.com/title/tt12345678/", "tt12345678"),
+    ("https://openlibrary.org/works/OL893414W", "OL893414W"),
+    ("https://openlibrary.org/works/OL893414W/Dune?edition=x", "OL893414W"),
+    ("https://openlibrary.org/works/OL893414W/Fantastic_Mr_FOX/", "OL893414W"),
+])
+def test_a_catalog_link_may_end_in_a_query_or_a_fragment(text, query):
+    assert from_link(text).query == query
