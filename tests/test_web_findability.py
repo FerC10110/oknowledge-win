@@ -395,6 +395,8 @@ def test_ids_are_url_encoded_in_links(tmp_path):
     path = next(cfg.links_dir.glob("*.md"))
     path.write_text(path.read_text(encoding="utf-8").replace(
         "status:", "cover: ../attachments/x.png\nstatus:", 1), encoding="utf-8")
+    cfg.attachments_dir.mkdir(parents=True, exist_ok=True)     # a cover is drawn if its file is there
+    (cfg.attachments_dir / "x.png").write_bytes(b"\x89PNG")
     text = client.get("/").text
     assert "sel=a+b%3Fc%23d" in text and "/cover/a%20b%3Fc%23d" in text
     assert "sel=a b" not in text
