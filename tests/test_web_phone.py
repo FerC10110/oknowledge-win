@@ -314,3 +314,64 @@ def test_neither_the_hint_nor_the_way_back_moves_the_desktop():
     css = static("app.css")
     assert ".btn:has(> .enter-hint) { gap: 0; }" in css
     assert ".detail-back { display: none; }" in css
+
+
+# --- Task 5: the frame (spec §1, §2.2, §3, §4, §5, §12) ------------------------------------
+
+PHONE = "@media (max-width: 60rem) {"
+WIDE = "@media (max-width: 60rem) and (min-width: 42rem) {"
+
+
+def test_one_phone_block_replaces_the_unpolished_one():
+    css = static("app.css")
+    assert css.count(PHONE) == 1
+    assert ".app, .app.legacy { display: block; height: auto; }" not in css
+    assert "--tabbar-h: calc(60px + env(safe-area-inset-bottom));" in css
+    phone = block(css, PHONE)
+    assert "height: 100vh; height: 100dvh;" in phone
+    assert "overflow-x: clip" in phone
+    assert "env(safe-area-inset-top)" in phone
+    assert "max(8px, env(safe-area-inset-bottom))" in phone
+    assert ".sidebar { display: none; }" in phone
+    assert ".detail:not([data-open]) { display: none; }" in phone
+    # block() stops at the closing brace: the marker sits right after it.
+    assert css[css.index(PHONE):].startswith(phone + " /* end of the phone */")
+
+
+def test_every_phone_field_is_16px_so_ios_does_not_zoom():
+    phone = block(static("app.css"), PHONE)
+    assert re.search(r"\.unified input\[type=text\] \{[^}]*height: 46px;[^}]*font-size: 16px;", phone)
+
+
+def test_the_tabs_step_aside_while_typing():
+    phone = block(static("app.css"), PHONE)
+    assert re.search(r"textarea, select\):focus\) \.tabbar \{ display: none; \}", phone)
+
+
+def test_between_42_and_60rem_only_the_grids_widen():
+    wide = block(static("app.css"), WIDE)
+    assert ".tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); }" in wide
+    assert ".posters { grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); }" in wide
+    assert ".idea-shelf .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }" in wide
+
+
+def test_a_finger_sees_the_checkbox_and_not_the_keys():
+    css = static("app.css")
+    assert ".check { opacity: 1; }" in block(css, "@media (hover: none) {")
+    coarse = block(css, "@media (pointer: coarse) {")
+    for sel in (".key", ".enter-hint", ".unified .hint", '[data-modal="keys"]'):
+        assert sel in coarse, sel
+
+
+def test_a_filter_with_no_twin_unlights_the_other_drawing_and_lights_its_tab():
+    """★ Favoritos has no chip: the row must not keep the last one lit; and
+    the tab bar follows a filter clicked (Cocina from Favoritos lights Biblioteca)."""
+    js = static("shell.js")
+    head = js.index("function setActive")
+    body = js[head:js.index("\n  }\n", head)]
+    assert 'if (!twin && link.closest("[data-apart]")) return;' in body
+    assert "litTab(href);" in body
+    head = js.index("function litTab")
+    body = js[head:js.index("\n  }\n", head)]
+    assert '".tabbar a"' in body
+    assert 'classList.toggle("on"' in body

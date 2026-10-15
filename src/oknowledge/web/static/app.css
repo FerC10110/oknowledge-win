@@ -63,11 +63,6 @@ body { background: #141519; }
 .toast button:hover { text-decoration: underline; }
 @keyframes toast-out { to { opacity: 0; visibility: hidden; } }
 
-@media (max-width: 60rem) {
-  .app, .app.legacy { display: block; height: auto; }
-  .sidebar { border-right: 0; border-bottom: 1px solid var(--b-div); }
-}
-
 /* --- the library ------------------------------------------------------- */
 .app.home { grid-template-columns: 216px minmax(0, 1fr) 480px; overflow: hidden; }
 .center { display: flex; flex-direction: column; min-height: 0; min-width: 0;
@@ -558,3 +553,114 @@ html:not(.js) .js-only { display: none !important; }
 .detail-back { display: none; }
 /* A ↵ hint is a span (spec §4): no gap may open between it and its words. */
 .btn:has(> .enter-hint) { gap: 0; }
+
+:root { --tabbar-h: calc(60px + env(safe-area-inset-bottom)); }
+
+/* The phone: one column (spec §1-§12). Every rule for it lives in this
+   block, in (hover: none) or in (pointer: coarse): the desktop above 60rem
+   does not move by a pixel. */
+@media (max-width: 60rem) {
+  /* §2 the frame: top bar, the column, the tabs. The list scrolls inside. */
+  .app, .app.home, .app.ocio, .app.idea-shelf, .app.idea-screen, .app.legacy {
+    display: flex; flex-direction: column; height: 100vh; height: 100dvh;
+    overflow: hidden; overflow-x: clip; }
+  .sidebar { display: none; }
+  .topbar { display: flex; flex: none; align-items: center; justify-content: space-between;
+    padding: calc(18px + env(safe-area-inset-top)) 16px 10px; line-height: normal; }
+  .topbar .logo { font-size: 16px; font-weight: 600; color: var(--t1); text-decoration: none; }
+  .topbar-settings { display: inline-flex; align-items: center; gap: 6px; min-height: 44px;
+    margin: -12px -8px; padding: 0 8px; font-size: 13px; color: var(--t5); text-decoration: none; }
+  .topbar-settings b { font-weight: 400; font-size: 12px; color: var(--t6); }
+  .center { flex: 1; min-height: 0; border-right: 0; }
+  .detail:not([data-open]) { display: none; }
+  .tabbar { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); position: fixed;
+    left: 0; right: 0; bottom: 0; z-index: 30; background: #141519;
+    border-top: 1px solid var(--b-div); padding: 8px 8px max(8px, env(safe-area-inset-bottom));
+    line-height: normal; }
+  .tabbar a { display: flex; align-items: center; justify-content: center; min-height: 44px;
+    font-size: 12px; color: var(--t5); text-decoration: none; }
+  .tabbar a.on { color: var(--t1); font-weight: 500; }
+  /* The keyboard is up: a fixed bar would ride on it (Ruling 16). */
+  body:has(:is(input:not([type=checkbox]):not([type=radio]):not([type=file]), textarea, select):focus) .tabbar { display: none; }
+  /* Pages that scroll as pages (§2.2): an idea, the old pages. */
+  .app.idea-screen, .app.legacy { height: auto; overflow: visible; overflow-x: clip; }
+  body:has(> .app.idea-screen) { padding-bottom: var(--tabbar-h); }
+  .legacy-main { overflow: visible; min-width: 0; padding: 12px 16px var(--tabbar-h); }
+
+  /* §3 the chip row: scrolls by itself, never the page. Each chip is drawn
+     34px tall and touched 44px tall (::after, Ruling 21). */
+  .chip-row { display: flex; flex: none; align-items: center; gap: 6px; overflow-x: auto;
+    scrollbar-width: none; padding: 5px 16px; scroll-padding-inline: 16px; line-height: normal; }
+  .chip-row::-webkit-scrollbar { display: none; }
+  .chip-group { display: flex; flex: none; align-items: center; gap: 6px; }
+  .chip-group + .chip-group::before { content: ""; flex: none; width: 1px; height: 20px;
+    margin: 0 2px; background: var(--b-input); }
+  .fchip { position: relative; display: inline-flex; flex: none; align-items: center; gap: 6px;
+    min-height: 34px; padding: 7px 12px; border: 1px solid var(--b-input); border-radius: 999px;
+    font-size: 13px; color: var(--t3); text-decoration: none; white-space: nowrap; }
+  .fchip::after { content: ""; position: absolute; inset: -5px -3px; }
+  .fchip.on { background: #22232a; color: var(--t1); }
+
+  /* §4 the field: 16px (iOS zooms on less); saving takes a row of its own. */
+  .unified { flex: none; flex-wrap: wrap; padding: 0 16px 12px; border-bottom: 0; }
+  .unified input[type=text] { min-width: 0; height: 46px; border-radius: 12px; font-size: 16px; }
+  .unified .hint { display: none; }
+  .unified.saving .save { display: grid; flex-basis: 100%; gap: 8px;
+    grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .unified .save:not(:has(.seg)) { grid-template-columns: minmax(0, 1fr); }
+  .unified .save .seg { display: contents; }
+  .unified .save .seg label { display: block; margin: 0; }
+  .unified .save .seg label span, .unified .save .btn, .unified .find .btn {
+    display: flex; align-items: center; justify-content: center; height: auto; min-height: 44px;
+    padding: 11px; border: 1px solid var(--b-input); border-radius: 10px; font-size: 14px; }
+  .unified .save .seg input:checked + span { background: var(--s7); color: var(--t1); }
+  .unified.finding .find { flex-basis: 100%; }
+  .unified .find .btn { width: 100%; }
+
+  /* §4 the list head: "{filtro} · N", then Seleccionar and Lista | Tarjetas. */
+  .list-head { flex: none; flex-wrap: wrap; gap: 8px; padding: 0 16px 8px; }
+  .list-head > span { display: flex; flex-wrap: wrap; align-items: center; gap: 0 6px; min-width: 0; }
+  .list-head .unrewritten { flex-basis: 100%; margin: 6px 0 0; }
+  .list-head .seg a { position: relative; display: flex; align-items: center; min-height: 30px;
+    padding: 0 14px; }
+  .list-head .seg a::after { content: ""; position: absolute; inset: -7px 0; }
+  .list-head .sort > summary { position: relative; }
+  .list-head .sort > summary::after { content: ""; position: absolute; inset: -6px 0; }
+
+  /* §5 the lists: they end above the tabs. */
+  .list-body { padding: 0 16px calc(12px + var(--tabbar-h)); }
+  .list-body:has(> .rows) { padding: 0 8px calc(12px + var(--tabbar-h)); }
+  .list-body:has(> .posters) { padding: 0 0 calc(12px + var(--tabbar-h)); }
+  .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .tiles .thumb { height: 84px; }
+  .tiles .domain { font-size: 10px; }
+  .tiles .text { padding: 9px 10px 11px; }
+  .rows .item { border-radius: 0; border-bottom: 1px solid #1d1e23; }
+  .rows .hit { min-height: 44px; }
+  .rows .title { font-size: 15px; }
+  .rows .date { font-size: 11px; }
+  .posters { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; padding: 4px 16px 20px; }
+  .idea-shelf .tiles { grid-template-columns: minmax(0, 1fr); }
+  .empty-state { margin-top: 10vh; padding: 0 16px; }
+  /* No panel beside the list to explain a lit item: only keys draw it (§10). */
+  #list:not(.keyed) .rows .item.on { background: none; }
+  #list:not(.keyed) .tiles .item.on { border-color: var(--b-card); }
+  #list:not(.keyed) .poster.on .art { border-color: transparent; }
+} /* end of the phone */
+
+/* A phone on its side, a tablet: the same column, wider grids (§1, §5). */
+@media (max-width: 60rem) and (min-width: 42rem) {
+  .tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .posters { grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); }
+  .idea-shelf .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* A finger at any width (§1, §9): what waited for a mouse is there. */
+@media (hover: none) {
+  .check { opacity: 1; }
+}
+
+/* A finger: what only a keyboard uses is not drawn (§1, §4). */
+@media (pointer: coarse) {
+  .key, .enter-hint, .unified .hint, [data-modal="keys"] { display: none; }
+}

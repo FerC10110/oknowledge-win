@@ -317,12 +317,27 @@
       var twin = root.contains(link) ? link : Array.prototype.find.call(
         root.querySelectorAll("a[data-nav]"),
         function (a) { return a.getAttribute("href") === href; });
-      if (!twin) return;
-      (twin.closest("[data-apart]") || root).querySelectorAll("a.filter.on, a.fchip.on")
+      // No twin (★ Favoritos has no chip): a library filter still unlights
+      // the other drawing, or its last choice would stay lit there.
+      if (!twin && link.closest("[data-apart]")) return;
+      (twin ? twin.closest("[data-apart]") || root : root).querySelectorAll("a.filter.on, a.fchip.on")
         .forEach(function (a) { a.classList.remove("on"); });
-      twin.classList.add("on");
+      if (twin) twin.classList.add("on");
     });
+    litTab(href);
     litChipInView();
+  }
+
+  // The phone's tab bar follows a filter clicked: ★ Favoritos lights its
+  // tab, any other library filter lights Biblioteca (a tab of the same
+  // page with no query). A page with no such tab keeps its own.
+  function litTab(href) {
+    var tabs = Array.prototype.slice.call(document.querySelectorAll(".tabbar a"));
+    var path = new URL(href, location.href).pathname;
+    var tab = tabs.find(function (a) { return a.getAttribute("href") === href; }) ||
+      tabs.find(function (a) { var u = new URL(a.href); return u.pathname === path && !u.search; });
+    if (!tab) return;
+    tabs.forEach(function (a) { a.classList.toggle("on", a === tab); });
   }
 
   // The chip row scrolls sideways: the lit chip is brought into view, and
