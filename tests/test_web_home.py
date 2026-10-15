@@ -247,3 +247,22 @@ def test_the_home_speaks_spanish(client, tmp_path):
                  "MARCAS", "COLECCIONES", "Tarjetas", "Lista", "★ Favoritos",
                  "Completo", "Resumen", "Abrir el original"):
         assert text in body
+
+
+# --- review M-4: a link's cover whose file is gone draws no broken image ---------------------
+
+@pytest.mark.parametrize("there", [True, False])
+def test_a_library_row_draws_its_cover_only_if_the_file_is_there(tmp_path, there):
+    vault = tmp_path / "vault"
+    (vault / "oknowledge" / "links").mkdir(parents=True)
+    cfg = Config(vault=vault)
+    if there:
+        cfg.attachments_dir.mkdir(parents=True, exist_ok=True)
+        (cfg.attachments_dir / "a.jpg").write_bytes(b"\xff\xd8\xff")
+    linked = note("a1", "Con portada")
+    linked.cover = "../attachments/a.jpg"
+    write_note(cfg, linked, "es")
+    rebuild_indexes(cfg, "es")
+    body = TestClient(create_app(cfg)).get("/").text
+    item = re.search(r'<li class="item[^"]*" id="card-a1".*?</li>', body, re.S).group(0)
+    assert ('<img src="/cover/a1"' in item) is there

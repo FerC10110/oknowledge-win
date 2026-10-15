@@ -9,7 +9,7 @@
   {%- endif %}
   <a class="hit" href="{{ view.url(sel=note.id) }}" data-sel="{{ note.id }}">
     <span class="thumb" style="background: {{ note.category|tint }}">
-      {% if note.cover %}<img src="/cover/{{ note.id|slug }}" alt="" loading="lazy">{% endif %}
+      {% if note is drawn_cover('links') %}<img src="/cover/{{ note.id|slug }}" alt="" loading="lazy">{% endif %}
       {% if note.source %}<span class="domain mono">{{ note.source }}</span>{% endif %}
       {% if note.mark %}<span class="flag{% if note.mark == '⭐' %} fav{% endif %}"{% if note.mark == '⭐' %} role="img" aria-label="{{ t('Favorite') }}"{% endif %}>{% if note.mark == '⭐' %}{% include "icon-star.html" %}{% else %}{{ note.mark }}{% endif %}</span>{% endif %}
     </span>
