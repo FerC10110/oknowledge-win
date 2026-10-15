@@ -9,8 +9,6 @@ entrega 3. Ninguno pierde datos: en el peor caso una nota queda en
 
 ## Código
 
-- Reglas viejas `.sidebar .foot` al lado de las nuevas `.foot-link`; clase
-  `bulk-star` sin uso.
 - `settings_panel` arma `t`, `lang` y `batch` a mano en vez de usar `page()`.
 - `select.js` repite el callback de Deshacer que `app.js` ya hace por defecto.
 - `idea.js`: el `refresh(...).then(...)` no atrapa el rechazo (como antes).
