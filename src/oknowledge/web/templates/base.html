@@ -43,6 +43,9 @@
       {%- endfor %}
     </dl>
   </dialog>
+  {# Settings (spec §3.1): filled by settings.js from /settings/panel. Empty
+     without JavaScript: the sidebar's "Ajustes" is then a link to /settings. #}
+  <dialog id="settings-modal" class="modal settings" aria-label="{{ t('Settings') }}" data-failed="{{ t('The settings could not be loaded. Check that oknowledge is still running.') }}"></dialog>
   {# Not deferred: it has to fold the page before the first paint. #}
   <script src="/static/layout.js"></script>
   <script src="/static/app.js" defer></script>

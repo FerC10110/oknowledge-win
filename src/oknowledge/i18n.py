@@ -606,6 +606,9 @@ STRINGS = {
         "Delete the selected": "Borrar seleccionados",
         "List / cards": "Lista / tarjetas",
         "Close / deselect": "Cerrar / deseleccionar",
+        # The Settings modal (delivery 3, spec §3.1).
+        "The settings could not be loaded. Check that oknowledge is still running.":
+            "No se pudieron cargar los ajustes. Fijate que oknowledge siga andando.",
         "Restored, but the indexes could not be rebuilt. Run `oknowledge reindex` "
         "once the folder is writable again.":
             "Restaurado, pero no se pudieron rehacer los índices. Corré "

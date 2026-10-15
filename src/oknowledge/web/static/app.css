@@ -495,3 +495,12 @@ html:not(.js) .js-only { display: none !important; }
 .keys-grid dd { margin: 0; color: var(--t3); }
 .keys-grid kbd { display: inline-block; min-width: 18px; padding: 1px 5px; border: 1px solid #2a2b32;
   border-radius: 4px; font-size: 10px; text-align: center; color: var(--t2); }
+
+/* The Settings modal (spec §3.1): head and tabs fixed, the body scrolls. */
+.modal.settings { width: 640px; height: 520px; max-width: calc(100vw - 32px);
+  max-height: calc(100vh - 32px); overflow: hidden; }
+.modal.settings .settings-body { height: 100%; display: flex; flex-direction: column; }
+.modal.settings .settings-scroll { flex: 1; overflow-y: auto; }
+.modal.settings.loading { cursor: progress; }
+.modal-failed { margin: 0; padding: 26px 22px 12px; color: var(--t2); font-size: 14px; }
+.modal-failed-foot { margin: 0; padding: 0 22px 22px; text-align: right; }
