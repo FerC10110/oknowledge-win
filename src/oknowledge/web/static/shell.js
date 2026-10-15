@@ -120,12 +120,12 @@
           var still = here().searchParams.get("sel");
           if (still) markCurrent(still);
         } else if (panel) {
-          var current = items ? items.dataset.current : "";
-          var shown = panel.querySelector("[data-panel]");
+          var serverPick = items ? items.dataset.current : "";
+          var onScreen = panel.querySelector("[data-panel]");
           // Not over a catalog search the URL still names (Ocio): the list
           // was reloaded under it, the search was not left.
           if (current && !target.searchParams.get("buscar") &&
-              (!shown || shown.dataset.panel !== current)) loadPanel(current, true);
+              (!onScreen || onScreen.dataset.panel !== serverPick)) loadPanel(serverPick, true);
         }
         observe();
         watch();
@@ -186,8 +186,8 @@
   // the URL and the list say it is still the one shown.
   function keepShown(failed) {
     toast(failed.message || texts.saveFailed);
-    var shown = panel.querySelector("[data-panel]");
-    var id = shown ? shown.dataset.panel : "";
+    var onScreen = panel.querySelector("[data-panel]");
+    var id = onScreen ? onScreen.dataset.panel : "";
     if (!id) return;
     var url = here();
     ["buscar", "catalogo", "year"].forEach(function (name) { url.searchParams.delete(name); });
@@ -483,9 +483,9 @@
         // it ends; its own notice says "reload in a moment", which is wrong
         // here. The server marks those (`runs`); every other notice is said.
         if (!answer.runs) toast(answer.notice || "");
-        var shown = panel && panel.querySelector("[data-panel]");
-        if (shown && shown.dataset.panel && stillPicked(shown.dataset.panel)) {
-          loadPanel(shown.dataset.panel, true);    // deleted: gone
+        var onScreen = panel && panel.querySelector("[data-panel]");
+        if (onScreen && onScreen.dataset.panel && stillPicked(onScreen.dataset.panel)) {
+          loadPanel(onScreen.dataset.panel, true);    // deleted: gone
         }
         loadList(here().href, true, "refresh");
       })
@@ -516,8 +516,8 @@
             toast(state.status === "failed" ? failedAs : doneAs);
             // What the user picked, not what is on screen: that is still the
             // old panel while a newer pick is on its way.
-            var shown = panel && panel.querySelector("[data-panel]");
-            if (shown && shown.dataset.panel === id && stillPicked(id)) loadPanel(id, true);
+            var onScreen = panel && panel.querySelector("[data-panel]");
+            if (onScreen && onScreen.dataset.panel === id && stillPicked(id)) loadPanel(id, true);
             loadList(here().href, true, "refresh");
           })
           .catch(function () { /* try again in three seconds */ });
@@ -537,10 +537,11 @@
     return n || 1;
   }
 
-  // With nothing picked, any move picks the first one.
+  // With nothing picked, any move picks the first one. An empty list is
+  // nothing to move: the key is left alone (false).
   function step(by) {
     var items = shown();
-    if (!items.length) return;
+    if (!items.length) return false;
     var at = -1;
     var id = current();
     for (var i = 0; i < items.length; i++) if (idOf(items[i]) === id) at = i;
@@ -549,10 +550,19 @@
     if (to !== at) pick(idOf(items[to]));
   }
 
-  ok.keys.j = ok.keys.ArrowRight = function () { step(1); };
-  ok.keys.k = ok.keys.ArrowLeft = function () { step(-1); };
-  ok.keys.ArrowDown = function () { step(rowWidth()); };
-  ok.keys.ArrowUp = function () { step(-rowWidth()); };
+  ok.keys.j = ok.keys.ArrowRight = function () { return step(1); };
+  ok.keys.k = ok.keys.ArrowLeft = function () { return step(-1); };
+  ok.keys.ArrowDown = function () { return step(rowWidth()); };
+  ok.keys.ArrowUp = function () { return step(-rowWidth()); };
+
+  // The panel, only once it shows the pick. Right after a j the old one is
+  // still on screen until the new one lands: f, e and Enter wait for it
+  // rather than act on the item just left.
+  function pickedPanel() {
+    var onScreen = panel && panel.querySelector("[data-panel]");
+    var id = current();
+    return onScreen && id && onScreen.dataset.panel === id ? panel : null;
+  }
 
   // Enter: the original in another tab (library, Ocio), or the idea's screen.
   // On an item's own checkbox (select.js) it is that item's Enter: one not
@@ -568,7 +578,7 @@
       location.href = hit.href;
       return;
     }
-    var open = panel.querySelector("a[data-open]");
+    var open = pickedPanel() && panel.querySelector("a[data-open]");
     if (!open) return false;
     window.open(open.href, "_blank", "noopener");
     toast((texts.opening || "").replace("%1", new URL(open.href).hostname.replace(/^www\./, "")));
@@ -576,14 +586,14 @@
 
   // f: the panel's ★, as a click (the library only: Ocio has no favourites).
   ok.keys.f = function () {
-    var star = mode === "library" && panel && panel.querySelector("form.push button.star");
+    var star = mode === "library" && pickedPanel() && panel.querySelector("form.push button.star");
     if (!star) return false;
     star.click();
   };
 
   // e: the panel's "+ tag" (the keydown's default is prevented, so no "e").
   ok.keys.e = function () {
-    var box = panel && document.getElementById("tag-add");
+    var box = pickedPanel() && document.getElementById("tag-add");
     if (!box || !panel.contains(box)) return false;
     box.focus();
   };

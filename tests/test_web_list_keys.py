@@ -110,3 +110,20 @@ def test_the_list_is_offered_to_the_other_scripts():
     assert re.search(r"ok\.list = \{", text)
     for name in ("current:", "pick:", "next:", "reload:", "shown:"):
         assert name in between(text, "ok.list = {", "};"), name
+
+
+def test_the_panel_keys_wait_for_the_pick_to_land():
+    # A fast j then f must not star the item just left (review, fix round 1).
+    text = SHELL.read_text(encoding="utf-8")
+    rule = between(text, "function pickedPanel", "ok.keys.Enter")
+    assert "current()" in rule and "dataset.panel === id" in rule
+    for key, end in (("ok.keys.Enter", "ok.keys.f"), ("ok.keys.f", "ok.keys.e"),
+                     ("ok.keys.e", "ok.keys.v")):
+        assert "pickedPanel()" in between(text, key, end), key
+
+
+def test_an_empty_list_leaves_the_arrows_alone():
+    body = between(SHELL.read_text(encoding="utf-8"), "function step", "ok.keys.j")
+    assert "if (!items.length) return false;" in body
+    keys = between(SHELL.read_text(encoding="utf-8"), "ok.keys.j", "function pickedPanel")
+    assert keys.count("return step(") == 4

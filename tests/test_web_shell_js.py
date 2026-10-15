@@ -74,7 +74,7 @@ def test_a_save_that_lands_after_another_pick_does_not_reload_the_old_panel():
     X again instead of Y). It asks what the user picked, not whether any
     panel load happened since: two quick saves on X must both reload X."""
     body = between(SCRIPT.read_text(encoding="utf-8"), 'form[data-inline]', "// --- links being read")
-    assert "stillPicked(shown.dataset.panel)" in body
+    assert "stillPicked(onScreen.dataset.panel)" in body
     assert "shownAsked" not in body
 
 
