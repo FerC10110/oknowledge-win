@@ -109,6 +109,35 @@
     return !items || items.dataset.current === id;
   }
 
+  // The panel's text boxes (Ocio's note) save themselves. Before the panel
+  // is swapped they send what they have and it waits for them to land: a
+  // panel fetched before would show older text, and the next keys would
+  // save that over what was typed in between. Resolves with null, or the
+  // error of a save that failed.
+  function settled() {
+    var ok = window.oknowledge;
+    return ok && ok.settle ? ok.settle(panel) : Promise.resolve(null);
+  }
+
+  function dirty() {
+    var ok = window.oknowledge;
+    return !!(ok && ok.dirty && ok.dirty(panel));
+  }
+
+  // A save failed: the panel stays, with the text in its box (spec §1), and
+  // the URL and the list say it is still the one shown.
+  function keepShown(failed) {
+    toast(failed.message || texts.saveFailed);
+    var shown = panel.querySelector("[data-panel]");
+    var id = shown ? shown.dataset.panel : "";
+    if (!id) return;
+    var url = here();
+    ["buscar", "catalogo", "year"].forEach(function (name) { url.searchParams.delete(name); });
+    url.searchParams.set("sel", id);
+    history.replaceState(null, "", url.pathname + url.search);
+    markCurrent(id);
+  }
+
   // `gone` is for a link that may have stopped existing while it was shown
   // (an analysis that failed): its 404 empties the panel instead of
   // reloading the page, which would wipe the toast that just said so.
@@ -122,17 +151,33 @@
     ["buscar", "catalogo", "year"].forEach(function (name) { url.searchParams.delete(name); });
     history.replaceState(null, "", url.pathname + url.search);
     markCurrent(id);
-    return fetch("/panel/" + encodeURIComponent(id) + url.search)
-      .then(function (r) {
-        if (gone && r.status === 404) return null;
-        if (!r.ok) throw new Error(r.status);
-        return r.text();
+    var STOP = {};
+    return settled()
+      .then(function (failed) {
+        if (mine !== shownAsked) return STOP;   // a newer panel was asked for since
+        if (failed) { keepShown(failed); return STOP; }
+        return fetch("/panel/" + encodeURIComponent(id) + url.search)
+          .then(function (r) {
+            if (gone && r.status === 404) return null;
+            if (!r.ok) throw new Error(r.status);
+            return r.text();
+          });
       })
       .then(function (html) {
-        if (mine !== shownAsked) return;      // a newer panel was asked for since
+        if (html === STOP || mine !== shownAsked) return;      // a newer panel was asked for since
+        // Typed in while this was on its way: that text is not in `html`.
+        if (dirty(panel)) { loadPanel(id, gone); return; }
         if (html === null) { emptyPanel(); return; }
+        var active = document.activeElement;
+        var refocus = active && active.id && panel.contains(active) ? active.id : "";
         panel.innerHTML = html;
         if (window.oknowledge) window.oknowledge.bind(panel);   // the note saves itself
+        // The same card again (a rewrite ended): the box being typed in keeps the caret.
+        var again = refocus && document.getElementById(refocus);
+        if (again && panel.contains(again) && again.focus) {
+          again.focus();
+          if (again.setSelectionRange) again.setSelectionRange(again.value.length, again.value.length);
+        }
         watch();
       })
       .catch(function () { if (mine === shownAsked) location.href = url.href; });
@@ -146,6 +191,15 @@
   function loadCatalog(q, kind) {
     if (!panel) return;
     var mine = ++shownAsked;
+    // The card's note leaves with the panel: it lands first (loadPanel).
+    settled().then(function (failed) {
+      if (mine !== shownAsked) return;
+      if (failed) { keepShown(failed); return; }
+      showCatalog(q, kind, mine);
+    });
+  }
+
+  function showCatalog(q, kind, mine) {
     var url = here();
     var grid = url.searchParams.get("tipo") || "";
     // A kind picked in the panel, the one searched last, or the grid's
@@ -163,7 +217,11 @@
     if (grid) ask.set("grid", grid);
     fetch("/ocio/candidatos?" + ask.toString())
       .then(function (r) { if (!r.ok) throw new Error(r.status); return r.text(); })
-      .then(function (html) { if (mine === shownAsked) panel.innerHTML = html; })
+      .then(function (html) {
+        if (mine !== shownAsked) return;
+        if (dirty()) { loadCatalog(q, kind); return; }
+        panel.innerHTML = html;
+      })
       .catch(function () { if (mine === shownAsked) location.href = url.href; });
   }
 
@@ -266,6 +324,8 @@
     event.preventDefault();
     var catalog = event.submitter && event.submitter.id === "catalog-search";
     if (mode === "ocio" && !saves(field.value) && (catalog || field.value.trim())) {
+      // Not the live filter after it: its list would take buscar off the URL.
+      clearTimeout(timer);
       if (field.value.trim()) loadCatalog(field.value.trim().split(/\s+/).join(" "));
       return;
     }
@@ -356,8 +416,9 @@
       .then(function (answer) {
         if (!answer.ok) { toast(answer.error || texts.saveFailed); return; }
         // A write that starts a run (a rewrite) is told by its watcher when
-        // it ends; its own notice says "reload in a moment", which is wrong here.
-        if (!target.dataset.runs) toast(answer.notice || "");
+        // it ends; its own notice says "reload in a moment", which is wrong
+        // here. The server marks those (`runs`); every other notice is said.
+        if (!answer.runs) toast(answer.notice || "");
         var shown = panel && panel.querySelector("[data-panel]");
         if (shown && shown.dataset.panel && stillPicked(shown.dataset.panel)) {
           loadPanel(shown.dataset.panel, true);    // deleted: gone

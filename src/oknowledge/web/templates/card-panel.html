@@ -12,7 +12,7 @@
   <details class="menu more">
     <summary class="btn icon framed" aria-label="{{ t('More') }}" title="{{ t('More') }}">⋯</summary>
     <div class="menu-list">
-      <form method="post" action="/item/{{ note.id|slug }}/describe" data-inline data-runs>
+      <form method="post" action="/item/{{ note.id|slug }}/describe" data-inline>
         <button>{{ t('Rewrite the card') }}</button>
       </form>
       <details class="submenu">
@@ -51,7 +51,7 @@
       <p>{{ t('The card is as the source gave it (in English).') }}</p>
       {% if rewriting %}<p class="working">{{ t('Rewriting…') }}</p>
       {% else %}
-        <form method="post" action="/item/{{ note.id|slug }}/describe" data-inline data-runs>
+        <form method="post" action="/item/{{ note.id|slug }}/describe" data-inline>
           <button class="btn primary">{{ t('Rewrite in Spanish') }}</button>
         </form>
       {% endif %}

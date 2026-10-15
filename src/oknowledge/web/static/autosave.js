@@ -40,6 +40,11 @@
     return send(form.action, new FormData(form, submitter || undefined));
   }
 
+  // Every box bound, for the page's own listeners (added once, below) and
+  // for settle(). A box whose panel was swapped away is dropped once it has
+  // nothing left to send.
+  var boxes = [];
+
   function watchField(field) {
     if (field.dataset.bound) return;
     field.dataset.bound = "1";
@@ -48,6 +53,8 @@
     var inflight = false;
     var again = false;
     var outgoing = null;            // the newest text sent, until it fails
+    var failure = null;             // why the last save failed, until one lands
+    var waiting = [];               // settle()s waiting for nothing in flight
     var indicator = field.dataset.indicator ? document.querySelector(field.dataset.indicator) : null;
 
     function say(state) {
@@ -71,6 +78,7 @@
       say("saving");
       send(field.dataset.autosave, data, keep)
         .then(function (body) {
+          failure = null;
           if (outgoing === sending) saved = sending;   // not when leave() sent a newer one
           else return;
           say(field.value === saved ? "saved" : "saving");
@@ -78,6 +86,7 @@
           field.dispatchEvent(new CustomEvent("saved", { bubbles: true }));
         })
         .catch(function (error) {
+          failure = error;
           if (outgoing === sending) outgoing = null;
           say("");
           toast(error.message || texts.saveFailed);    // the text stays in the field
@@ -87,7 +96,18 @@
         .then(function () {
           inflight = false;
           if (again) { again = false; flush(); }
+          if (!inflight) wake();
         });
+    }
+
+    // What settle() is told once nothing is in flight: null when the field
+    // holds what the server has (or a failure was overtaken by a save that
+    // landed), else why the last save failed.
+    function wake() {
+      var told = field.value === saved ? null : failure;
+      var all = waiting;
+      waiting = [];
+      all.forEach(function (resolve) { resolve(told); });
     }
 
     // Leaving the page -- closing the tab, going back, switching away -- the
@@ -121,9 +141,24 @@
 
     field.addEventListener("input", schedule);
     field.addEventListener("blur", function () { flush(); });
-    window.addEventListener("pagehide", leave);
-    document.addEventListener("visibilitychange", function () {
-      if (document.visibilityState === "hidden") leave();
+    boxes.push({
+      field: field,
+      leave: leave,
+      idle: function () { return !timer && !inflight && field.value === saved; },
+      dirty: function () {
+        if (timer || inflight) return true;
+        // An empty text a field never sends is not waiting to be sent.
+        if (field.hasAttribute("data-skip-empty") && !field.value.trim()) return false;
+        return field.value !== saved;
+      },
+      // Send now what waits for the second, and say when it has landed.
+      settle: function () {
+        return new Promise(function (resolve) {
+          flush();
+          if (inflight) waiting.push(resolve);
+          else resolve(field.value === saved ? null : failure);
+        });
+      }
     });
     if (field.form) {
       field.form.addEventListener("submit", function (event) {
@@ -141,12 +176,42 @@
     };
   }
 
+  // Leaving the page: every box sends what it has not, the ones of a panel
+  // swapped away too.
+  function leaving() { boxes.forEach(function (box) { box.leave(); }); }
+  window.addEventListener("pagehide", leaving);
+  document.addEventListener("visibilitychange", function () {
+    if (document.visibilityState === "hidden") leaving();
+  });
+
+  function under(root) {
+    return boxes.filter(function (box) {
+      return !root || root === document || !box.field.isConnected ||
+             (root.contains ? root.contains(box.field) : true);
+    });
+  }
+
+  // Before a part of the page is swapped (shell.js's panel): every box under
+  // it sends what it has and this resolves when all of them have landed --
+  // with null, or the error of one that failed, whose text is still in its
+  // field. Boxes already swapped away count too: their text is still going.
+  function settle(root) {
+    return Promise.all(under(root).map(function (box) { return box.settle(); }))
+      .then(function (told) { return told.filter(Boolean)[0] || null; });
+  }
+
+  // Whether a box under `root` has text the server does not have yet.
+  function dirty(root) {
+    return under(root).some(function (box) { return box.dirty(); });
+  }
+
   function bind(root) {
+    boxes = boxes.filter(function (box) { return box.field.isConnected || !box.idle(); });
     var scope = root || document;
     scope.querySelectorAll("[data-nojs]").forEach(function (el) { el.hidden = true; });
     scope.querySelectorAll("[data-autosave]").forEach(watchField);
   }
 
-  window.oknowledge = { toast: toast, post: post, bind: bind };
+  window.oknowledge = { toast: toast, post: post, bind: bind, settle: settle, dirty: dirty };
   bind(document);
 })();

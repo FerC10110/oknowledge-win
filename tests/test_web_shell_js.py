@@ -111,13 +111,6 @@ def test_inline_writes_ask_for_json_and_say_what_came_back():
     assert "answer.notice" in body and "answer.error" in body
 
 
-def test_a_write_that_starts_a_run_does_not_say_it_ended():
-    """A rewrite's notice says "reload in a moment": the watcher says when it
-    ends, so the start is not toasted (carried from Task 6)."""
-    body = between(SCRIPT.read_text(encoding="utf-8"), 'form[data-inline]', "// --- links being read")
-    assert "target.dataset.runs" in body
-
-
 def test_a_panel_that_lands_binds_its_autosave():
     body = between(SCRIPT.read_text(encoding="utf-8"), "function loadPanel", "function emptyPanel")
     assert "window.oknowledge" in body and ".bind(panel)" in body
@@ -144,3 +137,36 @@ def test_a_rewrite_says_its_own_words_when_it_ends():
     body = between(SCRIPT.read_text(encoding="utf-8"), "function watch", "observe();\n  watch();\n})")
     assert "doneAs" in body and "failedAs" in body
     assert "panel.querySelectorAll" in body
+
+
+def test_a_panel_waits_for_its_note_before_it_is_swapped():
+    """Fix round 1: the panel is fetched only after the note's saves have
+    landed; a failed one keeps the panel (and the text) where it is, and a
+    box typed in while the panel was on its way asks for it again."""
+    body = between(SCRIPT.read_text(encoding="utf-8"), "function settled", "function loadCatalog")
+    assert "settle(panel)" in body
+    head = body.index("settle(panel)")
+    assert body.index('fetch("/panel/"') > head
+    assert "if (failed)" in body and "mine !== shownAsked" in body[head:]
+    assert "dirty(panel)" in body
+
+
+def test_picking_a_card_ends_a_catalog_search():
+    body = between(SCRIPT.read_text(encoding="utf-8"), "function loadPanel", "function loadCatalog")
+    assert '["buscar", "catalogo", "year"]' in body and "searchParams.delete(name)" in body
+
+
+def test_a_list_reload_leaves_an_open_catalog_search_alone():
+    body = between(SCRIPT.read_text(encoding="utf-8"), "function loadList", "function markCurrent")
+    assert '!target.searchParams.get("buscar")' in body
+
+
+def test_enter_cancels_the_live_filter_before_searching_the_catalogs():
+    text = SCRIPT.read_text(encoding="utf-8")
+    body = between(text, 'form.addEventListener("submit"', "// --- more at the end")
+    assert body.index("clearTimeout(timer)") < body.index("loadCatalog(")
+
+
+def test_only_the_start_of_a_run_is_kept_quiet():
+    body = between(SCRIPT.read_text(encoding="utf-8"), 'form[data-inline]', "// --- links being read")
+    assert "answer.runs" in body and "dataset.runs" not in body

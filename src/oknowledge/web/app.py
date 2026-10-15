@@ -444,6 +444,12 @@ them, and every other notice of a write that landed (indexes-stale) is a
 warning the toast has to show."""
 
 
+RUNS = {"rewriting", "rewriting-all", "completing", "thinking"}
+"""The notices that say a run started behind the page ("reload in a moment
+to read it"). Their JSON says `runs`: a script that watches the run says
+when it ends, and does not toast its start as if it had."""
+
+
 def wants_json(request: Request) -> bool:
     """A script asking for the answer as data: the redesigned screens save in
     place and need to know how it went, not a page to go to (spec §1)."""
@@ -464,6 +470,8 @@ def answer(request: Request, where: str, notice: str = "", **params) -> Response
     status = FAILURES.get(notice)
     if status is not None:
         return JSONResponse({"ok": False, "error": said}, status_code=status)
+    if notice in RUNS:
+        return JSONResponse({"ok": True, "notice": said, "runs": True})
     return JSONResponse({"ok": True, "notice": said})
 
 

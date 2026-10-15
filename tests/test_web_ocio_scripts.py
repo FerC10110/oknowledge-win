@@ -52,10 +52,13 @@ def test_the_grid_says_the_same_for_a_rewrite_of_all(client):
     assert 'data-done-as="Done: card rewritten"' in grid
 
 
-def test_the_writes_that_start_a_rewrite_say_so(client):
-    """shell.js does not toast "reload in a moment" for these: the watcher
-    says when the rewrite ends."""
-    for page in ("/panel/c00000000001", "/ocio"):
-        body = client.get(page).text
-        for form in re.findall(r'<form[^>]*action="[^"]*(?:/describe|/ocio/reescribir)"[^>]*>', body):
-            assert "data-runs" in form, form
+def test_only_the_start_of_a_rewrite_is_marked_as_a_run(client):
+    """shell.js does not toast "reload in a moment": the watcher says when
+    the rewrite ends. "Every card is already rewritten" is still said."""
+    json = {"Accept": "application/json"}
+    # Already being rewritten: neither post starts a model, both answer.
+    client.app.state.rewriting.start("c00000000001", "describe")
+    started = client.post("/item/c00000000001/describe", headers=json).json()
+    assert started["ok"] and started.get("runs") is True
+    again = client.post("/ocio/reescribir", headers=json).json()
+    assert again["ok"] and "runs" not in again and again["notice"]
