@@ -658,7 +658,8 @@ html:not(.js) .js-only { display: none !important; }
   .detail[aria-busy="true"] > :not(.detail-back) { visibility: hidden; }
   .detail-back { display: flex; flex: none; align-items: center; min-height: 44px; padding: 0 16px;
     font-size: 14px; color: var(--acc); text-decoration: none; }
-  .detail-scroll, .detail-scroll.card, .detail-scroll.candidates { padding: 12px 16px 24px; gap: 16px; }
+  .detail-scroll, .detail-scroll.card, .detail-scroll.candidates { padding: 12px 16px max(24px, env(safe-area-inset-bottom));
+    gap: 16px; overscroll-behavior: contain; }
   .detail h1 { font-size: 22px; }
   .detail h1, .detail .where, .detail .body, .detail li, .detail a { overflow-wrap: anywhere; }
   .detail pre { max-width: 100%; overflow-x: auto; }
@@ -675,8 +676,6 @@ html:not(.js) .js-only { display: none !important; }
   .card-top { flex: none; flex-wrap: wrap; gap: 8px; padding: 10px 16px; }
   .card-top .seg button, .card-top .seg a { display: flex; align-items: center; min-height: 44px; }
   .card-top details.more { order: 2; margin-left: auto; }
-  /* The ⋯ menu's rows are touch targets too (spec §12). */
-  .card-top .menu-list button, .card-top .menu-list summary { min-height: 44px; }
   .card-top .stars.big { order: 3; flex-basis: 100%; }
   .stars.big button, .idea-controls .stars button { display: inline-flex; align-items: center;
     justify-content: center; width: 44px; height: 44px; }
