@@ -4,12 +4,15 @@ It is an agent, not a text service: it has bash and the network, and the
 prompt it gets carries text from a web page. Restricting its tools from its
 own config makes the free tier refuse it (measured: 403). The Linux version
 locks every run in from the outside with bubblewrap and pasta; on Windows
-neither exists, and it runs with --pure in an empty temporary folder only.
+neither exists, and it runs in an empty temporary folder only, as a run of
+its own (--pure on 1.x, --standalone on 2.x).
 """
 
 from __future__ import annotations
 
+import functools
 import json
+import re
 import subprocess
 import tempfile
 
@@ -31,6 +34,26 @@ def sandboxed(argv: list[str], cwd: str) -> list[str]:
     files, but nothing stops it from leaving.
     """
     return list(argv)
+
+
+@functools.lru_cache(maxsize=None)
+def isolation(name: str) -> str:
+    """The flag that keeps a run to itself, by opencode's version.
+
+    1.x had --pure: no plugins from outside. 2.0 dropped it and refuses the
+    whole run over it ("Unrecognized flag"); there a run talks to a
+    background service unless it is --standalone. A version nobody can read
+    is taken as the new one: that is what an install gets today.
+    """
+    try:
+        with tempfile.TemporaryDirectory() as cwd:
+            proc = subprocess.run(sandboxed([name, "--version"], cwd), cwd=cwd,
+                                  capture_output=True, text=True,
+                                  timeout=LIST_TIMEOUT, stdin=subprocess.DEVNULL)
+    except (OSError, subprocess.TimeoutExpired):
+        proc = None
+    said = re.search(r"(\d+)\.\d+", proc.stdout) if proc is not None else None
+    return "--pure" if said and int(said.group(1)) < 2 else "--standalone"
 
 
 def parse_opencode_models(text: str) -> list[str]:
@@ -108,7 +131,7 @@ class OpenCodeEngine:
             raise EngineError(f"opencode could not be run: {error}") from error
 
     def complete(self, prompt: str) -> str:
-        proc = self._run([self.binary, "run", "--pure", "-m", self.model, prompt])
+        proc = self._run([self.binary, "run", isolation(self.binary), "-m", self.model, prompt])
         if proc.returncode != 0:
             raise EngineError(f"opencode failed: {proc.stderr.strip()[:300]}")
         if not proc.stdout.strip():
@@ -116,7 +139,7 @@ class OpenCodeEngine:
         return proc.stdout
 
     def search(self, prompt: str) -> str:
-        proc = self._run([self.binary, "run", "--pure", "--format", "json",
+        proc = self._run([self.binary, "run", isolation(self.binary), "--format", "json",
                           "-m", self.model, prompt])
         if proc.returncode != 0:
             # A refused model says why in an error event, which parse_events

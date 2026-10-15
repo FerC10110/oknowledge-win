@@ -78,3 +78,13 @@ def isolated_state_tree(tmp_path, monkeypatch):
     asserts the result.
     """
     monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "xdg-state"))
+
+
+@pytest.fixture(autouse=True)
+def fresh_opencode_version():
+    """isolation() reads opencode's version once per process: a test that
+    fakes subprocess.run must not leave its answer for the next one."""
+    from oknowledge.ai.opencode import isolation
+    isolation.cache_clear()
+    yield
+    isolation.cache_clear()

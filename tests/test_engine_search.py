@@ -35,6 +35,7 @@ def ran(monkeypatch):
                                            stderr=seen["stderr"])
 
     monkeypatch.setattr("oknowledge.ai.opencode.sandboxed", lambda argv, cwd: ["bwrap", *argv])
+    monkeypatch.setattr("oknowledge.ai.opencode.isolation", lambda name: "--pure")    # a 1.x
     monkeypatch.setattr("subprocess.run", run)
     return seen
 

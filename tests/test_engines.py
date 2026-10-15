@@ -42,6 +42,7 @@ def test_opencode_runs_in_an_empty_directory_and_without_plugins(monkeypatch):
         return type("P", (), {"returncode": 0, "stdout": GOOD, "stderr": ""})()
 
     monkeypatch.setattr("subprocess.run", fake_run)
+    monkeypatch.setattr("oknowledge.ai.opencode.isolation", lambda name: "--pure")    # a 1.x
     out = OpenCodeEngine(model="opencode/x-free").complete("hola")
 
     assert out == GOOD
