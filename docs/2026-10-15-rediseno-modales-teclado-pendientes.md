@@ -18,7 +18,4 @@ entrega 3. Ninguno pierde datos: en el peor caso una nota queda en
   están en el repo.
 - El harness de `app.js` no cubre textarea/select/contenteditable, Enter sobre
   un link o botón, `?` sin diálogo ni `/`.
-- `test_every_translated_string_is_one_the_code_asks_for` compara por
-  substring: una traducción sin uso puede sobrevivir si su texto aparece dentro
-  de otro.
 - El test del foco de Atajos compara el HTML literal.

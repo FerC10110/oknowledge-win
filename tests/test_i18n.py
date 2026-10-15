@@ -11,7 +11,7 @@ def test_english_is_the_identity():
 
 def test_spanish_translates_what_it_knows_and_passes_through_the_rest():
     t = i18n.translator("es")
-    assert t("Search") == "Buscar"
+    assert t("Settings") == "Ajustes"
     assert t("Categories") == "Categorías"
     assert t("a string nobody translated") == "a string nobody translated"
 
@@ -46,25 +46,37 @@ def test_the_cases_that_tell_one_pass_from_a_loop():
 
 def test_every_translated_string_is_one_the_code_asks_for():
     """A key nobody passes to t() is a translation that can rot without
-    anybody noticing. The English key is the lookup, so it has to appear
-    somewhere a caller can produce it.
-
-    Whitespace, quotes and backslashes come out of both sides first, so a
-    notice written as four concatenated source lines still matches the one
-    string it builds.
+    anybody noticing. The English key is the lookup, so the code has to hold
+    it whole, as one string: a literal in the Python (adjacent literals
+    joined, as Python joins them) or inside a template's {{ }} / {% %}. A
+    key that only appears inside a longer string ("Search" in "Search your
+    ideas") is not asked for. Runs of whitespace count as one space, so a
+    notice written over several source lines still matches.
     """
+    import ast
     import pathlib
     import re
 
-    def squeezed(text):
-        return re.sub(r"""[\s"'\\]""", "", text)
+    def norm(text):
+        return re.sub(r"\s+", " ", text).strip()
 
     root = pathlib.Path(i18n.__file__).resolve().parent
-    files = [p for p in [*root.rglob("*.py"), *root.rglob("*.html")]
-             if p.name != "i18n.py"]
-    blob = squeezed("\n".join(p.read_text(encoding="utf-8") for p in files))
+    held = set()
+    for path in root.rglob("*.py"):
+        if path.name == "i18n.py":
+            continue
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if isinstance(node, ast.Constant) and isinstance(node.value, str):
+                held.add(norm(node.value))
+    quoted = re.compile(r"'((?:[^'\\]|\\.)*)'" r'|"((?:[^"\\]|\\.)*)"', re.S)
+    for path in root.rglob("*.html"):
+        text = path.read_text(encoding="utf-8")
+        for block in re.finditer(r"\{[{%](.*?)[}%]\}", text, re.S):
+            for found in quoted.finditer(block.group(1)):
+                literal = found.group(1) if found.group(1) is not None else found.group(2)
+                held.add(norm(re.sub(r"\\(.)", r"\1", literal)))
 
-    unused = [key for key in i18n.STRINGS["es"] if squeezed(key) not in blob]
+    unused = [key for key in i18n.STRINGS["es"] if norm(key) not in held]
     assert unused == [], f"declared and never asked for: {unused}"
 
 

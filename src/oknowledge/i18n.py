@@ -62,7 +62,6 @@ STRINGS = {
         "More": "Más",
         "No mark": "Sin marca",
         "Reprocess with AI": "Reprocesar con IA",
-        "Search": "Buscar",
         "Categories": "Categorías",
         "Settings": "Ajustes",
         "That is not an emoji the mark can be.": "Eso no es un emoji que pueda ser una marca.",
@@ -75,7 +74,6 @@ STRINGS = {
         "Saved": "Guardado",
         "Incomplete": "Incompleto",
         "Delete": "Borrar",
-        "Reprocess": "Reprocesar",
         "Rename": "Renombrar",
         "Save": "Guardar",
         "Engines": "Motores",
@@ -110,8 +108,6 @@ STRINGS = {
         "saved": "guardado",
         "Movies": "Películas",
         "Books": "Libros",
-        "Pending": "Pendiente",
-        "not rewritten": "sin reescribir",
         "Rewriting the cards one after the other. Reload in a while to read them.":
             "Reescribiendo las fichas, una después de la otra. Recargá en un rato para leerlas.",
         "Every card is already rewritten.": "Todas las fichas ya están reescritas.",
@@ -167,7 +163,6 @@ STRINGS = {
             "Escribí la idea primero: todavía no hay nada que guardar.",
         "Title": "Título",
         "Your idea": "Tu idea",
-        "Ask the model again": "Pedírselo de nuevo al modelo",
         "Thinking it over. Reload in a moment to read it.":
             "Pensándolo. Recargá en un momento para leerlo.",
         "No engine in your chain searches the web: opencode or the Anthropic API do.":
@@ -181,10 +176,7 @@ STRINGS = {
         "Links that may help": "Links que pueden servir",
         "Last time it failed: %1": "La última vez falló: %1",
         "Among": "Entre",
-        "already linked": "ya relacionado",
         "Nothing matches": "Nada coincide",
-        "Linked": "Vinculados",
-        "Use": "Usar",
         "That idea already has 16 links. Take one off before adding another.":
             "Esa idea ya tiene 16 links. Sacale uno antes de sumar otro.",
         "That idea is not there any more.": "Esa idea ya no está.",
@@ -313,15 +305,12 @@ STRINGS = {
 
         # La línea de tiempo. Los meses son de tres letras porque la tira
         # en la que entran mide cinco caracteres de ancho.
-        "Time": "Tiempo",
         "Jan": "ene", "Feb": "feb", "Mar": "mar", "Apr": "abr",
         "May": "may", "Jun": "jun", "Jul": "jul", "Aug": "ago",
         "Sep": "sep", "Oct": "oct", "Nov": "nov", "Dec": "dic",
 
         # Las colecciones: lo \u00fanico de una nota que escribe el usuario.
         "Add to a collection": "Agregar a una colecci\u00f3n",
-        "Collection": "Colecci\u00f3n",
-        "Add": "Agregar",
         "Leave the collection %1": "Sacar de la colecci\u00f3n %1",
         "That name cannot be used as a collection: it has to be "
         "something other than spaces, dots and slashes.":
@@ -405,7 +394,6 @@ STRINGS = {
         # Choosing a model from a list instead of typing it from memory.
         # Who the api engine talks to, and the key it needs.
         "Who the api engine talks to": "Con quién habla el motor api",
-        "Provider": "Proveedor",
         "The api engine is not ticked above, so none of this is in use yet.":
             "El motor api no está tildado arriba, así que todavía nada de esto "
             "se usa.",
