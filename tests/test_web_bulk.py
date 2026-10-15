@@ -156,7 +156,7 @@ def test_kind_retypes_the_cards(s):
 def test_state_changes_the_ideas_and_not_a_link(s):
     body = post(s, "state", ids=[*s.ideas, "a1"], state="doing").json()
     assert body["done"] == s.ideas and body["failed"] == ["a1"]
-    assert body["notice"] == "2 are now under way · 1 could not be changed"
+    assert body["notice"] == "2 are now «under way» · 1 could not be changed"
     assert {find_note(s.cfg, i, s.cfg.ideas)[1].state for i in s.ideas} == {"doing"}
 
 
@@ -293,12 +293,12 @@ def test_a_card_that_cannot_follow_is_counted_not_hidden(s):
     body = post(s, "state", ids=[s.ideas[0], CARD1], state="dropped").json()
     assert body["done"] == [s.ideas[0]] and body["failed"] == [CARD1]
     # Only the idea changed, so the idea's word is true; the card is counted.
-    assert body["notice"] == "1 is now dropped · 1 could not be changed"
+    assert body["notice"] == "1 is now «dropped» · 1 could not be changed"
 
 
 def test_a_batch_of_ideas_alone_keeps_the_state_words(s):
     assert post(s, "state", ids=s.ideas, state="doing").json()["notice"] == \
-        "2 are now under way"
+        "2 are now «under way»"
 
 
 def test_nothing_ticked_in_a_bulk_speaks_of_notes_not_cards(s):
@@ -335,8 +335,13 @@ def test_a_bulk_state_says_the_notes_are_now_in_it():
     from oknowledge.i18n import translator
     from oknowledge.web.app import bulk_words
     es = translator("es")
-    assert bulk_words(es, "state", 1, 0, "descartada") == "1 pasó a descartada"
-    assert bulk_words(es, "state", 2, 0, "descartada") == "2 pasaron a descartada"
+    # Final review M-3: "2 pasaron a descartada" did not agree in number; the
+    # state is quoted as the label it is in the menu, lower case as there.
+    assert bulk_words(es, "state", 1, 0, "descartada") == "1 pasó a «descartada»"
+    assert bulk_words(es, "state", 2, 0, "descartada") == "2 pasaron a «descartada»"
+    en = translator("en")
+    assert bulk_words(en, "state", 1, 0, "dropped") == "1 is now «dropped»"
+    assert bulk_words(en, "state", 3, 0, "dropped") == "3 are now «dropped»"
     # A category is a place, and keeps its words.
     assert bulk_words(es, "category", 2, 0, "Redes") == "2 movidos a Redes"
 

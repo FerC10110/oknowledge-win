@@ -338,9 +338,10 @@ def bulk_words(t, action: str, done: int, failed: int, label: str = "",
         # Ideas and cards in one batch: no state word fits both, so none is said.
         said = t("1 changed") if done == 1 else t("%1 changed", done)
     elif action == "state":
-        # A state is not a place, and in Spanish it has a gender of its own
-        # ("descartada"): said with a verb that has none.
-        said = t("1 is now %2", done, label) if done == 1 else t("%1 are now %2", done, label)
+        # A state is not a place, and in Spanish it has a gender and a number
+        # of its own ("descartada"): said with a verb that has none, and
+        # quoted as the label it is in the menu, so it agrees with nothing.
+        said = t("1 is now «%2»", done, label) if done == 1 else t("%1 are now «%2»", done, label)
     else:
         said = t("1 moved to %2", done, label) if done == 1 else t("%1 moved to %2", done, label)
     if failed:
