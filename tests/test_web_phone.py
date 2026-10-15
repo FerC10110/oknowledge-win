@@ -456,40 +456,11 @@ def test_a_finger_is_not_asked_to_drop_a_file(client):
         assert drop and '<p class="drop-title">Drop the WhatsApp export here</p>' in drop.group(0)
 
 
-# --- Task 8: Ajustes waits for its back before reloading (Ruling 14) --------------------------
-
-def test_a_rename_reloads_only_after_the_layer_has_gone():
-    js = static("settings.js")
-    head = js.index('modal.addEventListener("close"')
-    body = js[head:js.index("\n    });", head)]                # the listener's own end
-    assert "ok.layers ? ok.layers.settled() : Promise.resolve()" in body
-    assert "after.then(function () { location.reload(); })" in body
-
-
 # --- Task 9: the layer in shell.js (spec §6.3, §10) -----------------------------------------
 
 def between(text, start, end):
     head = text.index(start)
     return text[head:text.index(end, head)]
-
-
-def test_a_tap_opens_the_layer_and_a_key_does_not():
-    js = static("shell.js")
-    click = between(js, 'document.addEventListener("click"', "// --- remembered layout")
-    assert "loadPanel(link.dataset.sel, false, { push: true })" in click
-    body = between(js, "function loadPanel", "function loadCatalog")
-    assert "opts && opts.push && phone() && !isOpen() && openLayer(url)" in body
-    assert 'panel.setAttribute("aria-busy", "true")' in body
-    assert 'panel.removeAttribute("aria-busy")' in body
-    # j/k (pick), the poller and loadList never push.
-    assert re.search(r"function pick\(id\) \{\n[^}]*loadPanel\(id\);", js)
-
-
-def test_a_shut_layer_keeps_the_pick_out_of_the_url():
-    js = static("shell.js")
-    assert "if (phone() && !isOpen()) return;" in between(js, "function writePick", "\n  }\n")
-    assert "writePick(url)" in between(js, "function keepShown", "\n  }\n")
-    assert "if (phone()) return;" in between(js, "// --- the pick in the URL", "observe();")
 
 
 def test_shell_keeps_the_entry_s_state():
@@ -523,12 +494,6 @@ def test_a_delete_from_the_layer_goes_back_to_the_list_and_opens_nothing():
     assert 'ok.layers.close().then(function () { loadList(here().href, true, "refresh"); });' in handler
 
 
-def test_an_empty_panel_does_not_stay_open():
-    # The behaviour, and the forward it leaves: test_web_layer_history.py.
-    assert 'phone() && isOpen() && ok.layers ? ok.layers.close() : null' in between(
-        static("shell.js"), "function emptyPanel", "\n  }\n")
-
-
 def test_the_catalogs_open_the_layer_too():
     js = static("shell.js")
     assert "push && phone() && !isOpen() && openLayer(url)" in between(js, "function showCatalog", "function emptyPanel")
@@ -536,20 +501,10 @@ def test_the_catalogs_open_the_layer_too():
     assert 'loadCatalog(field.value.trim().split(/\\s+/).join(" "), undefined, true)' in submit
 
 
-def test_keys_draw_the_pick_until_a_finger_touches():
-    js = static("shell.js")
-    assert 'list.classList.add("keyed")' in between(js, "function step", "\n  }\n")
-    assert 'document.addEventListener("pointerdown", function () { list.classList.remove("keyed"); }, true);' in js
-
-
-def test_a_list_reload_under_the_open_layer_keeps_its_note():
-    # Task 9 review, fix round 1: an edit in the layer (an Ocio state change
-    # under an estado filter) reloads the list; a server pick that differs
-    # must not swap the open layer to a note nobody tapped.
-    body = between(static("shell.js"), "function loadList", "function sideFilters")
-    guard = body.index("} else if (panel && phone() && isOpen()) {")
-    assert guard < body.index("loadPanel(serverPick, true)")
-    assert "markCurrent(open.dataset.panel)" in body[guard:body.index("loadPanel(serverPick, true)")]
+# A key opens no layer, a shut layer keeps sel out of the URL, keys draw the pick
+# until a finger touches, a reload keeps the open layer's note, an emptied panel
+# shuts: tests/test_web_layer_history.py. Ajustes reloads after its back:
+# tests/test_web_settings_script.py (batch G).
 
 
 # --- Task 10: selection without hover (spec §9) -----------------------------------------

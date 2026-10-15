@@ -506,3 +506,19 @@ out.after = sends.length;
 """, categories=["Redes"])
     assert out["whileOut"] == 1
     assert out["after"] == 2
+
+
+def test_on_the_phone_a_rename_reloads_only_after_the_layer_has_gone(tmp_path):
+    """Ruling 14: closing Ajustes on the phone goes back first; a reload
+    before that back has landed would reload onto Ajustes' own entry."""
+    out = run(tmp_path, """
+let leave = null;
+ok.layers = { settled: () => new Promise((r) => { leave = r; }) };
+""" + OPEN + """
+rename(root, "Redes", "Otra");
+sends[0].answer({ moved: 2 }); await settle(); serveAll(); await settle();
+modal.close(); await settle();
+out.beforeBack = out.reloads;
+leave(); await settle();
+""", categories=["Redes"])
+    assert out["beforeBack"] == 0 and out["reloads"] == 1

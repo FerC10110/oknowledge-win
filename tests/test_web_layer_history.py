@@ -644,3 +644,42 @@ out.panel = panelHtml;
     assert out["before"] == [False, False, False] and out["didBefore"] == []
     assert out["panel"] == "PANEL:b2"
     assert out["did"] == ["star PANEL:b2", "tag PANEL:b2", "open PANEL:b2"]
+
+
+# --- the phone's layer and the keys (batch G: test_web_phone.py read these in the source) ----
+
+def test_on_the_phone_a_key_loads_the_pick_but_opens_no_layer(tmp_path):
+    out = run(tmp_path, LIST_KEYS + """
+ok.keys.j(); await settle();
+out.page = page();
+out.keyed = list.classList.contains("keyed");
+fireDoc("pointerdown", {});
+out.touched = list.classList.contains("keyed");
+""", current="a1", panel="PANEL:a1")
+    assert out["page"]["panel"] == "PANEL:b2"
+    assert out["page"]["open"] is False and out["page"]["top"] == ""
+    # A shut layer keeps the pick out of the URL, and makes no entry.
+    assert out["page"]["url"] == "/" and out["page"]["length"] == 1
+    # Keys draw the pick, until a finger touches the screen.
+    assert out["keyed"] is True and out["touched"] is False
+
+
+@pytest.mark.parametrize("wide, url", [(False, "/"), (True, "/?sel=a1")])
+def test_the_pick_is_written_in_the_url_on_load_only_on_a_desktop(tmp_path, wide, url):
+    out = run(tmp_path, "out.page = page();", current="a1", panel="PANEL:a1", wide=wide)
+    assert out["page"]["url"] == url
+
+
+def test_a_list_reload_under_the_open_layer_keeps_its_note(tmp_path):
+    """An edit in the layer reloads the list; a server pick that differs
+    must not swap the open layer to a note nobody tapped."""
+    out = run(tmp_path, """
+tap("a1"); await settle();
+items.dataset.current = "b2";
+const before = asked.length;
+ok.list.reload(); await settle();
+out.page = page();
+out.panels = asked.slice(before).filter((u) => u.indexOf("/panel/") === 0);
+""")
+    assert out["page"]["open"] and out["page"]["panel"] == "PANEL:a1"
+    assert out["panels"] == []
