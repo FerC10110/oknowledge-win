@@ -81,7 +81,7 @@ function el(id, extra) {
     dispatchEvent(event) { (on[event.type] || []).forEach((fn) => fn(event)); return true; },
     querySelector() { return null; }, querySelectorAll() { return []; },
     contains(x) { return x === this; }, closest() { return null; }, matches() { return false; },
-    scrollIntoView() {}, focus() {}, replaceChildren() {},
+    scrollIntoView() {}, focus() {}, replaceChildren() {}, appendChild() {}, remove() {},
   }, extra || {});
 }
 
@@ -548,3 +548,30 @@ out.panels = asked.filter((u) => u.indexOf("/panel/") === 0).map((u) => u.split(
     assert "sel=b2" in out["where"] and "q=vpn" in out["where"]
     assert out["panel"] == "PANEL:b2"
     assert out["panels"] == ["/panel/b2"]
+
+
+# --- the tab bar follows the list shown (batch G: read in the source before) ---------------
+
+TABS = """
+const classOf = (on) => { const c = new Set(on ? ["on"] : []);
+  return { toggle(n, f) { if (f) c.add(n); else c.delete(n); }, contains: (n) => c.has(n) }; };
+const tabs = ["/", "/ocio", "/ideas", "/?mark=%E2%AD%90"].map((h, i) =>
+  ({ href: ORIGIN + h, name: h, classList: classOf(i === LIT) }));
+const all = document.querySelectorAll;
+document.querySelectorAll = (sel) => (sel === ".tabbar a" ? tabs : all(sel));
+ok.list.reload(); await settle();
+out.lit = tabs.filter((t) => t.classList.contains("on")).map((t) => t.name);
+"""
+
+
+@pytest.mark.parametrize("url, source, lit", [
+    ("/?vista=lista&mark=%E2%AD%90", "/lista", ["/?mark=%E2%AD%90"]),     # ★ carries vista: still Favoritos
+    ("/?mark=%E2%AD%90&q=wire", "/lista", ["/"]),                         # a search is not Favoritos
+    ("/?mark=%E2%AD%90&q=%20", "/lista", ["/?mark=%E2%AD%90"]),           # blanks are no search
+    ("/?cat=Redes", "/lista", ["/"]),
+    ("/ocio?tipo=book", "/ocio/lista", ["/ocio"]),
+])
+def test_the_tab_lit_is_read_from_the_list_s_path_and_mark(tmp_path, url, source, lit):
+    out = run(tmp_path, "const LIT = 1;" + TABS, entries=[{"url": url, "state": None}],
+              source=source)
+    assert out["lit"] == lit

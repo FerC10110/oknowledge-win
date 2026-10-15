@@ -105,3 +105,20 @@ def test_the_state_of_a_pending_entry_someone_holds_is_working(client):
     with q.lock("live0000"):
         assert client.get("/item/live0000/state").json() == {"working": True,
                                                              "status": "pending"}
+
+
+# --- batch G: the phone's way back, read off the page and not off app.py ----------
+
+def test_a_link_being_analysed_has_its_way_back_to_the_list(client):
+    """panel_context's first return (no note yet) carries list_url too: the
+    phone's "← Library" goes to the list it came from, without the pick."""
+    client.post("/add", data={"q": URL})
+    new = link_id(normalize(URL))
+    for path in (f"/panel/{new}?vista=lista", f"/?sel={new}&vista=lista"):
+        body = client.get(path).text
+        assert "The AI is reading the link…" in body, path
+        found = re.search(r'<a class="detail-back"[^>]*>', body)
+        assert found, path
+        href = re.search(r'href="([^"]*)"', found.group(0)).group(1).replace("&amp;", "&")
+        assert href.startswith("/?") and "sel=" not in href, href
+        assert "vista=lista" in href, href

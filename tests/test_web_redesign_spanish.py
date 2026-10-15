@@ -149,3 +149,23 @@ def test_the_phone_says_it_as_the_spec_does(client, text):
 def test_the_way_back_says_where_it_goes(client):
     assert 'aria-label="Volver a Biblioteca">← Biblioteca</a>' in client.get("/?sel=l00000000001").text
     assert 'aria-label="Volver a Ocio">← Ocio</a>' in client.get("/ocio?sel=c00000000001").text
+
+
+# --- batch G: the phone's tabs and top bar, in Spanish ---------------------------------------
+
+@pytest.mark.parametrize("path", ["/", "/ocio", "/ideas", "/settings"])
+def test_the_phone_s_tabs_and_top_bar_speak_spanish(client, path):
+    import re
+    body = client.get(path).text
+    tabs = re.search(r'<nav class="tabbar" aria-label="([^"]+)">(.*?)</nav>', body, re.S)
+    assert tabs.group(1) == "Secciones"
+    assert [t.strip() for t in re.findall(r">([^<]+)</a>", tabs.group(2))] == [
+        "Biblioteca", "Ocio", "Ideas", "Favoritos"]
+    top = re.search(r'<header class="topbar">.*?</header>', body, re.S).group(0)
+    assert 'data-modal="settings">Ajustes' in top
+
+
+@pytest.mark.parametrize("path", ["/", "/ocio", "/ideas"])
+def test_the_phone_s_select_button_speaks_spanish(client, path):
+    body = client.get(path).text
+    assert 'data-select-mode data-on="Cancelar" aria-pressed="false">Seleccionar</button>' in body

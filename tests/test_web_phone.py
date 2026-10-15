@@ -290,12 +290,8 @@ def test_the_catalogs_go_back_to_the_grid(client, no_catalogs):
     assert 'href="/ocio"' in back(client.get("/ocio/candidatos?q=Dune&tipo=movie").text)
 
 
-def test_a_link_being_analysed_has_its_way_back_too():
-    """panel_context's first return (no note yet) carries list_url as well."""
-    app = WEB.joinpath("app.py").read_text(encoding="utf-8")
-    head = app.index("def panel_context")
-    body = app[head:app.index("def card_context", head)]
-    assert body.count('"list_url": view.url(sel="")') == 2
+# A link being analysed has its way back too: tests/test_web_analyzing.py
+# reads it off the page (batch G).
 
 
 HINT = '<span class="enter-hint" aria-hidden="true">&nbsp;↵</span>'
@@ -379,18 +375,7 @@ def test_a_filter_with_no_twin_unlights_the_other_drawing_and_lights_its_tab():
 
 # --- Task 5, fix round 1 -------------------------------------------------------------------
 
-def test_the_tab_lit_is_read_from_the_url_s_path_and_mark_not_its_whole_href():
-    """★ from /?vista=lista carries vista: Favoritos still lights. A typed
-    search drops the mark: Biblioteca lights (tabbar.html: a search is not
-    Favoritos)."""
-    js = static("shell.js")
-    head = js.index("function litTab")
-    body = js[head:js.index("\n  }\n", head)]
-    assert 'searchParams.get("mark")' in body and "pathname" in body
-    assert 'getAttribute("href") === href' not in body
-    head = js.index("function loadList")
-    body = js[head:js.index("\n  }\n", head)]
-    assert "litTab(target.href);" in body
+# Which tab a list lights is run in node: tests/test_web_layer_history.py (batch G).
 
 
 def test_a_phone_card_keeps_a_long_domain_on_one_line_and_clamps_a_long_word():
@@ -460,8 +445,15 @@ def test_the_toast_stays_at_the_top_and_may_wrap():
     assert "max-width: calc(100vw - 32px);" in rule and "white-space: normal;" in rule
 
 
-def test_a_finger_is_not_asked_to_drop_a_file():
-    assert ".drop-title" in block(static("app.css"), "@media (pointer: coarse) {")
+def test_a_finger_is_not_asked_to_drop_a_file(client):
+    coarse = block(static("app.css"), "@media (pointer: coarse) {")
+    assert re.search(r"[^{}]*\.drop-title[^{}]*\{ display: none; \}", coarse)
+    # And the rule hides something real: Ajustes' Importar draws the title
+    # inside the form a file is dropped on (batch G), in the modal and on the page.
+    for path in ("/settings/panel?tab=importar", "/settings?tab=importar"):
+        drop = re.search(r'<form[^>]*class="drop"[^>]*data-settings-drop>.*?</form>',
+                         client.get(path).text, re.S)
+        assert drop and '<p class="drop-title">Drop the WhatsApp export here</p>' in drop.group(0)
 
 
 # --- Task 8: Ajustes waits for its back before reloading (Ruling 14) --------------------------
