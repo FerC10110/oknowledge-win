@@ -199,7 +199,7 @@ def test_undo_after_the_note_was_pasted_again_is_blocked(s):
     answer = s.client.post(f"/undo/{token}", headers=JSON)
     assert answer.status_code == 409
     assert answer.json() == {"ok": False, "error":
-                             "Nothing was restored: still in the trash/ folder of your vault"}
+                             "Nothing was restored: it is all still in oknowledge/trash/"}
     assert len(list(trash_dir(s.cfg).glob("*.md"))) == 1
 
 
@@ -229,7 +229,7 @@ def test_a_lot_with_one_blocked_says_both(s):
     body = s.client.post(f"/undo/{token}", headers=JSON).json()
 
     assert body == {"ok": True, "restored": ["b2"], "skipped": ["a1"],
-                    "notice": "Restored · 1 not restored, still in the trash/ folder of your vault"}
+                    "notice": "Restored · 1 not restored, still in oknowledge/trash/"}
 
 
 # --- undo with the indexes behind --------------------------------------------------
@@ -262,7 +262,7 @@ def test_an_undo_with_stale_indexes_and_one_blocked_says_both(s, monkeypatch):
     body = s.client.post(f"/undo/{token}", headers=JSON).json()
 
     assert body["restored"] == ["b2"] and body["skipped"] == ["a1"]
-    assert body["notice"] == ("Restored · 1 not restored, still in the trash/ folder of your vault. "
+    assert body["notice"] == ("Restored · 1 not restored, still in oknowledge/trash/. "
                               "The indexes could not be rebuilt: run `oknowledge "
                               "reindex` once the folder is writable again.")
 
@@ -278,7 +278,7 @@ def test_without_a_script_the_stale_partial_undo_keeps_its_counts(s, monkeypatch
     location = answer.headers["location"]
     assert location == "/?notice=restored-one-partial-indexes-stale&n=1&m=1"
     page = s.client.get(location).text
-    assert "Restored · 1 not restored, still in the trash/ folder of your vault" in page
+    assert "Restored · 1 not restored, still in oknowledge/trash/" in page
     assert "oknowledge reindex" in page
 
 
@@ -292,7 +292,7 @@ def test_a_stale_undo_of_several_with_some_blocked_counts_both(s, monkeypatch):
 
     body = s.client.post(f"/undo/{token}", headers=JSON).json()
 
-    assert body["notice"] == ("2 restored · 1 not restored, still in the trash/ folder of your vault. "
+    assert body["notice"] == ("2 restored · 1 not restored, still in oknowledge/trash/. "
                               "The indexes could not be rebuilt: run `oknowledge "
                               "reindex` once the folder is writable again.")
 
@@ -338,7 +338,7 @@ def test_a_note_left_behind_for_another_reason_is_not_blamed_on_another_note(s):
 
     assert body["restored"] == ["b2"] and body["skipped"] == ["a1"]
     assert "another note" not in body["notice"]
-    assert body["notice"] == "Restored · 1 not restored, still in the trash/ folder of your vault"
+    assert body["notice"] == "Restored · 1 not restored, still in oknowledge/trash/"
 
 
 def test_the_left_behind_notices_say_it_in_spanish(isolated_ui_language):
@@ -346,12 +346,12 @@ def test_the_left_behind_notices_say_it_in_spanish(isolated_ui_language):
     from oknowledge.web.app import NOTICES
 
     t = translator("es")
-    assert t(NOTICES["undo-blocked"]) == "No se restauró nada: sigue en la carpeta trash/ del vault"
+    assert t(NOTICES["undo-blocked"]) == "No se restauró nada: todo sigue en oknowledge/trash/"
     assert t(NOTICES["restored-one-partial"], 1, 2) == \
-        "Restaurado · 2 sin restaurar, en la carpeta trash/ del vault"
+        "Restaurado · 2 sin restaurar, en oknowledge/trash/"
     assert t(NOTICES["restored-partial"], 3, 1) == \
-        "3 restaurados · 1 sin restaurar, en la carpeta trash/ del vault"
+        "3 restaurados · 1 sin restaurar, en oknowledge/trash/"
     for code in ("restored-one-partial-indexes-stale", "restored-partial-indexes-stale"):
         said = t(NOTICES[code], 3, 1)
-        assert "sin restaurar, en la carpeta trash/ del vault." in said
+        assert "sin restaurar, en oknowledge/trash/." in said
         assert "oknowledge reindex" in said and "otra nota" not in said
