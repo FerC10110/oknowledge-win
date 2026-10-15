@@ -156,7 +156,7 @@ def test_kind_retypes_the_cards(s):
 def test_state_changes_the_ideas_and_not_a_link(s):
     body = post(s, "state", ids=[*s.ideas, "a1"], state="doing").json()
     assert body["done"] == s.ideas and body["failed"] == ["a1"]
-    assert body["notice"] == "2 moved to under way · 1 could not be changed"
+    assert body["notice"] == "2 are now under way · 1 could not be changed"
     assert {find_note(s.cfg, i, s.cfg.ideas)[1].state for i in s.ideas} == {"doing"}
 
 
@@ -249,16 +249,24 @@ def test_a_bulk_delete_without_a_script_offers_undo(s):
 # --- polish: delivery 6, batch C ----------------------------------------------------
 
 def count_library_refreshes(monkeypatch):
-    """How often the Biblioteca's index is read: held_by() reads it first, every time."""
+    """How often the Biblioteca's index is read to find a note: held_by()
+    reads it first, every time. The reads once the indexes are rebuilt are
+    not lookups (they pick up what the batch wrote) and are not counted."""
+    import oknowledge.web.app as web_app
     from oknowledge.web.index import Library
-    calls = []
-    real = Library.refresh
+    calls, rebuilt = [], []
+    real, real_rebuild = Library.refresh, web_app.rebuild_indexes
 
     def counting(self, *a, **k):
-        if self.shelf.name == "links":
+        if self.shelf.name == "links" and not rebuilt:
             calls.append(1)
         return real(self, *a, **k)
+
+    def rebuilding(*a, **k):
+        rebuilt.append(1)
+        return real_rebuild(*a, **k)
     monkeypatch.setattr(Library, "refresh", counting)
+    monkeypatch.setattr(web_app, "rebuild_indexes", rebuilding)
     return calls
 
 
@@ -271,7 +279,7 @@ def test_a_bulk_state_looks_up_the_shelf_once_per_note(s, monkeypatch):
 def test_a_bulk_delete_looks_up_the_shelf_once_per_note(s, monkeypatch):
     calls = count_library_refreshes(monkeypatch)
     post(s, "delete", ids=s.ideas)
-    assert len(calls) == len(s.ideas) + 1       # the one after the rebuilds is not a lookup
+    assert len(calls) == len(s.ideas)
 
 
 def test_a_mixed_state_batch_does_not_speak_in_the_words_of_ideas(s):
@@ -285,12 +293,12 @@ def test_a_card_that_cannot_follow_is_counted_not_hidden(s):
     body = post(s, "state", ids=[s.ideas[0], CARD1], state="dropped").json()
     assert body["done"] == [s.ideas[0]] and body["failed"] == [CARD1]
     # Only the idea changed, so the idea's word is true; the card is counted.
-    assert body["notice"] == "1 moved to dropped · 1 could not be changed"
+    assert body["notice"] == "1 is now dropped · 1 could not be changed"
 
 
 def test_a_batch_of_ideas_alone_keeps_the_state_words(s):
     assert post(s, "state", ids=s.ideas, state="doing").json()["notice"] == \
-        "2 moved to under way"
+        "2 are now under way"
 
 
 def test_nothing_ticked_in_a_bulk_speaks_of_notes_not_cards(s):
@@ -317,3 +325,24 @@ def test_a_busy_note_is_skipped_in_bulk_kind_state_and_mark(s):
     with Queue().lock("a1"):
         body = post(s, "mark", ids=["a1", "b2"], mark="⭐").json()
     assert body["done"] == ["b2"] and body["failed"] == ["a1"]
+
+
+# --- the words of a bulk state (batch G) ----------------------------------------------
+
+def test_a_bulk_state_says_the_notes_are_now_in_it():
+    """Spanish gives a state its own gender ("descartada"): "movido a" would
+    not agree, so a state is said with a verb that has none."""
+    from oknowledge.i18n import translator
+    from oknowledge.web.app import bulk_words
+    es = translator("es")
+    assert bulk_words(es, "state", 1, 0, "descartada") == "1 pasó a descartada"
+    assert bulk_words(es, "state", 2, 0, "descartada") == "2 pasaron a descartada"
+    # A category is a place, and keeps its words.
+    assert bulk_words(es, "category", 2, 0, "Redes") == "2 movidos a Redes"
+
+
+@pytest.mark.parametrize("ids", [[CARD1, CARD2], [CARD1, "a1"]])
+def test_when_no_card_can_take_the_state_the_answer_says_why(s, ids):
+    answer = post(s, "state", ids=ids, state="dropped")
+    assert answer.status_code == 400
+    assert answer.json()["error"] == "That state does not apply to Ocio cards."

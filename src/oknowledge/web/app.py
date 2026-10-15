@@ -103,6 +103,7 @@ NOTICES = {
     "bad-mark": "That is not an emoji the mark can be.",
     "bad-kind": "That is not a type a card can have.",
     "bad-state": "That is not a state it can be in.",
+    "state-not-for-cards": "That state does not apply to Ocio cards.",
     "renamed-one": "1 note moved.",
     "renamed": "%1 notes moved.",
     "merged-one": "1 note merged into a category that was already there.",
@@ -322,6 +323,10 @@ def bulk_words(t, action: str, done: int, failed: int, label: str = "",
     elif mixed:
         # Ideas and cards in one batch: no state word fits both, so none is said.
         said = t("1 changed") if done == 1 else t("%1 changed", done)
+    elif action == "state":
+        # A state is not a place, and in Spanish it has a gender of its own
+        # ("descartada"): said with a verb that has none.
+        said = t("1 is now %2", done, label) if done == 1 else t("%1 are now %2", done, label)
     else:
         said = t("1 moved to %2", done, label) if done == 1 else t("%1 moved to %2", done, label)
     if failed:
@@ -554,7 +559,7 @@ GONE = "That is not there any more."
 """What a script is told when the note it was editing has gone."""
 
 FAILURES = {"undo-gone": 404, "undo-blocked": 409, "bad-category": 400, "bad-mark": 400,
-            "bad-kind": 400, "bad-state": 400, "nothing-picked": 400, "nothing-selected": 400,
+            "bad-kind": 400, "bad-state": 400, "state-not-for-cards": 400, "nothing-picked": 400, "nothing-selected": 400,
             "bad-collection": 400, "title-empty": 400, "busy": 409, "idea-full": 409,
             "cannot-search": 409, "no-such-idea": 404, "write-failed": 500,
             "settings-failed": 500, "env-failed": 500, "env-there": 409, "batch-running": 409}
@@ -1562,7 +1567,8 @@ def create_app(cfg: Config) -> FastAPI:
             if note is None or which.name == "links":
                 return Edited(MISSING, False), ""
             if state not in states_for(note.type):
-                return Edited("bad-state", False), ""
+                # Only a card can refuse one: the ideas take every state.
+                return Edited("state-not-for-cards", False), ""
             return restate_one(link, state, (shelves, which)), which.name
 
         if action == "category":

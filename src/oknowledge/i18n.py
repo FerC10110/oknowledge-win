@@ -584,9 +584,12 @@ STRINGS = {
         "Deleted": "Borrado",
         # Bulk actions (delivery 3, spec §5.1).
         "That is not a state it can be in.": "Ese no es un estado que pueda tener.",
+        "That state does not apply to Ocio cards.": "Ese estado no se aplica a las fichas de Ocio.",
         "%1 deleted": "%1 borrados",
         "1 moved to %2": "1 movido a %2",
         "%1 moved to %2": "%1 movidos a %2",
+        "1 is now %2": "1 pasó a %2",
+        "%1 are now %2": "%1 pasaron a %2",
         "1 marked as favorite": "1 marcado como favorito",
         "%1 marked as favorites": "%1 marcados como favoritos",
         "Favorite removed from %1": "Se quitó favorito a %1",
