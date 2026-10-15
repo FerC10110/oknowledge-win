@@ -131,7 +131,7 @@ def test_an_env_that_cannot_be_made_is_a_500(client, monkeypatch):
 def test_renaming_answers_a_script_and_a_form_goes_to_categories(client):
     body = client.post("/categories/rename", data={"old": "Networking", "new": "Redes"},
                        headers=JSON).json()
-    assert body == {"ok": True, "notice": "2 notes moved."}
+    assert body == {"ok": True, "notice": "2 notes moved.", "moved": 2}
     location = client.post("/categories/rename", data={"old": "Redes", "new": "Seguridad"},
                            follow_redirects=False).headers["location"]
     assert location == "/settings?tab=categorias&notice=renamed&n=2&m=0"

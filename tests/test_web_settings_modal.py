@@ -52,7 +52,7 @@ def test_the_modal_says_when_the_settings_cannot_be_loaded():
     text = SETTINGS.read_text(encoding="utf-8")
     opening = between(text, "ok.openSettings = function", "ok.bindSettings = ")
     assert '"/settings/panel' in opening and ".catch(" in opening
-    failing = between(text, "function failed", "ok.openSettings = function")
+    failing = between(text, "function unreachable", "ok.openSettings = function")
     assert "modal.dataset.failed" in failing
     assert 'setAttribute("data-close", "")' in failing and "texts.close" in failing
 
@@ -69,7 +69,7 @@ def test_a_rename_into_another_category_asks_first():
     text = SETTINGS.read_text(encoding="utf-8")
     renaming = between(text, "function renames", "function drops")
     assert "confirm(" in renaming and "dataset.merge" in renaming
-    assert "renamed = true" in renaming
+    assert "body.moved" in renaming
 
 
 def test_the_model_picker_saves_once():
@@ -96,9 +96,9 @@ def test_the_fragment_and_the_page_carry_the_same_hooks(client):
 def test_closing_the_modal_while_a_rename_is_out_reloads_once_it_lands():
     text = SETTINGS.read_text(encoding="utf-8")
     renaming = between(text, "function renames", "function drops")
-    assert "pendingRename = " in renaming
+    assert "renamesOut.push(" in renaming
     closing = between(text, 'modal.addEventListener("close"', "});")
-    assert "pendingRename" in closing and "location.reload()" in closing
+    assert "renamesOut" in closing and "location.reload()" in closing
 
 
 def test_a_redraw_waits_for_the_saves_still_out():
@@ -110,7 +110,7 @@ def test_a_redraw_waits_for_the_saves_still_out():
 
 def test_a_rename_that_landed_can_be_sent_again():
     renaming = between(SETTINGS.read_text(encoding="utf-8"), "function renames", "function drops")
-    landed = between(renaming, "renamed = true", ".catch(")
+    landed = between(renaming, ".then(function (body)", ".catch(")
     assert "sending = false" in landed
 
 

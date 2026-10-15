@@ -98,3 +98,9 @@ def test_the_interface_language_hint_is_in_spanish(client, isolated_ui_language)
     isolated_ui_language.write_text(json.dumps({"language": "es"}), encoding="utf-8")
     body = client.get("/settings/panel?tab=idioma").text
     assert "Compartido con tus otros plugins de Omarchy; recarga la página" in body
+
+
+# --- 9. the dialog itself, focused, draws no ring ------------------------------------------
+
+def test_the_settings_dialog_draws_no_ring_when_it_has_the_focus():
+    assert any("outline: none" in r for r in rule(".modal.settings:focus"))

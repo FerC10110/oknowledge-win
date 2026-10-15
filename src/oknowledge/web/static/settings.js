@@ -8,8 +8,20 @@
   var texts = document.body.dataset;
   var modal = document.getElementById("settings-modal");
   var lastTab = "";
-  var renamed = false;
-  var pendingRename = null;   // a rename sent and not answered yet: true if it landed
+  var renamesOut = [];        // every rename sent since the modal opened: each true if it moved notes
+  var opening = 0;            // the modal's last load: an older one landing late is dropped
+  var SAVE_MS = 15000;        // a save with no answer by then has failed
+
+  // Forms whose last save failed, with what was said (the page's ✕ says it
+  // again instead of leaving, once).
+  var unsaved = [];
+  function failed(form, message) {
+    unsaved = unsaved.filter(function (u) { return u.form !== form; });
+    unsaved.push({ form: form, message: message });
+  }
+  function landed(form) {
+    unsaved = unsaved.filter(function (u) { return u.form !== form; });
+  }
 
   // Saves still out. A redraw waits for them: drawn before one lands, the
   // box would show the old value and the next change would send it back.
@@ -25,6 +37,15 @@
   }
 
   function toast(text) { if (text && ok.toast) ok.toast(text); }
+
+  // A save that never answers fails, so the redraws waiting for it go on.
+  function within(promise) {
+    return new Promise(function (resolve, reject) {
+      var timer = setTimeout(function () { reject(new Error(texts.saveFailed || "")); }, SAVE_MS);
+      promise.then(function (body) { clearTimeout(timer); resolve(body); },
+                   function (error) { clearTimeout(timer); reject(error); });
+    });
+  }
 
   // The toast lives inside the open modal (app.js): drawing the modal's
   // content takes it out, and this puts it back.
@@ -86,13 +107,14 @@
       var payload = new URLSearchParams(data).toString();
       if (payload === lastSent) { done(); return; }
       lastSent = payload;
-      ok.send(form.getAttribute("action"), data)
+      within(ok.send(form.getAttribute("action"), data))
         .then(function (body) {
+          landed(form);
           if (body.reload) { location.reload(); return; }
           toast(body.notice);
           syncKeep(form);
         })
-        .catch(function (error) { lastSent = ""; toast(error.message); })
+        .catch(function (error) { lastSent = ""; failed(form, error.message); toast(error.message); })
         .then(done);
     }
     function done() {
@@ -152,18 +174,25 @@
           return;
         }
         sending = true;
-        pendingRename = ok.send(form.getAttribute("action"), new FormData(form))
+        var sent = ok.send(form.getAttribute("action"), new FormData(form))
           .then(function (body) {
-            renamed = true;
+            landed(form);
             sending = false;
             // Until the redraw lands (or if it fails) the row is the new name.
             known[known.indexOf(old)] = name;
             form.elements.old.value = old = name;
             toast(body.notice);
             redraw(root, onPage);
-            return true;
+            // Only notes moved change the list and the sidebar under the modal.
+            return body.moved > 0;
           })
-          .catch(function (error) { sending = false; toast(error.message); return false; });
+          .catch(function (error) {
+            sending = false;
+            failed(form, error.message);
+            toast(error.message);
+            return false;
+          });
+        renamesOut.push(sent);
       }
       box.addEventListener("change", rename);
       form.addEventListener("submit", function (event) { event.preventDefault(); rename(); });
@@ -215,12 +244,21 @@
 
   // The page's ✕ is a link home. The click's blur has just sent the field
   // typed in: leaving at once could cut that save off, so it goes once the
-  // saves (and a rename) have landed.
+  // saves (and the renames) have landed. If the last save of a form failed,
+  // it stays and says so again: leaving would lose the notice and the value.
+  // A second ✕ leaves.
   function leave(link) {
     var active = document.activeElement;
     if (active && active.blur) active.blur();
-    Promise.all([whenIdle(), pendingRename])
-      .then(function () { location.href = link.getAttribute("href"); });
+    Promise.all([whenIdle()].concat(renamesOut))
+      .then(function () {
+        if (unsaved.length) {
+          toast(unsaved[unsaved.length - 1].message);
+          unsaved = [];
+          return;
+        }
+        location.href = link.getAttribute("href");
+      });
   }
 
   function bind(root, onPage) {
@@ -246,7 +284,7 @@
   }
 
   // --- the modal ---------------------------------------------------------------------
-  function failed() {
+  function unreachable() {
     var p = document.createElement("p");
     p.className = "modal-failed";
     p.textContent = modal.dataset.failed || "";
@@ -267,25 +305,31 @@
     if (!modal) { location.href = "/settings"; return; }
     var key = tab || lastTab || "motores";
     // Refused on the phone over another layer (the detail): nothing to load.
-    if (!modal.open && !ok.openModal(modal)) return;
-    renamed = false;
-    pendingRename = null;
+    // Emptied before it opens: showModal() then focuses the dialog itself
+    // (drawn with no ring, app.css), not a control of the last content,
+    // which goes next and would drop the focus onto the page behind.
+    if (!modal.open) {
+      modal.replaceChildren();
+      if (!ok.openModal(modal)) return;
+    }
+    renamesOut = [];
+    var mine = ++opening;
     modal.replaceChildren();
     modal.classList.add("loading");
     raiseToast();                          // the toast sat in what was just emptied
     fetch("/settings/panel?tab=" + encodeURIComponent(key), { headers: { Accept: "text/html" } })
       .then(function (r) { if (!r.ok) throw new Error(r.status); return r.text(); })
       .then(function (html) {
-        if (!modal.open) return;
+        if (!modal.open || mine !== opening) return;
         modal.classList.remove("loading");
         modal.innerHTML = html;
         raiseToast();
         bind(modal.querySelector("[data-settings-root]"), false);
       })
       .catch(function () {
-        if (!modal.open) return;
+        if (!modal.open || mine !== opening) return;
         modal.classList.remove("loading");
-        failed();
+        unreachable();
       });
   };
   ok.bindSettings = bind;
@@ -298,14 +342,14 @@
       if (active && modal.contains(active) && active.blur) active.blur();
     });
     // A category renamed changes the list and the sidebar under the modal.
-    // Closing blurs the box first, so a rename may still be out: the page
-    // reloads once it lands -- and, on the phone, once the modal's history
-    // entry has gone (app.js goes back first, delivery 4 Ruling 14).
+    // Closing blurs the box first, so renames may still be out: the page
+    // reloads once they have all landed, if any moved notes -- and, on the
+    // phone, once the modal's history entry has gone (app.js goes back
+    // first, delivery 4 Ruling 14).
     modal.addEventListener("close", function () {
       var after = ok.layers ? ok.layers.settled() : Promise.resolve();
-      var rename = renamed ? Promise.resolve(true) : pendingRename;
-      if (rename) rename.then(function (landed) {
-        if (landed) after.then(function () { location.reload(); });
+      Promise.all(renamesOut).then(function (results) {
+        if (results.indexOf(true) >= 0) after.then(function () { location.reload(); });
       });
     });
   }

@@ -9,16 +9,7 @@ entrega 3. Ninguno pierde datos: en el peor caso una nota queda en
 
 ## Ajustes
 
-- Un renombre recarga la página al cerrar aunque no haya movido nada. Con dos
-  renombres al mismo tiempo y un cierre inmediato, puede no recargar.
-- Un guardado que nunca contesta deja esperando los redibujos (sin timeout).
-- Si se cierra el modal y se reabre en otra pestaña antes de que conteste el
-  primero, puede mostrar la pestaña equivocada.
 - Soltar un arrastre de texto sobre el fondo cierra el modal.
-- En la página `/settings`, la ✕ navega aunque el último guardado haya
-  fallado (el aviso se pierde; antes también se perdía el valor).
-- Al reabrir un modal después de Esc, el diálogo mismo toma el foco y muestra
-  un borde blanco.
 
 ## Código
 

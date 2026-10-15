@@ -516,6 +516,9 @@ html:not(.js) .drop-file::file-selector-button { height: 32px; margin-right: 10p
 .modal.settings .settings-body { height: 100%; display: flex; flex-direction: column; }
 .modal.settings .settings-scroll { flex: 1; overflow-y: auto; }
 .modal.settings.loading { cursor: progress; }
+/* It opens empty, so showModal() focuses the dialog itself: no ring on it
+   (as the help's grid), the first Tab goes to its first control. */
+.modal.settings:focus { outline: none; }
 .modal-failed { margin: 0; padding: 26px 22px 12px; color: var(--t2); font-size: 14px; }
 .modal-failed-foot { margin: 0; padding: 0 22px 22px; text-align: right; }
 

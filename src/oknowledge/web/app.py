@@ -1839,8 +1839,10 @@ def create_app(cfg: Config) -> FastAPI:
             code = "merged-one" if result.moved == 1 else "merged"
         else:
             code = "renamed-one" if result.moved == 1 else "renamed"
+        # `moved` tells settings.js whether the list under the modal changed
+        # (a reload only then).
         return answer(request, settings_url("categorias"), code,
-                      n=result.moved, m=len(result.failed))
+                      extra={"moved": result.moved}, n=result.moved, m=len(result.failed))
 
     def config_file() -> Path:
         """The file this process reads its config from. `--config` arrives

@@ -666,6 +666,8 @@ def test_a_page_back_from_the_bfcache_forgets_a_back_under_way(reloads):
 def test_settings_loads_nothing_when_ajustes_is_refused():
     text = (STATIC / "settings.js").read_text(encoding="utf-8")
     opening = between(text, "ok.openSettings = function", "ok.bindSettings")
-    gate = "if (!modal.open && !ok.openModal(modal)) return;"
-    assert gate in opening
-    assert opening.index(gate) < opening.index("modal.replaceChildren()") < opening.index("fetch(")
+    # Emptied before it opens (polish D9: the dialog takes the focus), and
+    # nothing fetched when refused (test_web_settings_script.py runs it).
+    gate = "if (!ok.openModal(modal)) return;"
+    assert "if (!modal.open) {" in opening and gate in opening
+    assert opening.index("modal.replaceChildren()") < opening.index(gate) < opening.index("fetch(")
