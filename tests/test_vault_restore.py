@@ -165,7 +165,8 @@ def test_rebuild_false_rebuilds_nothing(tmp_path, monkeypatch):
 
     update_note(cfg, "a1", "es", category="Seguridad", rebuild=False)
     moved = delete_note(cfg, "b2", "es", rebuild=False)
-    restore_note(cfg, "b2", moved.source, moved.target, "es", rebuild=False)
+    assert restore_note(cfg, "b2", moved.source, moved.target, "es", rebuild=False) is True
+    assert moved.source.exists()
 
     assert calls == []
     assert find_note(cfg, "a1")[1].category == "Seguridad"
@@ -182,3 +183,16 @@ def test_a_restore_whose_rebuild_fails_says_the_note_is_back(tmp_path, monkeypat
     with pytest.raises(IndexesStale) as raised:
         restore_note(cfg, "a1", moved.source, moved.target, "es")
     assert raised.value.done is True and path.exists()
+
+
+def test_a_trash_file_that_vanishes_before_the_link_leaves_nothing(tmp_path, monkeypatch):
+    cfg = make(tmp_path)
+    path, moved = trashed(cfg)
+
+    def vanished(src, dst):
+        raise FileNotFoundError(errno.ENOENT, "gone", str(src))
+    monkeypatch.setattr(os, "link", vanished)
+
+    assert restore_note(cfg, "a1", moved.source, moved.target, "es") is False
+    assert not path.exists()
+    assert not list(path.parent.glob("*.md"))          # no placeholder either

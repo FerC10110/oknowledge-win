@@ -939,8 +939,8 @@ def restore_note(cfg: Config, link_id: str, source: Path, target: Path, language
         return False
     try:
         os.link(trashed, back)                   # fails, not overwrites, if the name appeared
-    except FileExistsError:
-        return False
+    except (FileExistsError, FileNotFoundError):
+        return False                             # name taken, or the trash file vanished
     except OSError:
         # A filesystem without hard links: reserve the name, then move onto
         # our own empty placeholder.
