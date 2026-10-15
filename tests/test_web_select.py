@@ -583,3 +583,52 @@ def test_a_menu_before_the_500_ms_fires_the_press(early_menu):
 
 def test_the_desktop_menu_is_left_alone(early_menu):
     assert early_menu["desktop"] == [False, False]
+
+
+# --- polish: a desktop selection that shrinks onto the phone ----------------------------
+
+SHRUNK_SUFFIX = r"""
+const shrunk = {};
+media.matches = false;                               // the desktop
+listeners["list:change"].forEach((fn) => fn({ target: Object.assign(a.box, { checked: true }) }));
+shrunk.desk = [classes.has("selecting"), bar.hidden];
+media.matches = true;                                // the window made narrow
+media.fns.forEach((fn) => fn({ matches: true }));
+shrunk.phone = [classes.has("selecting"), a.box.checked, bar.hidden, button.textContent,
+                button.attrs["aria-pressed"]];
+const shrunkTap = tap(b.hit);
+shrunk.tapTicks = [shrunkTap.defaultPrevented, b.box.checked];
+ok.keys.Escape();
+media.matches = false; media.fns.forEach((fn) => fn({ matches: false }));
+media.matches = true; media.fns.forEach((fn) => fn({ matches: true }));
+shrunk.emptyStaysOff = classes.has("selecting");
+console.log(JSON.stringify(shrunk));
+"""
+
+
+@pytest.fixture(scope="module")
+def shrunk(tmp_path_factory):
+    import json
+    import shutil
+    import subprocess
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not installed")
+    harness = tmp_path_factory.mktemp("shrunk") / "harness.js"
+    harness.write_text(MEDIA_PREFIX + MODE_HARNESS + SHRUNK_SUFFIX, encoding="utf-8")
+    done = subprocess.run([node, str(harness), str(SELECT)], capture_output=True, text=True,
+                          timeout=30, check=False)
+    assert done.returncode == 0, done.stderr
+    return json.loads(done.stdout.strip().splitlines()[-1])
+
+
+def test_a_selection_that_shrinks_onto_the_phone_enters_the_mode(shrunk):
+    """The boxes would be hidden and a tap would open the layer: the mode
+    shows them, with Cancelar, and a tap ticks."""
+    assert shrunk["desk"] == [False, False]
+    assert shrunk["phone"] == [True, True, False, "Cancelar", "true"]
+    assert shrunk["tapTicks"] == [True, True]
+
+
+def test_shrinking_with_nothing_ticked_enters_no_mode(shrunk):
+    assert shrunk["emptyStaysOff"] is False

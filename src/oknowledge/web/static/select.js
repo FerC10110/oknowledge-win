@@ -157,8 +157,13 @@
 
   // A tablet turned past 60rem: Cancelar is not drawn there, so the mode
   // (and what it ticked) goes, and a tap opens again (app.js's breakpoint).
+  // The other way, a selection made on the desktop is the mode on the
+  // phone: its boxes stay in sight, and a tap ticks rather than opens.
   var narrow = window.matchMedia ? window.matchMedia("(max-width: 60rem)") : null;
-  function widened(event) { if (!event.matches && selecting()) clear(); }
+  function widened(event) {
+    if (!event.matches && selecting()) clear();
+    else if (event.matches && picked.length && !selecting()) mode(true);
+  }
   if (narrow && narrow.addEventListener) narrow.addEventListener("change", widened);
   else if (narrow && narrow.addListener) narrow.addListener(widened);
 

@@ -14,12 +14,6 @@ comparación de capturas dio 0 píxeles con diferencia fuerte en todas.
 - Al tocar, Chromium dibuja un recuadro de color un instante
   (`-webkit-tap-highlight-color`). Sacarlo es una decisión de diseño.
 
-## Selección
-
-- Una selección hecha en el escritorio que sobrevive a achicar la ventana
-  no entra en modo Seleccionar: las casillas no se ven y un toque abre la
-  capa (la ✕ de la barra la limpia).
-
 ## Tamaños y toques
 
 - La ✕ de cada etiqueta del detalle mide 42 px de alto (ya era así).
