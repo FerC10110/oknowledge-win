@@ -151,14 +151,18 @@
     // onto its entry opens it again on that entry, with no new one. Outgrown
     // (past 60rem) it stays open: the desktop's modal.
     if (dialog.id === "settings-modal" && phone()) {
-      var shut = function (how) { if (how !== "wide" && dialog.open) dialog.close(); };
       var ours = history.state && history.state.layer === "settings";
-      if (!(ours ? adoptLayer("settings", shut) : openLayer("settings", shut))) return false;
+      if (!(ours ? adoptLayer("settings", shutSettings) : openLayer("settings", shutSettings))) return false;
     }
     closeMenus();
     dialog.showModal();
     raise();
     return true;
+  }
+
+  function shutSettings(how) {
+    var dialog = document.getElementById("settings-modal");
+    if (how !== "wide" && dialog && dialog.open) dialog.close();
   }
 
   function toggleKeys() {
@@ -286,8 +290,16 @@
   // pushed from this same URL (Ajustes) goes by a back() that changes
   // nothing on screen; another (the detail's, with sel) stays, as a plain
   // entry of the page.
+  // Back under 60rem with Ajustes still open (the desktop's modal): it is
+  // the phone's layer again, with a new entry, so back closes it and never
+  // leaves the site.
   function outgrown(event) {
-    if (event.matches || !layer) return;
+    var dialog = document.getElementById("settings-modal");
+    if (event.matches) {
+      if (!layer && dialog && dialog.open) openLayer("settings", shutSettings);
+      return;
+    }
+    if (!layer) return;
     var top = layer;
     layer = null;
     var state = history.state;

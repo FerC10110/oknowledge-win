@@ -383,3 +383,20 @@ out.href = back.getAttribute("href");
     assert out["searched"]["url"] == "/ocio?q=dune&estado=pending&orden=titulo&buscar=dune&catalogo=movie"
     assert out["searched"]["open"] and out["searched"]["panel"] == "CATALOG"
     assert out["href"] == "/ocio?q=dune&estado=pending&orden=titulo"
+
+
+# --- review M1: Ajustes widened and narrowed again ----------------------------------------
+
+def test_ajustes_back_on_the_phone_after_a_rotation_gets_its_entry_again(tmp_path):
+    """Back must close it, never leave the app."""
+    out = run(tmp_path, """
+ok.openSettings(); await settle();
+resize(false); await settle();
+resize(true); await settle();
+out.narrow = page();
+history.back(); await settle();
+out.back = page();
+""")
+    assert out["narrow"]["settings"] and out["narrow"]["top"] == "settings"
+    assert out["narrow"]["at"] == 1 and out["narrow"]["layer"] == "settings"
+    assert not out["back"]["settings"] and out["back"]["at"] == 0 and out["back"]["top"] == ""
