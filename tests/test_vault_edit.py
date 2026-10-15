@@ -158,7 +158,7 @@ def test_deleting_moves_the_note_to_the_trash_instead_of_destroying_it(tmp_path)
     path = write_note(cfg, note("a1", "WireGuard", "Redes"), "es")
     before = path.read_text(encoding="utf-8")
 
-    moved = delete_note(cfg, "a1", "es")
+    moved = delete_note(cfg, "a1", "es").target
 
     assert not path.exists()
     assert moved == trash_dir(cfg) / path.name
@@ -168,10 +168,10 @@ def test_deleting_moves_the_note_to_the_trash_instead_of_destroying_it(tmp_path)
 def test_two_deleted_notes_with_the_same_name_do_not_clobber_each_other(tmp_path):
     cfg = make(tmp_path)
     first = write_note(cfg, note("a1", "WireGuard", "Redes"), "es")
-    one = delete_note(cfg, "a1", "es")
+    one = delete_note(cfg, "a1", "es").target
     second = write_note(cfg, note("b2", "WireGuard", "Redes"), "es")
     assert second.name == first.name          # same date, same title, same file name
-    two = delete_note(cfg, "b2", "es")
+    two = delete_note(cfg, "b2", "es").target
 
     assert one != two
     assert one.exists() and two.exists()
@@ -312,8 +312,8 @@ def test_a_delete_whose_indexes_fail_says_the_note_moved(tmp_path, monkeypatch):
     with pytest.raises(IndexesStale) as raised:
         delete_note(cfg, "a1", "es")
 
-    assert raised.value.done == trash_dir(cfg) / path.name
-    assert not path.exists() and raised.value.done.exists()
+    assert raised.value.done.target == trash_dir(cfg) / path.name
+    assert not path.exists() and raised.value.done.target.exists()
 
 
 def test_a_rename_whose_indexes_fail_still_reports_what_moved(tmp_path, monkeypatch):

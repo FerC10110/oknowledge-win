@@ -86,6 +86,15 @@ class IndexesStale(Exception):
         self.error = error
 
 
+@dataclass(frozen=True)
+class Trashed:
+    """Where a deleted note was, and the file it is now in trash/. The pair
+    is what a Deshacer needs to put it back (spec §6.2)."""
+
+    source: Path
+    target: Path
+
+
 def _safe(text: str) -> str:
     """Reduce text to [A-Za-z0-9-]: no separators, no dots, nothing that can escape."""
     return re.sub(r"[^A-Za-z0-9]+", "-", text).strip("-")
@@ -751,7 +760,8 @@ def update_note(cfg: Config, link_id: str, language: str,
                 my_note: str | None = None,
                 mark: str | None = None,
                 kind: str | None = None,
-                shelf: Shelf | None = None) -> Path | None:
+                shelf: Shelf | None = None,
+                rebuild: bool = True) -> Path | None:
     """Change one of our notes' classification and rebuild the indexes.
 
     `mentions` replaces the whole list. `drop_mention` removes the entries of
@@ -766,6 +776,9 @@ def update_note(cfg: Config, link_id: str, language: str,
 
     `found` is a (path, note) the caller already read, under its own lock, so
     this does not scan the vault a second time. Without it the note is looked up.
+
+    `rebuild=False` writes the note and leaves the indexes to the caller: a
+    bulk move of thirty notes rebuilds once at the end, not thirty times.
 
     Returns the path written, or None if no note of ours has that id. Raises
     BadCategory for a category we refuse, before touching anything.
@@ -816,7 +829,7 @@ def update_note(cfg: Config, link_id: str, language: str,
     # A change to mentions or collections skips the rebuild: no index names
     # either, and rebuilding the whole library on a delete click -- or once
     # per note while thirty of them join a project -- buys nothing.
-    if category is None and tags is None:
+    if (category is None and tags is None) or not rebuild:
         return written
     return _finish(cfg, language, written, shelf)
 
@@ -869,12 +882,13 @@ def _free_name(folder: Path, name: str) -> Path:
 
 
 def delete_note(cfg: Config, link_id: str, language: str,
-                shelf: Shelf | None = None) -> Path | None:
+                shelf: Shelf | None = None, rebuild: bool = True) -> Trashed | None:
     """Move one of our notes to trash/ and rebuild the indexes.
 
-    Returns the new path, or None if no note of ours has that id. Deleting
-    fires from a POST in a browser, so it has to be undoable: the file keeps
-    its name and content and can be dragged back from Obsidian.
+    Returns where it was and where it went, or None if no note of ours has
+    that id. Deleting fires from a POST in a browser, so it has to be
+    undoable: the file keeps its name and content, can be dragged back from
+    Obsidian, and restore_note() puts it back from a Deshacer.
     """
     found = find_note(cfg, link_id, shelf)
     if found is None:
@@ -890,7 +904,60 @@ def delete_note(cfg: Config, link_id: str, language: str,
     except OSError:
         target.unlink(missing_ok=True)           # no empty placeholder left behind
         raise
-    return _finish(cfg, language, target, shelf)
+    done = Trashed(source=path, target=target)
+    if not rebuild:
+        return done
+    return _finish(cfg, language, done, shelf)
+
+
+def restore_note(cfg: Config, link_id: str, source: Path, target: Path, language: str,
+                 shelf: Shelf | None = None, rebuild: bool = True) -> bool:
+    """Put a deleted note back at its old address, and rebuild its shelf.
+
+    False, with nothing touched, unless all of this holds: `target` is a file
+    directly in trash/, still ours and still this id (Obsidian can edit,
+    unmark or move it in the meantime); `source` is a free name directly in
+    the shelf's folder; and no note on the shelf has the id (the link was
+    pasted again since). The move never overwrites: a file that appears at
+    `source` between the check and the move wins, and the note stays in
+    trash/.
+    """
+    shelf = shelf or cfg.links
+    try:
+        trashed = ensure_inside_root(cfg, Path(target))
+        back = ensure_inside_root(cfg, Path(source))
+    except ProtectedNote:
+        return False
+    if trashed.parent != trash_dir(cfg).resolve() or back.parent != shelf.dir.resolve():
+        return False
+    if not trashed.is_file() or not back.parent.is_dir():
+        return False
+    found = read_note(trashed)
+    if found is None or found.id != link_id:
+        return False
+    if back.exists() or back.is_symlink() or find_note(cfg, link_id, shelf) is not None:
+        return False
+    try:
+        os.link(trashed, back)                   # fails, not overwrites, if the name appeared
+    except FileExistsError:
+        return False
+    except OSError:
+        # A filesystem without hard links: reserve the name, then move onto
+        # our own empty placeholder.
+        try:
+            os.close(os.open(back, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o666))
+        except FileExistsError:
+            return False
+        try:
+            os.replace(trashed, back)
+        except OSError:
+            back.unlink(missing_ok=True)
+            raise
+    else:
+        trashed.unlink()
+    if rebuild:
+        _finish(cfg, language, True, shelf)
+    return True
 
 
 @dataclass(frozen=True)
