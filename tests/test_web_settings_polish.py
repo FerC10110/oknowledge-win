@@ -4,7 +4,6 @@ visible without JavaScript, Categories' autocomplete and links, and the
 interface language's hint on one line. What settings.js does is in
 test_web_settings_script.py."""
 
-import json
 import re
 from pathlib import Path
 
@@ -91,13 +90,14 @@ def test_the_interface_language_has_one_hint(client):
     body = client.get("/settings/panel?tab=idioma").text
     row = re.search(r'<p class="setting-name">Interface language</p>(.*?)</div>', body, re.S).group(1)
     hints = re.findall(r'<p class="setting-hint">(.*?)</p>', row)
-    assert hints == ["Shared with your other Omarchy plugins; reloads the page"]
+    assert hints == ["Changing it reloads the page"]
 
 
-def test_the_interface_language_hint_is_in_spanish(client, isolated_ui_language):
-    isolated_ui_language.write_text(json.dumps({"language": "es"}), encoding="utf-8")
-    body = client.get("/settings/panel?tab=idioma").text
-    assert "Compartido con tus otros plugins de Omarchy; recarga la página" in body
+def test_the_interface_language_hint_is_in_spanish(client, tmp_path):
+    # The fork keeps the interface language in its own config.
+    spanish = TestClient(create_app(Config(vault=tmp_path / "vault", ui_language="es")))
+    body = spanish.get("/settings/panel?tab=idioma").text
+    assert "Cambiarlo recarga la página" in body
 
 
 # --- 9. the dialog itself, focused, draws no ring ------------------------------------------

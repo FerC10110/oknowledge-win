@@ -341,7 +341,7 @@ def test_a_note_left_behind_for_another_reason_is_not_blamed_on_another_note(s):
     assert body["notice"] == "Restored · 1 not restored, still in oknowledge/trash/"
 
 
-def test_the_left_behind_notices_say_it_in_spanish(isolated_ui_language):
+def test_the_left_behind_notices_say_it_in_spanish():
     from oknowledge.i18n import translator
     from oknowledge.web.app import NOTICES
 
