@@ -12,7 +12,7 @@
   <details class="menu more">
     <summary class="btn icon framed" aria-label="{{ t('More') }}" title="{{ t('More') }}">⋯</summary>
     <div class="menu-list">
-      <form method="post" action="/item/{{ note.id|slug }}/describe" data-inline>
+      <form method="post" action="/item/{{ note.id|slug }}/describe" data-inline data-runs>
         <button>{{ t('Rewrite the card') }}</button>
       </form>
       <details class="submenu">
@@ -28,7 +28,8 @@
     </div>
   </details>
 </div>
-<div class="detail-scroll card" data-panel="{{ panel_id }}"{% if rewriting %} data-working="{{ panel_id }}"{% endif %}>
+<div class="detail-scroll card" data-panel="{{ panel_id }}"{% if rewriting %} data-working="{{ panel_id }}"{% endif %}
+     data-done-as="{{ t('Done: card rewritten') }}" data-failed-as="{{ t('The card could not be rewritten') }}">
   <div class="card-head">
     <span class="art" style="background: {{ note.type|poster_fill }}">
       {% if note.cover %}<img src="/cover/{{ note.id|slug }}" alt="">{% endif %}
@@ -50,7 +51,7 @@
       <p>{{ t('The card is as the source gave it (in English).') }}</p>
       {% if rewriting %}<p class="working">{{ t('Rewriting…') }}</p>
       {% else %}
-        <form method="post" action="/item/{{ note.id|slug }}/describe" data-inline>
+        <form method="post" action="/item/{{ note.id|slug }}/describe" data-inline data-runs>
           <button class="btn primary">{{ t('Rewrite in Spanish') }}</button>
         </form>
       {% endif %}

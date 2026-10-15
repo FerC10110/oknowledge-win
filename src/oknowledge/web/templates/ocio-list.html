@@ -5,7 +5,7 @@
     <span class="unrewritten"><i class="dot" style="background: var(--acc)"></i>
       {% if unrewritten == 1 %}{{ t('1 card not rewritten') }}{% else %}{{ t('%1 cards not rewritten', unrewritten) }}{% endif %}
       {% if rewriting_all %}<em>{{ t('Rewriting…') }}</em>
-      {% else %}<form method="post" action="/ocio/reescribir" data-inline><button class="btn small">{{ t('Rewrite') }}</button></form>{% endif %}
+      {% else %}<form method="post" action="/ocio/reescribir" data-inline data-runs><button class="btn small">{{ t('Rewrite') }}</button></form>{% endif %}
     </span>
   {% endif %}
   </span>
@@ -18,7 +18,7 @@
 </div>
 <div class="list-body" id="list-body">
   {% if notes %}
-    <ul class="posters" id="items" data-current="{{ current }}">
+    <ul class="posters" id="items" data-current="{{ current }}" data-done-as="{{ t('Done: card rewritten') }}" data-failed-as="{{ t('The card could not be rewritten') }}">
       {% for note in notes %}{{ shelf.poster(note, view, current, busy) }}{% endfor %}
     </ul>
     {% if more %}<a class="more" href="{{ view.url(hasta=view.hasta + chunk) }}" data-more="{{ view.url('/ocio/lista', desde=view.hasta) }}">{{ t('Show more') }}</a>{% endif %}

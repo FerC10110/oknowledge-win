@@ -39,9 +39,9 @@
   // library_view.saves -- a link, or "película: Terminator" (cards.wanted:
   // the word before the first colon, folded and trimmed, and a title after it).
   function saves(text) {
-    // Only the library saves on Enter. On /ideas Enter searches and only the
-    // "New idea" button saves (spec §2).
-    if (mode !== "library") return false;
+    // The library and Ocio save on Enter. On /ideas Enter searches and only
+    // the "New idea" button saves (spec §2).
+    if (mode === "ideas") return false;
     var start = text.trim().toLowerCase();
     if (start.indexOf("http://") === 0 || start.indexOf("https://") === 0 ||
         start.indexOf("www.") === 0) return true;
@@ -81,7 +81,10 @@
         } else if (panel) {
           var current = items ? items.dataset.current : "";
           var shown = panel.querySelector("[data-panel]");
-          if (current && (!shown || shown.dataset.panel !== current)) loadPanel(current, true);
+          // Not over a catalog search the URL still names (Ocio): the list
+          // was reloaded under it, the search was not left.
+          if (current && !target.searchParams.get("buscar") &&
+              (!shown || shown.dataset.panel !== current)) loadPanel(current, true);
         }
         observe();
         watch();
@@ -115,6 +118,8 @@
     var mine = ++shownAsked;
     var url = here();
     url.searchParams.set("sel", id);
+    // Ocio: a card picked ends a catalog search, on reload too.
+    ["buscar", "catalogo", "year"].forEach(function (name) { url.searchParams.delete(name); });
     history.replaceState(null, "", url.pathname + url.search);
     markCurrent(id);
     return fetch("/panel/" + encodeURIComponent(id) + url.search)
@@ -127,7 +132,38 @@
         if (mine !== shownAsked) return;      // a newer panel was asked for since
         if (html === null) { emptyPanel(); return; }
         panel.innerHTML = html;
+        if (window.oknowledge) window.oknowledge.bind(panel);   // the note saves itself
+        watch();
       })
+      .catch(function () { if (mine === shownAsked) location.href = url.href; });
+  }
+
+  // Ocio: the catalogs' answers in the panel (spec §3). The URL says what
+  // was searched, so a reload shows the same. The page's `tipo` is the
+  // poster grid's filter and stays; `catalogo` is the kind searched. The
+  // fragment takes that kind as `tipo` and the grid as `grid`, which its
+  // kind links carry on.
+  function loadCatalog(q, kind) {
+    if (!panel) return;
+    var mine = ++shownAsked;
+    var url = here();
+    var grid = url.searchParams.get("tipo") || "";
+    // A kind picked in the panel, the one searched last, or the grid's
+    // (Todo: films), as the page without JavaScript does.
+    var searched = kind || url.searchParams.get("catalogo") || grid || "movie";
+    if (!kind) url.searchParams.delete("year");    // a new search, not a new kind
+    url.searchParams.set("buscar", q);
+    url.searchParams.set("catalogo", searched);
+    url.searchParams.delete("sel");
+    history.replaceState(null, "", url.pathname + url.search);
+    list.querySelectorAll("li.item.on").forEach(function (li) { li.classList.remove("on"); });
+    var ask = new URLSearchParams({ q: q, tipo: searched });
+    var year = url.searchParams.get("year");
+    if (year) ask.set("year", year);
+    if (grid) ask.set("grid", grid);
+    fetch("/ocio/candidatos?" + ask.toString())
+      .then(function (r) { if (!r.ok) throw new Error(r.status); return r.text(); })
+      .then(function (html) { if (mine === shownAsked) panel.innerHTML = html; })
       .catch(function () { if (mine === shownAsked) location.href = url.href; });
   }
 
@@ -155,6 +191,13 @@
         event.shiftKey || event.altKey) return;
     // Only anchors: the panel's ⋯ is a <details class="menu up more"> and
     // must keep opening as a menu, never load more of the list.
+    var kind = event.target.closest("a[data-kind]");
+    if (kind && panel && panel.contains(kind)) {
+      event.preventDefault();
+      var search = panel.querySelector("[data-search]");
+      loadCatalog(search ? search.dataset.search : "", kind.dataset.kind);
+      return;
+    }
     var link = event.target.closest("a[data-sel], a[data-nav], a[data-view], a.more[data-more]");
     if (!link) return;
     event.preventDefault();
@@ -203,6 +246,8 @@
     // On /ideas "New idea" shows as soon as there is text, and the text
     // still searches: the button saves it, Enter does not.
     form.classList.toggle("saving", mode === "ideas" ? text.trim() !== "" : saving);
+    // Ocio: text that does not save searches the catalogs with its button.
+    form.classList.toggle("finding", mode === "ocio" && !saving && text.trim() !== "");
     if (saving) return;
     timer = setTimeout(function () {
       var url = new URL(form.getAttribute("action") || "/", location.href);
@@ -219,6 +264,11 @@
   form.addEventListener("submit", function (event) {
     if (event.submitter && event.submitter.id === "save-link") return;   // a real POST
     event.preventDefault();
+    var catalog = event.submitter && event.submitter.id === "catalog-search";
+    if (mode === "ocio" && !saves(field.value) && (catalog || field.value.trim())) {
+      if (field.value.trim()) loadCatalog(field.value.trim().split(/\s+/).join(" "));
+      return;
+    }
     if (saves(field.value)) {
       // Not from inside this handler: a submission started while the form is
       // still firing its submit event is ignored (HTML spec, "firing
@@ -298,28 +348,39 @@
     event.preventDefault();
     var data = new FormData(target, event.submitter || undefined);
     closeMenus();
-    fetch(target.action, { method: "POST", body: data })
+    fetch(target.action, { method: "POST", body: data,
+                           headers: { Accept: "application/json" } })
       .then(function (r) {
-        if (!r.ok) throw new Error(r.status);
-        return r.text();
+        return r.json().catch(function () { return { ok: false }; });
       })
-      .then(function (html) {
-        var page = new DOMParser().parseFromString(html, "text/html");
-        var said = page.querySelector(".toast");
-        toast(said ? said.textContent : "");
+      .then(function (answer) {
+        if (!answer.ok) { toast(answer.error || texts.saveFailed); return; }
+        // A write that starts a run (a rewrite) is told by its watcher when
+        // it ends; its own notice says "reload in a moment", which is wrong here.
+        if (!target.dataset.runs) toast(answer.notice || "");
         var shown = panel && panel.querySelector("[data-panel]");
-        if (shown && stillPicked(shown.dataset.panel)) loadPanel(shown.dataset.panel, true);    // deleted: gone
+        if (shown && shown.dataset.panel && stillPicked(shown.dataset.panel)) {
+          loadPanel(shown.dataset.panel, true);    // deleted: gone
+        }
         loadList(here().href, true);
       })
       .catch(function () { toast(texts.saveFailed); });
   });
 
   // --- links being read -----------------------------------------------------
+  // A link being analysed in the list, or a card being rewritten in the
+  // list or the panel: each says its own words when it ends, from the
+  // nearest data-done-as / data-failed-as (the library's are the page's).
   var watched = {};
   function watch() {
-    list.querySelectorAll("[data-working]").forEach(function (li) {
-      var id = li.dataset.working;
+    var busy = Array.prototype.slice.call(list.querySelectorAll("[data-working]"));
+    if (panel) busy = busy.concat(Array.prototype.slice.call(panel.querySelectorAll("[data-working]")));
+    busy.forEach(function (el) {
+      var id = el.dataset.working;
       if (watched[id]) return;
+      var words = el.closest("[data-done-as]");
+      var doneAs = words ? words.dataset.doneAs : texts.done;
+      var failedAs = words ? words.dataset.failedAs : texts.failed;
       watched[id] = setInterval(function () {
         fetch("/item/" + encodeURIComponent(id) + "/state")
           .then(function (r) { return r.json(); })
@@ -327,7 +388,7 @@
             if (state.working) return;
             clearInterval(watched[id]);
             delete watched[id];
-            toast(state.status === "failed" ? texts.failed : texts.done);
+            toast(state.status === "failed" ? failedAs : doneAs);
             // What the user picked, not what is on screen: that is still the
             // old panel while a newer pick is on its way.
             var shown = panel && panel.querySelector("[data-panel]");

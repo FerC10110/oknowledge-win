@@ -79,7 +79,9 @@ def test_a_rewrite_that_works_clears_the_failure(client, model):
     model[0][T2] = None
     client.post(f"/item/{T2}/describe")
     assert "Last time it failed" not in client.get(f"/panel/{T2}").text
-    assert "could not be rewritten" not in client.get("/ocio").text
+    # The grid carries "The card could not be rewritten" as the words a
+    # watcher says (data-failed-as); what must be gone is the failure shown.
+    assert "Last time it failed" not in client.get(f"/ocio?sel={T2}").text
 
 
 def test_a_running_rewrite_says_so_and_is_not_asked_twice(cfg, model):

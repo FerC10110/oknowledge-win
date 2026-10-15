@@ -102,4 +102,45 @@ def test_the_script_serves_any_list_column():
 
 def test_in_ideas_enter_never_saves():
     body = between(SCRIPT.read_text(encoding="utf-8"), "function saves", "// --- the list column")
-    assert 'mode !== "library"' in body
+    assert 'mode === "ideas"' in body
+
+
+def test_inline_writes_ask_for_json_and_say_what_came_back():
+    body = between(SCRIPT.read_text(encoding="utf-8"), 'form[data-inline]', "// --- links being read")
+    assert 'Accept: "application/json"' in body
+    assert "answer.notice" in body and "answer.error" in body
+
+
+def test_a_write_that_starts_a_run_does_not_say_it_ended():
+    """A rewrite's notice says "reload in a moment": the watcher says when it
+    ends, so the start is not toasted (carried from Task 6)."""
+    body = between(SCRIPT.read_text(encoding="utf-8"), 'form[data-inline]', "// --- links being read")
+    assert "target.dataset.runs" in body
+
+
+def test_a_panel_that_lands_binds_its_autosave():
+    body = between(SCRIPT.read_text(encoding="utf-8"), "function loadPanel", "function emptyPanel")
+    assert "window.oknowledge" in body and ".bind(panel)" in body
+
+
+def test_ocio_searches_the_catalogs_in_the_panel():
+    text = SCRIPT.read_text(encoding="utf-8")
+    body = between(text, "function loadCatalog", "function emptyPanel")
+    assert '"/ocio/candidatos?"' in body and '"buscar"' in body
+    assert "data-kind" in text and "catalog-search" in text
+
+
+def test_the_catalog_search_keeps_the_grid_apart():
+    """Task 10's contract: the page's `tipo` is the grid, `catalogo` the
+    catalog's kind; the fragment takes the kind as `tipo` and the grid as
+    `grid`, and the page's `tipo` is never overwritten."""
+    body = between(SCRIPT.read_text(encoding="utf-8"), "function loadCatalog", "function emptyPanel")
+    assert 'set("catalogo"' in body
+    assert 'ask.set("grid"' in body
+    assert 'url.searchParams.set("tipo"' not in body
+
+
+def test_a_rewrite_says_its_own_words_when_it_ends():
+    body = between(SCRIPT.read_text(encoding="utf-8"), "function watch", "observe();\n  watch();\n})")
+    assert "doneAs" in body and "failedAs" in body
+    assert "panel.querySelectorAll" in body

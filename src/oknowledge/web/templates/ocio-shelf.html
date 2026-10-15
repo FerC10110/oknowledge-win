@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block title %}{% if view.q %}{{ view.q }} - {% endif %}{{ t('Leisure') }} - oknowledge{% endblock %}
 {% block app_class %}ocio{% endblock %}
+{% block scripts %}<script src="/static/autosave.js" defer></script><script src="/static/shell.js" defer></script>{% endblock %}
 {% block layout %}
 <section class="center" aria-label="{{ t('Leisure') }}">
   <form class="unified{% if field_saves %} saving{% elif view.q %} finding{% endif %}" id="unified" action="/ocio" method="get" role="search"
