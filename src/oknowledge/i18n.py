@@ -237,7 +237,6 @@ STRINGS = {
         "Remove": "Quitar",
 
         # Analysing a batch of what an import left unanalysed.
-        "Activity": "Actividad",
         "Add a model": "Agregar un modelo",
         "Add a model…": "Agregar un modelo…",
         "AI activity": "Actividad de IA",
@@ -283,7 +282,6 @@ STRINGS = {
             "Cu\u00e1ntos de una vez se configura en Ajustes.",
         "Every link has been analysed.": "Todos los links est\u00e1n analizados.",
         "Links to analyse at a time": "Links a analizar por vez",
-        "How many": "Cu\u00e1ntos",
         "Reading that link now. It shows up in the library when it is done.":
             "Leyendo ese link. Aparece en la biblioteca cuando termina.",
         "You already have that link.": "Ese link ya lo tenés.",
