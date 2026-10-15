@@ -6,6 +6,13 @@
 (function () {
   "use strict";
   var DELAY = 1000;
+  // A save with no answer by then has failed: it says so and lets the panel
+  // change again (the text stays in its box, and the next try sends it).
+  var LIMIT = 15000;
+  // keepalive bodies share a 64 KB budget: past it the request fails at
+  // once. A bigger text goes as a normal request (sendBeacon has the same
+  // budget), which a page that is only hidden still finishes.
+  var KEEP_MAX = 60000;
   var texts = document.body.dataset;
 
   // The one toast is app.js's (spec §2).
@@ -25,10 +32,27 @@
     });
   }
 
-  // `keep`: the request outlives the page, for what is sent while leaving it.
-  function send(url, data, keep) {
-    return fetch(url, { method: "POST", body: data, keepalive: keep === true,
-                        headers: { Accept: "application/json" } }).then(answer);
+  function bytes(text) {
+    try { return new Blob([text]).size; } catch (e) { return text.length * 3; }
+  }
+
+  // `keep`: the request outlives the page, for what is sent while leaving it
+  // -- when its text fits in keepalive's budget.
+  function send(url, data, keep, text) {
+    var controller = typeof AbortController === "function" ? new AbortController() : null;
+    return new Promise(function (resolve, reject) {
+      var timer = setTimeout(function () {
+        if (controller) controller.abort();
+        reject(new Error(texts.saveFailed || ""));
+      }, LIMIT);
+      var keepalive = keep === true && (text === undefined || bytes(text) <= KEEP_MAX);
+      fetch(url, { method: "POST", body: data, keepalive: keepalive,
+                   signal: controller ? controller.signal : undefined,
+                   headers: { Accept: "application/json" } })
+        .then(answer)
+        .then(function (body) { clearTimeout(timer); resolve(body); },
+              function (error) { clearTimeout(timer); reject(error); });
+    });
   }
 
   function post(form, submitter) {
@@ -73,7 +97,8 @@
       var data = new FormData();
       data.set(field.name, sending);
       say("saving");
-      send(field.dataset.autosave, data, keep)
+      var failed = false;
+      send(field.dataset.autosave, data, keep, sending)
         .then(function (body) {
           failure = null;
           if (outgoing === sending) saved = sending;   // not when leave() sent a newer one
@@ -83,6 +108,7 @@
           field.dispatchEvent(new CustomEvent("saved", { bubbles: true }));
         })
         .catch(function (error) {
+          failed = true;
           failure = error;
           if (outgoing === sending) outgoing = null;
           say("");
@@ -92,7 +118,14 @@
         })
         .then(function () {
           inflight = false;
-          if (again) { again = false; flush(); }
+          // After a failure the round ends: whoever waited is told now, and
+          // newer text typed meanwhile goes a second later, as after a key
+          // -- not at once, into what just failed, with the wait doubled.
+          if (again) {
+            again = false;
+            if (!failed) flush();
+            else if (field.value !== sending) schedule();
+          }
           if (!inflight) wake();
         });
     }
@@ -122,7 +155,7 @@
       outgoing = value;
       var data = new FormData();
       data.set(field.name, value);
-      send(field.dataset.autosave, data, true)
+      send(field.dataset.autosave, data, true, value)
         .then(function () {
           if (outgoing !== value) return;
           saved = value;
@@ -141,6 +174,12 @@
     boxes.push({
       field: field,
       leave: leave,
+      // Back on the page: what a leave() could not save is sent again now,
+      // not only with the next key.
+      retry: function () {
+        if (timer || inflight || field.value === saved || field.value === outgoing) return;
+        flush();
+      },
       idle: function () { return !timer && !inflight && field.value === saved; },
       dirty: function () {
         if (timer || inflight) return true;
@@ -179,6 +218,7 @@
   window.addEventListener("pagehide", leaving);
   document.addEventListener("visibilitychange", function () {
     if (document.visibilityState === "hidden") leaving();
+    else boxes.forEach(function (box) { box.retry(); });
   });
 
   function under(root) {

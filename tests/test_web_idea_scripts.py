@@ -62,7 +62,8 @@ def test_one_save_in_flight_per_field_and_the_newest_text_after_it():
     flush = between(AUTOSAVE, "function flush", "function schedule")
     assert "if (inflight) { again = true; return; }" in flush
     assert "var sending = field.value;" in flush
-    assert "if (again) { again = false; flush(); }" in flush
+    # After a save that landed; one that failed ends the round (polish).
+    assert "if (!failed) flush();" in flush
 
 
 def test_a_reply_never_writes_the_field():
@@ -127,10 +128,12 @@ def test_leaving_the_page_sends_what_is_not_saved_yet():
     last key still saves it, with a request that outlives the page, and not
     twice when that text is already on its way."""
     assert '"pagehide"' in AUTOSAVE and '"visibilitychange"' in AUTOSAVE
-    assert "keepalive: keep === true" in AUTOSAVE
+    # Within keepalive's 64 KB budget only (polish): the node tests in
+    # test_web_autosave_settle.py check what goes past it.
+    assert "keepalive: keepalive" in AUTOSAVE and "KEEP_MAX" in AUTOSAVE
     leave = between(AUTOSAVE, "function leave", "function schedule")
     assert "value === saved || value === outgoing" in leave
-    assert "flush(true)" in leave and "send(field.dataset.autosave, data, true)" in leave
+    assert "flush(true)" in leave and "send(field.dataset.autosave, data, true, value)" in leave
     assert 'addEventListener("blur", function () { flush(); })' in AUTOSAVE
 
 

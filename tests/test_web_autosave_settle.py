@@ -190,3 +190,195 @@ def test_text_back_to_the_saved_value_during_a_save_is_sent_after_it(back):
     assert back["followUp"] == ["A"]
     assert back["landed"] == ["AB", "A"]
     assert back["indicator"] == "Guardado"
+
+
+# --- polish (docs/2026-10-14-rediseno-ocio-ideas-pendientes.md, "Panel y autoguardado") ---
+# A clock the test moves: the timers autosave.js sets wait for advance().
+# node is the one program these run: taken before conftest's guard swaps
+# them for an alarm, and put back after it (as test_web_layer_history does).
+_REAL = {name: getattr(subprocess, name) for name in ("run", "Popen")}
+
+CLOCK_HARNESS = r"""
+const source = require("fs").readFileSync(process.argv[2], "utf8");
+const realTimeout = setTimeout;
+let now = 0;
+let timers = [];
+global.setTimeout = (fn, ms) => { const t = { fn, at: now + (ms || 0) }; timers.push(t); return t; };
+global.clearTimeout = (t) => { timers = timers.filter((x) => x !== t); };
+async function advance(ms) {
+  now += ms;
+  for (;;) {
+    const due = timers.filter((t) => t.at <= now).sort((a, b) => a.at - b.at)[0];
+    if (!due) break;
+    timers = timers.filter((t) => t !== due);
+    due.fn();
+    await tick();
+  }
+}
+const tick = () => new Promise((r) => realTimeout(r, 0));
+const listeners = { window: {}, document: {} };
+function on(where) {
+  return (type, fn) => { (listeners[where][type] = listeners[where][type] || []).push(fn); };
+}
+const handlers = {};
+const field = { value: "", name: "my_note", dataset: { autosave: "/item/x/mine/note" }, form: null,
+                isConnected: true, hasAttribute: () => false,
+                addEventListener: (t, f) => { handlers[t] = f; }, dispatchEvent: () => true };
+const root = { querySelectorAll: (sel) => sel === "[data-autosave]" ? [field] : [] };
+global.window = global;
+window.addEventListener = on("window");
+global.document = { body: { dataset: { saveFailed: "No se pudo guardar" }, appendChild: () => null },
+                    createElement: () => ({ setAttribute: () => null, remove: () => null }),
+                    activeElement: null, visibilityState: "visible", addEventListener: on("document"),
+                    querySelector: () => null, querySelectorAll: (sel) => root.querySelectorAll(sel) };
+global.FormData = class { constructor() { this.v = {}; } set(k, v) { this.v[k] = v; } };
+global.CustomEvent = class { constructor(t) { this.type = t; } };
+const held = [];
+const sent = [];
+global.fetch = (url, opts) => new Promise((resolve, reject) => {
+  sent.push({ text: opts.body.v.my_note, keepalive: opts.keepalive });
+  held.push({ resolve, reject });
+  if (opts.signal) opts.signal.addEventListener("abort", () => reject(new Error("aborted")));
+});
+function answer(ok) {
+  held.shift().resolve({ ok, status: ok ? 200 : 500,
+    json: () => Promise.resolve(ok ? { ok: true, notice: "" } : { ok: false, error: "boom" }) });
+}
+const toasts = [];
+window.oknowledge = { toast: (t) => toasts.push(t) };
+function visibility(state) {
+  document.visibilityState = state;
+  (listeners.document.visibilitychange || []).forEach((fn) => fn());
+}
+eval(source);
+const out = {};
+"""
+
+
+@pytest.fixture
+def clock(tmp_path, no_network_and_no_subprocess, monkeypatch):
+    for name, real in _REAL.items():
+        monkeypatch.setattr(subprocess, name, real)
+    return lambda scenario: run_clock(tmp_path, scenario)
+
+
+def run_clock(tmp_path, scenario):
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not installed")
+    harness = tmp_path / "harness.js"
+    harness.write_text(CLOCK_HARNESS + "(async () => {\n" + scenario +
+                       "\nconsole.log(JSON.stringify(out));\n})().catch((e) => { console.error(e.stack); process.exit(1); });\n",
+                       encoding="utf-8")
+    done = subprocess.run([node, str(harness), str(SCRIPT)], capture_output=True, text=True,
+                          timeout=30, check=False)
+    assert done.returncode == 0, done.stderr
+    return json.loads(done.stdout.strip().splitlines()[-1])
+
+
+def test_a_save_that_never_answers_fails_after_fifteen_seconds(clock):
+    out = clock("""
+field.value = "ab";
+let told = "waiting";
+window.oknowledge.settle(root).then((e) => { told = e ? e.message : null; });
+await tick();
+await advance(14999);
+out.before = told;
+await advance(1); await tick(); await tick();
+out.after = told;
+out.toasts = toasts.slice();
+out.text = field.value;
+// The panel change is not stuck: the next one tries again.
+window.oknowledge.settle(root);
+await tick();
+out.sent = sent.map((s) => s.text);
+""")
+    assert out["before"] == "waiting"
+    assert out["after"] == "No se pudo guardar" and out["toasts"] == ["No se pudo guardar"]
+    assert out["text"] == "ab" and out["sent"] == ["ab", "ab"]
+
+
+def test_a_save_that_answers_in_time_is_not_timed_out(clock):
+    out = clock("""
+field.value = "ab";
+let told = "waiting";
+window.oknowledge.settle(root).then((e) => { told = e; });
+await tick();
+await advance(14000);
+answer(true); await tick(); await tick(); await tick();
+await advance(5000);
+out.told = told;
+out.toasts = toasts;
+""")
+    assert out["told"] is None and out["toasts"] == []
+
+
+@pytest.mark.parametrize("size, keepalive", [(1000, True), (70000, False)])
+def test_leaving_with_a_big_text_does_not_use_keepalive(clock, size, keepalive):
+    """keepalive bodies are capped at 64 KB: a bigger one would fail at once
+    with a false error. It goes as a normal request instead."""
+    out = clock(f"""
+field.value = "x".repeat({size});
+visibility("hidden");
+await tick();
+out.keepalive = sent.map((s) => s.keepalive);
+out.toasts = toasts;
+""")
+    assert out["keepalive"] == [keepalive] and out["toasts"] == []
+
+
+def test_a_failed_leave_is_sent_again_when_the_page_comes_back(clock):
+    out = clock("""
+field.value = "abc";
+visibility("hidden");
+await tick();
+answer(false); await tick(); await tick(); await tick();
+out.afterFail = sent.length;
+visibility("visible");
+await tick();
+out.sent = sent.map((s) => s.text);
+""")
+    assert out["afterFail"] == 1 and out["sent"] == ["abc", "abc"]
+
+
+def test_coming_back_with_nothing_unsaved_sends_nothing(clock):
+    out = clock("""
+field.value = "abc";
+visibility("hidden");
+await tick();
+answer(true); await tick(); await tick(); await tick();
+visibility("visible");
+await tick();
+out.sent = sent.length;
+""")
+    assert out["sent"] == 1
+
+
+def test_a_failed_save_is_not_sent_again_at_once_by_the_settle_that_waited(clock):
+    """A settle asked while the save was out waits for that one only: it is
+    told the failure after fifteen seconds, not thirty."""
+    out = clock("""
+field.value = "ab"; handlers.blur();
+await tick();
+let told = "waiting";
+window.oknowledge.settle(root).then((e) => { told = e ? e.message : null; });
+await tick();
+await advance(15000); await tick(); await tick();
+out.told = told;
+out.sent = sent.map((s) => s.text);
+""")
+    assert out["told"] == "No se pudo guardar" and out["sent"] == ["ab"]
+
+
+def test_text_typed_while_a_save_failed_is_sent_a_second_later(clock):
+    out = clock("""
+field.value = "ab"; handlers.blur();
+await tick();
+field.value = "abc"; handlers.blur();          // out while "ab" is: it waits for it
+await tick();
+answer(false); await tick(); await tick(); await tick();
+out.atOnce = sent.map((s) => s.text);
+await advance(1000); await tick();
+out.later = sent.map((s) => s.text);
+""")
+    assert out["atOnce"] == ["ab"] and out["later"] == ["ab", "abc"]

@@ -11,11 +11,6 @@ en `2026-10-14-rediseno-biblioteca-pendientes.md`.
 
 ## Panel y autoguardado
 
-- Un guardado de la nota que nunca contesta bloquea los cambios de panel: no
-  hay timeout.
-- Un cambio de pestaña con más de 64 KB pendientes muestra un error falso
-  (límite de `keepalive`). Un `leave()` fallido se reintenta sólo con la
-  próxima tecla.
 - Una respuesta de `/actions/state` más lenta que 3 s se descarta por vieja;
   un servidor muy lento podría no llegar a mostrar "Listo".
 
