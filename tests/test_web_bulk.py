@@ -346,3 +346,68 @@ def test_when_no_card_can_take_the_state_the_answer_says_why(s, ids):
     answer = post(s, "state", ids=ids, state="dropped")
     assert answer.status_code == 400
     assert answer.json()["error"] == "That state does not apply to Ocio cards."
+
+
+# --- the sidebar's counts follow a bulk action (batch G) ------------------------------
+# Every bulk action, and its Deshacer, reloads the list: the list's answer
+# brings the sidebar drawn again for shell.js to swap in, the sections'
+# counts with it.
+
+def side_of(body):
+    found = re.search(r'<template id="side-filters">(.*?)</template>', body, re.S)
+    assert found, "the list's answer brings no sidebar"
+    return found.group(1)
+
+
+def section_count(side, href):
+    found = re.search(rf'<nav class="sections">.*?href="{re.escape(href)}"[^>]*>.*?'
+                      r'<b class="count mono">(\d+)</b>', side, re.S)
+    assert found, f"no section count for {href}"
+    return int(found.group(1))
+
+
+def row_count(side, label):
+    found = re.search(rf'<span>{re.escape(label)}</span><b class="count mono">(\d+)</b>', side)
+    return int(found.group(1)) if found else None
+
+
+def test_after_a_bulk_move_the_library_list_brings_the_new_category_counts(s):
+    before = side_of(s.client.get("/lista").text)
+    assert (row_count(before, "Redes"), row_count(before, "Cocina")) == (2, 1)
+    post(s, "category", ids=["b2"], category="Redes")
+    answer = s.client.get("/lista").text
+    after = side_of(answer)
+    assert (row_count(after, "Redes"), row_count(after, "Cocina")) == (3, None)
+    # The phone's chip row comes along, drawn for the same counts.
+    assert '<template id="chip-filters">' in answer
+
+
+def test_after_a_bulk_delete_and_its_undo_the_sections_count_again(s):
+    token = post(s, "delete", ids=["a1", "b2"]).json()["undo"]
+    assert section_count(side_of(s.client.get("/lista").text), "/") == 1
+    s.client.post(f"/undo/{token}", headers=JSON)
+    assert section_count(side_of(s.client.get("/lista").text), "/") == 3
+
+
+def test_after_a_bulk_state_the_ideas_list_brings_its_state_counts(s):
+    post(s, "state", ids=s.ideas, state="doing")
+    answer = s.client.get("/ideas/lista").text
+    side = side_of(answer)
+    assert row_count(side, "under way") == 2 and row_count(side, "seed") == 0
+    assert section_count(side, "/ideas") == 2
+    assert '<template id="chip-filters">' in answer
+
+
+def test_after_a_bulk_delete_of_a_card_the_ocio_list_counts_one_less(s):
+    post(s, "delete", ids=[CARD1])
+    assert section_count(side_of(s.client.get("/ocio/lista").text), "/ocio") == 1
+
+
+def test_show_more_brings_no_sidebar(s):
+    assert '<template id="side-filters">' not in s.client.get("/lista?desde=1").text
+    assert '<template id="side-filters">' not in s.client.get("/ideas/lista?desde=1").text
+
+
+def test_the_first_page_does_not_carry_a_second_sidebar(s):
+    for path in ("/", "/ideas", "/ocio"):
+        assert '<template id="side-filters">' not in s.client.get(path).text

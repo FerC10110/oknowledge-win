@@ -1013,6 +1013,11 @@ def create_app(cfg: Config) -> FastAPI:
                 "list_url": view.url(sel=""),
                 "KIND_ONE": KIND_ONE, "KIND_NAMES": KIND_NAMES, "CARD_DOTS": CARD_DOTS}
 
+    def library_groups() -> dict:
+        """The library's sidebar groups, over the index as it is now."""
+        return side_groups(library.notes, library.categories(), library.collections(),
+                           current["cfg"].marks)
+
     @app.get("/", response_class=HTMLResponse)
     def home(request: Request):
         library.refresh()
@@ -1021,8 +1026,7 @@ def create_app(cfg: Config) -> FastAPI:
         shown = listing(view, working)
         panel = panel_context(shown["current"], view, working) if shown["current"] else None
         return page(request, "home.html", section="links", toast=True,
-                    groups=side_groups(library.notes, library.categories(),
-                                       library.collections(), current["cfg"].marks),
+                    groups=library_groups(),
                     default_content=current["cfg"].default_content,
                     save_prefixes=" ".join(sorted(cards.PREFIXES)),
                     panel=panel is not None, **shown, **(panel or {}))
@@ -1046,7 +1050,8 @@ def create_app(cfg: Config) -> FastAPI:
         view = View.from_query(request.query_params)
         shown = listing(view, analyzing())
         if not desde:
-            return page(request, "list.html", **shown)
+            # The sidebar comes with the list, for a bulk action's counts.
+            return page(request, "list.html", side_groups=library_groups(), **shown)
         try:
             start = max(0, int(desde))
         except ValueError:
@@ -2458,9 +2463,12 @@ def create_app(cfg: Config) -> FastAPI:
     def idea_column(request: Request, desde: str = ""):
         """The list column alone, for the live search and "more". Registered
         before /ideas/{idea_id}, which would take "lista" for an id."""
-        shown = idea_listing(IdeaView.from_query(request.query_params))
+        view = IdeaView.from_query(request.query_params)
+        shown = idea_listing(view)
         if not desde:
-            return page(request, "idea-list.html", **shown)
+            # ESTADO comes with the list, for a bulk action's counts.
+            return page(request, "idea-list.html", side_filters=idea_filters(ideas.notes, view),
+                        **shown)
         try:
             start = max(0, int(desde))
         except ValueError:

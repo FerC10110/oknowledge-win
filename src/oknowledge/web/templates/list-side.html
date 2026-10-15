@@ -1,0 +1,7 @@
+{# What a list's answer brings for the sidebar (final review I-1, batch G):
+   the sections' counts, the section's groups and the phone's chip row,
+   drawn as a full page draws them, for shell.js to swap in. Every bulk
+   action and its Deshacer reload the list, so their counts follow. Only
+   the column's own answer passes `side_groups` or `side_filters`. #}
+<template id="side-filters">{% include "sidebar-sections.html" %}{% include "sidebar-groups.html" %}{% include "sidebar-filters.html" %}</template>
+<template id="chip-filters">{% include "filter-chips.html" %}</template>

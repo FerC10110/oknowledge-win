@@ -26,3 +26,4 @@
       <p>{{ t('Write one in the box above and press “New idea”.') }}</p></div>
   {% endif %}
 </div>
+{% if side_filters is defined %}{% with filters = side_filters %}{% include "list-side.html" %}{% endwith %}{% endif %}

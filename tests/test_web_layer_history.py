@@ -432,3 +432,46 @@ click(dialog);
 out.open = dialog.open;
 """, wide=True)
     assert out["open"] is True
+
+
+# --- the sidebar a list's answer brings (batch G) -----------------------------------------
+
+SIDEBAR_SWAP = """
+// A small tree: a box of named children, enough for what sideFilters() does.
+function box(names) {
+  const b = { kids: [] };
+  const kid = (name) => ({ name, parent: b,
+    remove() { const k = this.parent.kids; k.splice(k.indexOf(this), 1); },
+    replaceWith(x) { if (x.parent) x.remove(); const k = this.parent.kids; k.splice(k.indexOf(this), 1, x); x.parent = this.parent; } });
+  names.forEach((n) => b.kids.push(kid(n)));
+  const match = (k, sel) => ({ "nav.sections": "sections", "nav.group": "group", ".foot": "foot" })[sel] === k.name.split(":")[0];
+  b.querySelector = (sel) => b.kids.find((k) => match(k, sel)) || null;
+  b.querySelectorAll = (sel) => b.kids.filter((k) => match(k, sel));
+  b.insertBefore = (frag, ref) => {
+    const moving = frag.kids.splice(0);
+    moving.forEach((k) => { k.parent = b; });
+    b.kids.splice(ref ? b.kids.indexOf(ref) : b.kids.length, 0, ...moving);
+  };
+  return b;
+}
+const sidebar = box(["logo", "sections:old", "group:old1", "group:old2", "foot"]);
+let fresh = { content: box(FRESH), remove() { fresh = null; } };
+list.querySelector = (sel) => (sel === "template#side-filters" ? fresh : null);
+const before = document.querySelector;
+document.querySelector = (sel) => (sel === ".sidebar" ? sidebar : before(sel));
+ok.list.reload(); await settle();
+out.side = sidebar.kids.map((k) => k.name);
+"""
+
+
+def test_a_list_s_answer_swaps_the_sections_counts_and_the_groups_in_place(tmp_path):
+    """After a bulk action the list reloads: the sections (their counts) are
+    replaced where they are, and the groups land before the foot -- never a
+    second row of sections there."""
+    out = run(tmp_path, 'const FRESH = ["sections:new", "group:new1", "group:new2"];' + SIDEBAR_SWAP)
+    assert out["side"] == ["logo", "sections:new", "group:new1", "group:new2", "foot"]
+
+
+def test_a_list_s_answer_without_sections_keeps_the_sidebar_s_own(tmp_path):
+    out = run(tmp_path, 'const FRESH = ["group:new1"];' + SIDEBAR_SWAP)
+    assert out["side"] == ["logo", "sections:old", "group:new1", "foot"]

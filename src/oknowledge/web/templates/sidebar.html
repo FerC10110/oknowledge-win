@@ -4,42 +4,8 @@
    {"title", "rows": [{"href", "label", "dot", "count", "on"}]}. #}
 <aside class="sidebar" aria-label="{{ t('Sections') }}">
   <a class="logo" href="/">oknowledge</a>
-  <nav class="sections">
-    {% for key, href, name in (("links", "/", t("Library")), ("ocio", "/ocio", t("Leisure")), ("ideas", "/ideas", t("Ideas"))) %}
-      <a href="{{ href }}" class="section{% if side.section == key %} on{% endif %}"
-         {% if side.section == key %}aria-current="page"{% endif %}>
-        <span>{{ name }}</span><b class="count mono">{{ side.counts[key] }}</b><kbd class="key mono js-only">{{ loop.index }}</kbd></a>
-    {% endfor %}
-  </nav>
-  {% if groups is defined and groups %}
-    <nav class="group" aria-label="{{ t('Categories') }}">
-      <p class="group-title">{{ t('CATEGORIES') }}</p>
-      <a href="{{ view.url(cat='', tag='', mark='', col='', q='', sel='') }}" data-nav
-         class="filter{% if not view.filtered %} on{% endif %}"><i class="dot" style="background: #6d6f78"></i><span>{{ t('All') }}</span><b class="count mono">{{ groups.total }}</b></a>
-      {% for name, count in groups.categories.items() %}
-        <a href="{{ view.url(cat=name, tag='', mark='', col='', q='', sel='') }}" data-nav
-           class="filter{% if view.cat == name and not view.searching and not view.tag and not view.mark and not view.col %} on{% endif %}"><i class="dot" style="background: {{ name|dot }}"></i><span>{{ name }}</span><b class="count mono">{{ count }}</b></a>
-      {% endfor %}
-      <a href="{{ view.url(cat='', tag='', mark='⭐', col='', q='', sel='') }}" data-nav
-         class="filter{% if view.mark == '⭐' and not view.searching %} on{% endif %}"><i class="dot" style="background: var(--fav)"></i><span>★ {{ t('Favorites') }}</span><b class="count mono">{{ groups.favorites }}</b></a>
-    </nav>
-    <nav class="group" aria-label="{{ t('Marks') }}">
-      <p class="group-title">{{ t('MARKS') }}</p>
-      {% for mark, count in groups.marks %}
-        <a href="{{ view.url(cat='', tag='', mark=mark, col='', q='', sel='') }}" data-nav
-           class="filter{% if view.mark == mark and not view.searching %} on{% endif %}"><span class="emoji">{{ mark }}</span><span>{{ t('Pinned') if mark == '📌' else '' }}</span><b class="count mono">{{ count }}</b></a>
-      {% endfor %}
-    </nav>
-    {% if groups.collections %}
-      <nav class="group" aria-label="{{ t('Collections') }}">
-        <p class="group-title">{{ t('COLLECTIONS') }}</p>
-        {% for name, count in groups.collections.items() %}
-          <a href="{{ view.url(cat='', tag='', mark='', col=name, q='', sel='') }}" data-nav
-             class="filter{% if view.col == name and not view.searching %} on{% endif %}"><i class="dot" style="background: var(--t5)"></i><span>{{ name }}</span><b class="count mono">{{ count }}</b></a>
-        {% endfor %}
-      </nav>
-    {% endif %}
-  {% endif %}
+  {% include "sidebar-sections.html" %}
+  {% include "sidebar-groups.html" %}
   {% include "sidebar-filters.html" %}
   <nav class="foot">
     <button type="button" class="foot-link js-only" data-modal="keys">{{ t('Shortcuts') }} <kbd class="key mono">?</kbd></button>

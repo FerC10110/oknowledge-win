@@ -215,9 +215,10 @@
     });
   }
 
-  // Ocio's column answer brings TIPO and ESTADO for its filter (final
+  // Each column answer brings its section's groups for its filter (final
   // review I-1): their words (a book is read), counts, links (each keeps
-  // the other's choice) and lit rows, as a full page load draws them.
+  // the other's choice) and lit rows, as a full page load draws them, and
+  // the sections' counts, so a bulk action's (or its Deshacer's) show.
   // Swapped under loadList's own guard, so only the newest list's land.
   function sideFilters() {
     // The phone's row comes with it, drawn for the same filter (delivery 4, §3).
@@ -233,6 +234,11 @@
     fresh.remove();
     var sidebar = document.querySelector(".sidebar");
     if (!sidebar) return;
+    // The sections stay where they are, with their new counts.
+    var sections = fresh.content.querySelector("nav.sections");
+    var drawn = sidebar.querySelector("nav.sections");
+    if (sections && drawn) drawn.replaceWith(sections);
+    else if (sections) sections.remove();
     sidebar.querySelectorAll("nav.group").forEach(function (old) { old.remove(); });
     sidebar.insertBefore(fresh.content, sidebar.querySelector(".foot"));
   }

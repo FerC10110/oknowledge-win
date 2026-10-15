@@ -33,3 +33,4 @@
       <p>{{ t('Paste a link in the box above to save it.') }}</p></div>
   {% endif %}
 </div>
+{% if side_groups is defined %}{% with groups = side_groups %}{% include "list-side.html" %}{% endwith %}{% endif %}
