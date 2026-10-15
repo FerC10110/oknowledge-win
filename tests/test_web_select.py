@@ -632,3 +632,86 @@ def test_a_selection_that_shrinks_onto_the_phone_enters_the_mode(shrunk):
 
 def test_shrinking_with_nothing_ticked_enters_no_mode(shrunk):
     assert shrunk["emptyStaysOff"] is False
+
+
+# --- delivery 6, batch C: what a bulk action leaves behind, in node -------------------------
+
+LEFTOVERS_HARNESS = r"""
+const source = require("fs").readFileSync(process.argv[2], "utf8");
+const out = { reloads: [], picks: [], empties: 0 };
+const listeners = {};
+const on = (name) => (type, fn) => { (listeners[name + ":" + type] = listeners[name + ":" + type] || []).push(fn); };
+const button = (formaction) => ({ disabled: false, getAttribute: (a) => (a === "formaction" ? formaction : null) });
+const move = button("/bulk/category");
+const boxes = ["a1", "b2", "c3"].map((value) => ({ value, checked: false, matches: () => true, closest: () => null }));
+const bar = {
+  hidden: true, dataset: { one: "1", many: "%1" }, elements: { back: { value: "" } },
+  addEventListener: on("bar"), getAttribute: () => "/bulk/category",
+  querySelector: (sel) => (sel === "[data-count]" ? { textContent: "" } : null),
+  querySelectorAll: () => [move],
+  classList: { toggle() {}, add() {}, remove() {} },
+};
+const list = { addEventListener: on("list"), querySelectorAll: () => boxes, querySelector: () => null,
+               classList: { toggle() {}, contains: () => false } };
+global.window = global;
+global.location = { pathname: "/", search: "" };
+global.FormData = function () { this.delete = () => {}; this.append = () => {}; };
+global.document = { getElementById: (id) => ({ bulk: bar, list: list }[id] || null) };
+let answer = null, current = "a1", shown = ["a1", "b2", "c3"];
+window.oknowledge = {
+  keys: {}, closeMenus() {}, toast() {}, offerUndo() {},
+  send: () => new Promise((r) => { answer = r; }),
+  list: {
+    current: () => current,
+    shown: () => shown.map((id) => ({ id: "card-" + id })),
+    reload: (...args) => { out.reloads.push(args); shown = ["b2", "c3"]; return Promise.resolve(); },
+    pick: (id) => out.picks.push(id),
+    empty: () => { out.empties += 1; },
+  },
+};
+eval(source);
+const ok = window.oknowledge;
+const tick = (id) => listeners["list:change"].forEach((fn) => fn({ target: Object.assign(boxes.find((b) => b.value === id), { checked: true }) }));
+const click = () => listeners["bar:submit"].forEach((fn) => fn({ preventDefault() {}, submitter: move }));
+(async () => {
+  tick("a1");                       // the open one: a1, which the move takes out of the list
+  click();
+  current = "c3";
+  ok.keys.x();                      // ticked with x while the move travels
+  out.whileSending = boxes.map((b) => b.checked);
+  answer({ notice: "1 moved" });
+  await new Promise((r) => setTimeout(r, 10));
+  out.after = boxes.map((b) => b.checked);
+  out.barHidden = bar.hidden;
+  console.log(JSON.stringify(out));
+  process.exit(0);
+})();
+"""
+
+
+@pytest.fixture(scope="module")
+def leftovers(tmp_path_factory):
+    import json
+    import shutil
+    import subprocess
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not installed")
+    harness = tmp_path_factory.mktemp("leftovers") / "harness.js"
+    harness.write_text(LEFTOVERS_HARNESS, encoding="utf-8")
+    done = subprocess.run([node, str(harness), str(SELECT)], capture_output=True, text=True,
+                          timeout=30, check=False)
+    assert done.returncode == 0, done.stderr
+    return json.loads(done.stdout.strip().splitlines()[-1])
+
+
+def test_a_box_ticked_while_a_bulk_action_travels_is_kept(leftovers):
+    assert leftovers["whileSending"] == [True, False, True]
+    assert leftovers["after"] == [False, False, True]
+    assert leftovers["barHidden"] is False
+
+
+def test_moving_the_open_note_out_of_the_list_asks_for_the_panel_once(leftovers):
+    # The list is told to leave the panel to select.js, which picks the next one.
+    assert leftovers["reloads"] == [["", True]]
+    assert leftovers["picks"] == ["b2"]

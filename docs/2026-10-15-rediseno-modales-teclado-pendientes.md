@@ -7,19 +7,6 @@ Detalles menores que las revisiones encontraron y que no entraron en la
 entrega 3. Ninguno pierde datos: en el peor caso una nota queda en
 `oknowledge/trash/` sin Deshacer desde la app, y se recupera desde Obsidian.
 
-## Acciones en lote
-
-- Cambiar el estado en lote mira el estado válido nota por nota: en un lote
-  mezclado de ideas y fichas, las fichas fallan y las ideas cambian. El aviso
-  usa siempre las palabras de Ideas.
-- `held_by()` corre dos veces por nota en el estado en lote y en borrar (más
-  lecturas del estante de las necesarias).
-- Mover en lote la nota abierta fuera de la lista pide dos veces el panel.
-- Una casilla marcada con `x` mientras viaja una acción en lote se pierde al
-  volver la respuesta.
-- "No se seleccionó nada" reusa el texto de las colecciones ("No cards were
-  selected…"); la barra nunca lo manda vacío.
-
 ## Ajustes
 
 - Las casillas de los motores son las nativas del navegador (azules), no las
@@ -55,8 +42,6 @@ entrega 3. Ninguno pierde datos: en el peor caso una nota queda en
   están en el repo.
 - El harness de `app.js` no cubre textarea/select/contenteditable, Enter sobre
   un link o botón, `?` sin diálogo ni `/`.
-- No hay test de que el estado y la marca en lote no reconstruyan índices, ni
-  de nota ocupada en tipo/estado/marca en lote.
 - `test_every_translated_string_is_one_the_code_asks_for` compara por
   substring: una traducción sin uso puede sobrevivir si su texto aparece dentro
   de otro.

@@ -139,7 +139,7 @@
 
   // --- the list column ---------------------------------------------------
   var asked = 0;
-  function loadList(url, keepScroll, reason) {
+  function loadList(url, keepScroll, reason, leavePanel) {
     var mine = ++asked;
     // The pick this list was asked under. If the user picks another link
     // before it lands, its sel (and the server's data-current) is the old
@@ -173,7 +173,7 @@
           // note out) is not followed (Task 9 review).
           var open = panel.querySelector("[data-panel]");
           if (open && open.dataset.panel) markCurrent(open.dataset.panel);
-        } else if (panel) {
+        } else if (panel && !leavePanel) {
           var serverPick = items ? items.dataset.current : "";
           var onScreen = panel.querySelector("[data-panel]");
           // Not over a catalog search the URL still names (Ocio): the list
@@ -781,8 +781,10 @@
     empty: emptyPanel,
     // After an undo or a bulk action: the same list again, and `id` opened
     // (the first one restored, or the one after those deleted).
-    reload: function (id) {
-      var done = loadList(here().href, true, "refresh");
+    // `leavePanel`: the caller picks the panel itself once the list is back,
+    // so the list does not ask for the server's pick first.
+    reload: function (id, leavePanel) {
+      var done = loadList(here().href, true, "refresh", leavePanel);
       if (id && panel) loadPanel(id, true);
       else if (id && done) done.then(function () { if (itemOf(id)) markCurrent(id); });
       return done;

@@ -215,11 +215,12 @@
     var cur = ok.list.current();
     var mine = picked.indexOf(cur) >= 0;
     var after = deleting || mine ? pickAfter() : "";
+    var sent = picked.slice();
     busy(true);
     ok.send(url, data)
       .then(function (body) {
         busy(false);
-        clear();
+        sentDone(sent);
         if (deleting) {
           ok.offerUndo(body.notice, body.undo, function (back) {
             ok.list.reload(back.restored && back.restored[0]);
@@ -234,7 +235,8 @@
           if (settled) settled.then(function () { if (mine && !after) ok.list.empty(); });
           return;
         }
-        var back = ok.list.reload();
+        // The list leaves the panel to us: the pick is settled below, once.
+        var back = ok.list.reload("", true);
         if (back) back.then(function () {
           var next = listed(cur) ? cur : after;
           if (next) ok.list.pick(next); else ok.list.empty();
@@ -244,8 +246,15 @@
         busy(false);
         ok.toast(error.message);
         // All of them gone meanwhile: the list says so.
-        if (error.status === 404) { clear(); ok.list.reload(); }
+        if (error.status === 404) { sentDone(sent); ok.list.reload(); }
       });
+  }
+
+  // The ones that were sent are done with. A box ticked while the answer was
+  // on its way (an x) is not among them and stays.
+  function sentDone(sent) {
+    picked = picked.filter(function (id) { return sent.indexOf(id) < 0; });
+    if (picked.length) draw(); else clear();
   }
 
   function listed(id) {

@@ -224,3 +224,10 @@ def test_a_search_carries_the_pick():
     typed = between(text, 'field.addEventListener("input"', 'form.addEventListener("submit"')
     assert 'var pick = panel && here().searchParams.get("sel");' in typed
     assert 'if (pick) url.searchParams.set("sel", pick);' in typed
+
+
+def test_a_reload_can_leave_the_panel_to_its_caller():
+    text = SCRIPT.read_text(encoding="utf-8")
+    assert "function loadList(url, keepScroll, reason, leavePanel)" in text
+    assert "panel && !leavePanel" in text
+    assert "reload: function (id, leavePanel)" in text
