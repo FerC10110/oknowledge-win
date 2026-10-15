@@ -122,3 +122,15 @@ def test_on_the_phone_the_count_is_a_marked_44px_target_beside_the_box():
     assert "text-decoration: underline" in count and "var(--acc)" in count
     box = " ".join(r for r in drawn if r.split("{")[0].strip().endswith(".cat-row input"))
     assert "grid-column: 1 / -1" not in box
+
+
+# --- the model box keeps its width: the tools go under it ------------------------------------
+
+def test_the_engine_tools_sit_under_the_model_box():
+    # Picker, "Find models" and the date kept to the box's line squeezed it to
+    # 22 px in the modal, so a model picked seemed not to have been taken.
+    rows = [r for r in rule(".settings-pane .engine-row") if "grid-template-columns" in r]
+    assert rows and all("auto" not in r.split("grid-template-columns")[1].split(";")[0] for r in rows), rows
+    tools = [r for r in rule(".settings-pane .engine-tools") if "grid-column" in r]
+    assert any("grid-column: 3 / -1" in r for r in tools), tools
+    assert not any("nowrap" in r for r in rule(".settings-pane .engine-tools")), "the tools must wrap"

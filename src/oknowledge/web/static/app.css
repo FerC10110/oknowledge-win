@@ -460,12 +460,16 @@ html:not(.js) .js-only { display: none !important; }
 .settings-pane input:not([type=checkbox]):not([type=radio]):not([type=file]),
 .settings-pane select { background: #141519; border: 1px solid var(--b-input); border-radius: 8px;
   color: var(--t1); padding: 7px 10px; font: inherit; font-size: 13px; min-width: 0; }
-.settings-pane .engine-row { display: grid; grid-template-columns: 20px 90px minmax(0, 1fr) auto;
-  align-items: center; gap: 10px; padding: 0; }
-/* One line per engine (handoff §4): style.css's settings page put the box
-   on a second line. */
+.settings-pane .engine-row { display: grid; grid-template-columns: 20px 90px minmax(0, 1fr);
+  align-items: center; gap: 6px 10px; padding: 0; }
+/* The box on the engine's line, as wide as the rest of it: it holds the
+   models in the order they are tried, and must show them. The picker,
+   "Find models" and the date go under it: kept on the same line they
+   squeezed the box to 22 px in the modal. */
 .settings-pane .engine-row .model-box { grid-column: auto; }
-.settings-pane .engine-tools { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+.settings-pane .engine-tools { grid-column: 3 / -1; display: flex; flex-wrap: wrap;
+  align-items: center; gap: 6px 10px; min-width: 0; }
+.settings-pane .engine-tools .add-model { max-width: 100%; }
 .link-button { background: none; border: 0; padding: 0; color: var(--acc); font: inherit;
   font-size: 12.5px; cursor: pointer; }
 .link-button:hover { color: var(--acc-hi); }
