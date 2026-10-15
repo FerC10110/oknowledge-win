@@ -2,8 +2,6 @@
 to be in the HTML, the CSS and the scripts for a 390px screen. How it looks
 and moves is checked in a browser (the plan's Playwright steps)."""
 
-import re
-
 import pytest
 from fastapi.testclient import TestClient
 

@@ -92,7 +92,7 @@ def test_each_engine_is_one_compact_row(client):
 
 
 def test_the_js_class_is_set_before_the_first_paint():
-    """At the end of <body>'s head the page is still loading: waiting for
+    """At the end of <body> the page is still loading: waiting for
     DOMContentLoaded would draw the JavaScript-only parts hidden first."""
     js = WEB.joinpath("static", "layout.js").read_text(encoding="utf-8")
     assert 'addEventListener("DOMContentLoaded"' not in js
