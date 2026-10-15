@@ -187,10 +187,11 @@ def test_a_list_that_brings_its_sidebar_groups_swaps_them_in():
 
 def test_a_filter_click_lights_its_row_only_in_its_own_group():
     """Ocio's groups are apart (data-apart): a TIPO click leaves ESTADO lit.
-    The library's groups are one choice, so a click there clears them all."""
+    The library's groups are one choice, so a click there clears them all,
+    in the sidebar and in the phone's chip row (Ruling 7 of delivery 4)."""
     body = between(SCRIPT.read_text(encoding="utf-8"), "function setActive", "\n  }\n")
-    assert 'link.closest(".sidebar .group[data-apart]")' in body
-    assert '".sidebar .filter.on"' in body
+    assert 'twin.closest("[data-apart]") || root' in body
+    assert '"a.filter.on, a.fchip.on"' in body
 
 
 # --- final fix pass ------------------------------------------------------------------

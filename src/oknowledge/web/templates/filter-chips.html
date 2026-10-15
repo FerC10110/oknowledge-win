@@ -1,0 +1,37 @@
+{# The phone's filters (docs/2026-10-15-rediseno-celular-design.md §3): the
+   sidebar's groups as one row of chips that scrolls sideways. The library's
+   from `groups` and `view`, any other section's from `filters`. ★ Favoritos
+   is a tab, not a chip. The count is in the title. A group with nothing in
+   it is not drawn. #}
+<nav class="chip-row" aria-label="{{ t('Filters') }}">
+{%- if groups is defined and groups %}
+  <div class="chip-group" role="group" aria-label="{{ t('Categories') }}">
+    <a href="{{ view.url(cat='', tag='', mark='', col='', q='', sel='') }}" data-nav title="{{ groups.total }}" class="fchip{% if not view.filtered %} on{% endif %}">{{ t('All') }}</a>
+    {%- for name, count in groups.categories.items() %}
+    <a href="{{ view.url(cat=name, tag='', mark='', col='', q='', sel='') }}" data-nav title="{{ count }}" class="fchip{% if view.cat == name and not view.searching and not view.tag and not view.mark and not view.col %} on{% endif %}"><i class="dot" style="background: {{ name|dot }}"></i>{{ name }}</a>
+    {%- endfor %}
+  </div>
+  {%- if groups.marks %}
+  <div class="chip-group" role="group" aria-label="{{ t('Marks') }}">
+    {%- for mark, count in groups.marks %}
+    <a href="{{ view.url(cat='', tag='', mark=mark, col='', q='', sel='') }}" data-nav title="{{ count }}" class="fchip{% if view.mark == mark and not view.searching %} on{% endif %}"><span class="emoji">{{ mark }}</span>{% if mark == '📌' %} {{ t('Pinned') }}{% endif %}</a>
+    {%- endfor %}
+  </div>
+  {%- endif %}
+  {%- if groups.collections %}
+  <div class="chip-group" role="group" aria-label="{{ t('Collections') }}">
+    {%- for name, count in groups.collections.items() %}
+    <a href="{{ view.url(cat='', tag='', mark='', col=name, q='', sel='') }}" data-nav title="{{ count }}" class="fchip{% if view.col == name and not view.searching %} on{% endif %}">{{ name }}</a>
+    {%- endfor %}
+  </div>
+  {%- endif %}
+{%- else %}
+  {%- for group in filters|default([]) if group.rows %}
+  <div class="chip-group" data-apart role="group" aria-label="{{ t(group.title) }}">
+    {%- for row in group.rows %}
+    <a href="{{ row.href }}" data-nav title="{{ row.count }}" class="fchip{% if row.on %} on{% endif %}"><i class="dot" style="background: {{ row.dot }}"></i>{{ t(row.label) }}</a>
+    {%- endfor %}
+  </div>
+  {%- endfor %}
+{%- endif %}
+</nav>

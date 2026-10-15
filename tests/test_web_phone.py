@@ -142,3 +142,98 @@ def test_the_bars_are_not_drawn_on_a_desktop():
     css = static("app.css")
     assert ".topbar, .tabbar { display: none; }" in css
     assert css.index(".topbar, .tabbar { display: none; }") > css.index("/* --- delivery 4: the phone")
+
+
+# --- Task 3: the chip row (spec §3) ----------------------------------------------------------
+
+def chips(body):
+    return re.search(r'<nav class="chip-row" aria-label="Filters">.*?</nav>', body, re.S).group(0)
+
+
+def groups(row):
+    return re.findall(r'<div class="chip-group"( data-apart)?[^>]*>(.*?)</div>', row, re.S)
+
+
+def test_the_library_row_has_all_categories_marks_and_collections_but_no_star(client):
+    row = chips(client.get("/").text)
+    found = groups(row)
+    assert len(found) == 3
+    names = [re.sub(r"<[^>]+>", "", a).strip() for a in re.findall(r"<a [^>]*>(.*?)</a>", found[0][1], re.S)]
+    assert names == ["All", "Cocina", "Redes"]
+    assert "📌" in found[1][1] and "Pinned" in found[1][1] and "⭐" not in found[1][1]
+    assert ">Casa</a>" in found[2][1]
+    assert "Favorites" not in row and "★" not in row
+    # The count is in the title, never drawn.
+    assert re.search(r'<a href="/\?cat=Redes" data-nav title="2" class="fchip">', row)
+    assert re.search(r'title="3" class="fchip on">All</a>', row)
+
+
+@pytest.mark.parametrize("path, lit", [("/?cat=Redes", "Redes"), ("/?mark=%F0%9F%93%8C", "📌"),
+                                       ("/?col=Casa", "Casa"), ("/?mark=%E2%AD%90", None)])
+def test_the_chip_lit_is_the_filter_in_the_url(client, path, lit):
+    row = chips(client.get(path).text)
+    on = re.findall(r'class="fchip on">(.*?)</a>', row, re.S)
+    if lit is None:
+        assert on == []           # ★ lights the Favoritos tab, not a chip
+    else:
+        assert len(on) == 1 and lit in on[0]
+
+
+def test_an_empty_group_is_not_drawn(tmp_path):
+    vault = tmp_path / "solo"
+    (vault / "oknowledge" / "links").mkdir(parents=True)
+    config = Config(vault=vault)
+    write_note(config, Note(id="z1", url="https://e.com/z1", title="Z", category="Redes", tags=[],
+                            type="article", source="e.com", saved="2026-10-03", summary="s"), "es")
+    rebuild_indexes(config, "es")
+    row = chips(TestClient(create_app(config)).get("/").text)
+    assert len(groups(row)) == 2      # categories and marks (📌 always); no collections
+
+
+def test_ocio_and_ideas_rows_are_their_sidebar_groups_each_apart(client):
+    ocio = groups(chips(client.get("/ocio").text))
+    assert len(ocio) == 2 and all(apart for apart, _ in ocio)
+    ideas = groups(chips(client.get("/ideas").text))
+    assert len(ideas) == 1 and ideas[0][0]
+
+
+def test_ocio_s_column_answer_brings_the_row(client):
+    body = client.get("/ocio/lista?tipo=movie").text
+    template = re.search(r'<template id="chip-filters">(.*?)</template>', body, re.S).group(1)
+    assert '<nav class="chip-row"' in template
+    assert re.search(r'class="fchip on">.*?</a>', template, re.S)
+    assert '<template id="side-filters">' in body
+
+
+def test_the_row_sits_between_the_field_and_the_list(client):
+    for path in ("/", "/ocio", "/ideas"):
+        body = client.get(path).text
+        assert body.index('id="unified"') < body.index('<nav class="chip-row"') < body.index('id="list"'), path
+
+
+def test_a_filter_lights_its_twin_in_the_other_drawing():
+    js = static("shell.js")
+    head = js.index("function setActive")
+    body = js[head:js.index("\n  }\n", head)]
+    assert '".sidebar, .chip-row"' in body
+    assert 'getAttribute("href") === href' in body
+    assert 'closest("[data-apart]")' in body
+    assert '"a.filter.on, a.fchip.on"' in body
+    assert "litChipInView();" in body
+
+
+def test_ocio_s_answer_swaps_the_row_too():
+    js = static("shell.js")
+    head = js.index("function sideFilters")
+    body = js[head:js.index("\n  }\n", head)]
+    assert 'list.querySelector("template#chip-filters")' in body
+    assert "replaceWith(chips.content)" in body
+
+
+def test_the_lit_chip_is_brought_into_view_without_moving_the_page():
+    js = static("shell.js")
+    assert 'scrollIntoView({ inline: "nearest", block: "nearest" })' in js
+
+
+def test_the_row_is_not_drawn_on_a_desktop():
+    assert ".chip-row { display: none; }" in static("app.css")

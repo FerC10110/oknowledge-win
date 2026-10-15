@@ -141,6 +141,14 @@
   // the other's choice) and lit rows, as a full page load draws them.
   // Swapped under loadList's own guard, so only the newest list's land.
   function sideFilters() {
+    // The phone's row comes with it, drawn for the same filter (delivery 4, §3).
+    var chips = list.querySelector("template#chip-filters");
+    if (chips) {
+      chips.remove();
+      var row = document.querySelector(".chip-row");
+      if (row) row.replaceWith(chips.content);
+      litChipInView();
+    }
     var fresh = list.querySelector("template#side-filters");
     if (!fresh) return;
     fresh.remove();
@@ -299,13 +307,30 @@
 
   // The library's groups are one choice: a click clears them all. Ocio's
   // TIPO and ESTADO are apart: a click lights its row in its own group.
+  // The sidebar and the phone's chip row draw the same filters: the link
+  // clicked and its twin (the same href) light together (delivery 4, §3).
   function setActive(link) {
-    // A sort link in the list head is not a filter: the sidebar keeps its row.
-    if (!link.closest(".sidebar")) return;
-    var apart = link.closest(".sidebar .group[data-apart]");
-    (apart || document).querySelectorAll(apart ? ".filter.on" : ".sidebar .filter.on")
-      .forEach(function (a) { a.classList.remove("on"); });
-    link.classList.add("on");
+    // A sort link in the list head is not a filter: the filters keep their row.
+    if (!link.closest(".sidebar, .chip-row")) return;
+    var href = link.getAttribute("href");
+    document.querySelectorAll(".sidebar, .chip-row").forEach(function (root) {
+      var twin = root.contains(link) ? link : Array.prototype.find.call(
+        root.querySelectorAll("a[data-nav]"),
+        function (a) { return a.getAttribute("href") === href; });
+      if (!twin) return;
+      (twin.closest("[data-apart]") || root).querySelectorAll("a.filter.on, a.fchip.on")
+        .forEach(function (a) { a.classList.remove("on"); });
+      twin.classList.add("on");
+    });
+    litChipInView();
+  }
+
+  // The chip row scrolls sideways: the lit chip is brought into view, and
+  // "nearest" on both axes never moves the page. On a desktop the row is
+  // not drawn and this does nothing.
+  function litChipInView() {
+    var lit = document.querySelector(".chip-row .fchip.on");
+    if (lit && lit.scrollIntoView) lit.scrollIntoView({ inline: "nearest", block: "nearest" });
   }
 
   document.addEventListener("click", function (event) {
@@ -658,6 +683,7 @@
     }
   })();
 
+  litChipInView();
   observe();
   watch();
 })();

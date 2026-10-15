@@ -25,6 +25,7 @@
   {% if unreadable %}
     <p class="quiet" title="{{ links_dir }}">{% if unreadable == 1 %}{{ t('1 note could not be read and is not shown') }}{% else %}{{ t('%1 notes could not be read and are not shown', unreadable) }}{% endif %}</p>
   {% endif %}
+  {% include "filter-chips.html" %}
   <div class="list" id="list">{% include "list.html" %}</div>
   {% with bulk_section = 'links' %}{% include "bulk-bar.html" %}{% endwith %}
 </section>

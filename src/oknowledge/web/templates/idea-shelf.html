@@ -20,6 +20,7 @@
   {% if unreadable_ideas %}
     <p class="quiet">{{ t('%1 ideas could not be read and are not shown', unreadable_ideas) }}</p>
   {% endif %}
+  {% include "filter-chips.html" %}
   <div class="list" id="list" data-source="/ideas/lista">{% include "idea-list.html" %}</div>
   {% with bulk_section = 'ideas' %}{% include "bulk-bar.html" %}{% endwith %}
 </section>

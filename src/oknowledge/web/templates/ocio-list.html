@@ -36,4 +36,4 @@
 {# Ocio's TIPO and ESTADO for this filter, in the column's answer alone
    (the page draws them in the sidebar): shell.js swaps them in (final
    review I-1). #}
-{% if side_filters is defined %}<template id="side-filters">{% with filters = side_filters %}{% include "sidebar-filters.html" %}{% endwith %}</template>{% endif %}
+{% if side_filters is defined %}<template id="side-filters">{% with filters = side_filters %}{% include "sidebar-filters.html" %}{% endwith %}</template><template id="chip-filters">{% with filters = side_filters %}{% include "filter-chips.html" %}{% endwith %}</template>{% endif %}

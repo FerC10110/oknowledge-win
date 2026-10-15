@@ -24,6 +24,7 @@
   {% if unreadable_cards %}
     <p class="quiet">{{ t('%1 cards could not be read and are not shown', unreadable_cards) }}</p>
   {% endif %}
+  {% include "filter-chips.html" %}
   <div class="list" id="list" data-source="/ocio/lista">{% include "ocio-list.html" %}</div>
   {% with bulk_section = 'ocio' %}{% include "bulk-bar.html" %}{% endwith %}
 </section>

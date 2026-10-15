@@ -121,7 +121,7 @@ def test_a_filter_click_cancels_the_pending_search():
 
 def test_a_link_outside_the_sidebar_leaves_its_highlight_alone():
     body = between(SHELL.read_text(encoding="utf-8"), "function setActive", "\n  }\n")
-    assert body.index('if (!link.closest(".sidebar")) return;') < body.index("querySelectorAll")
+    assert body.index('if (!link.closest(".sidebar, .chip-row")) return;') < body.index("querySelectorAll")
 
 
 def test_the_idea_tag_box_gets_the_focus_back():
