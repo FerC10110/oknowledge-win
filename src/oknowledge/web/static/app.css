@@ -478,9 +478,20 @@ html:not(.js) .js-only { display: none !important; }
   text-align: center; display: flex; flex-direction: column; align-items: center; gap: 10px; }
 .drop.over { border-color: var(--b-sel); background: var(--s2); }
 .drop-title { margin: 0; color: var(--t1); font-weight: 500; }
-.drop-file { position: absolute; width: 1px; height: 1px; opacity: 0; }
+/* The button shows the choice with JavaScript (it sends the file at once);
+   without it the field is the browser's own, which names the file chosen. */
+.js .drop-file { position: absolute; width: 1px; height: 1px; opacity: 0; }
+html:not(.js) .drop-choose { height: auto; padding: 0; border: 0; background: none; }
+html:not(.js) .drop-choose:hover { background: none; }
+html:not(.js) .drop-file { font: inherit; font-size: 12.5px; color: var(--t5); }
+html:not(.js) .drop-file::file-selector-button { height: 32px; margin-right: 10px; padding: 0 12px;
+  border-radius: 8px; border: 1px solid var(--b-input); background: var(--s3); color: var(--t1);
+  font: inherit; font-size: 13px; cursor: pointer; }
 .cat-rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .cat-row { display: grid; grid-template-columns: 8px minmax(0, 1fr) auto auto; align-items: center; gap: 10px; }
+/* Its count is the way to its list: drawn as the count, a link on hover. */
+.cat-row a.count { color: inherit; font-weight: 700; text-decoration: none; text-align: right; }
+.cat-row a.count:hover { color: var(--acc-hi); text-decoration: underline; }
 .where summary { cursor: pointer; color: var(--t5); font-size: 12.5px; }
 
 /* --- modals (spec §3; handoff §4-§5) ---------------------------------------- */
@@ -513,11 +524,12 @@ html:not(.js) .js-only { display: none !important; }
 .check { position: absolute; top: 8px; left: 8px; z-index: 2; display: grid; place-items: center;
   opacity: 0; transition: opacity .12s; }
 #items > .item:hover .check, #items > .item.picked .check, .picking .check, .check:focus-within { opacity: 1; }
-.check input { appearance: none; -webkit-appearance: none; width: 18px; height: 18px; margin: 0;
+/* The app's one checkbox: the selection's, and the engines' in Settings. */
+.check input, .settings-pane .engine-row input[type=checkbox] { appearance: none; -webkit-appearance: none; width: 18px; height: 18px; margin: 0;
   border: 1.5px solid #55575f; border-radius: 5px; background: #17181dcc; cursor: pointer; }
-.check input:checked { background: #e7e7ea url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 6.4l2.3 2.3 4.7-5' fill='none' stroke='%23141519' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / 12px no-repeat;
+.check input:checked, .settings-pane .engine-row input[type=checkbox]:checked { background: #e7e7ea url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 6.4l2.3 2.3 4.7-5' fill='none' stroke='%23141519' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / 12px no-repeat;
   border-color: #e7e7ea; }
-.check input:focus-visible { outline: 2px solid var(--acc); outline-offset: 1px; }
+.check input:focus-visible, .settings-pane .engine-row input[type=checkbox]:focus-visible { outline: 2px solid var(--acc); outline-offset: 1px; }
 /* A row: the box takes the first column of "18px 8px 1fr auto" (Ruling 21). */
 .rows .check { top: 50%; left: 10px; margin-top: -9px; }
 .js .rows .hit { padding-left: 36px; }

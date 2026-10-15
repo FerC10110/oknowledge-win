@@ -562,6 +562,7 @@ STRINGS = {
         "If you rename to one that already exists, they merge.":
             "Si renombrás a una que ya existe, se unen.",
         "Merge «%1» into «%2»?": "¿Unir «%1» con «%2»?",
+        "See the links in %1": "Ver los links de %1",
         "Shortcuts": "Atajos",
         "Only what it discusses": "Sólo lo discutido",
         "created %1": "creada %1",

@@ -151,7 +151,9 @@
     <form action="/import" method="post" enctype="multipart/form-data" class="drop" data-settings-drop>
       <p class="drop-title">{{ t('Drop the WhatsApp export here') }}</p>
       <p class="meta">{{ t('In WhatsApp: open the chat, Export chat, Without media. Give it the .zip or the .txt inside it.') }}</p>
-      <label class="btn">{{ t('Choose file') }}<input type="file" name="file" accept=".txt,.zip,text/plain,application/zip" required class="drop-file"></label>
+      {# Without JavaScript the browser's own field shows (it names the file
+         chosen) and the words go: its button says them. #}
+      <label class="btn drop-choose"><span class="js-only">{{ t('Choose file') }}</span><input type="file" name="file" accept=".txt,.zip,text/plain,application/zip" required class="drop-file"></label>
       <button type="submit" class="btn" data-nojs>{{ t('Read it') }}</button>
     </form>
     <div class="setting">
@@ -178,14 +180,19 @@
             <form action="/categories/rename" method="post" class="cat-row" data-settings-rename>
               <i class="dot" style="background: {{ name|dot }}"></i>
               <input type="hidden" name="old" value="{{ name }}">
-              <input name="new" value="{{ name }}" required autocomplete="off"
+              {# The others offered as it is typed: renaming into one merges. #}
+              <input name="new" value="{{ name }}" required autocomplete="off" list="settings-categories"
                      aria-label="{{ t('Rename') }}: {{ name }}">
-              <b class="count mono">{{ count }}</b>
+              <a class="count mono" href="/?category={{ name|urlencode }}"
+                 title="{{ t('See the links in %1', name) }}" aria-label="{{ t('See the links in %1', name) }}">{{ count }}</a>
               <button type="submit" class="btn" data-nojs>{{ t('Save') }}</button>
             </form>
           </li>
         {% endfor %}
       </ul>
+      <datalist id="settings-categories">
+        {%- for name in categories %}<option value="{{ name }}">{% endfor -%}
+      </datalist>
       <p class="settings-hint">{{ t('If you rename to one that already exists, they merge.') }}</p>
     {% else %}
       <p class="empty">{{ t('Nothing saved yet') }}</p>

@@ -9,12 +9,6 @@ entrega 3. Ninguno pierde datos: en el peor caso una nota queda en
 
 ## Ajustes
 
-- Las casillas de los motores son las nativas del navegador (azules), no las
-  del diseño.
-- Sin JS, el campo de archivo de Importar mide 1 px: no se ve qué archivo se
-  eligió.
-- La pestaña Categorías perdió el autocompletado al unir y el link de cada
-  categoría a su lista.
 - Un renombre recarga la página al cerrar aunque no haya movido nada. Con dos
   renombres al mismo tiempo y un cierre inmediato, puede no recargar.
 - Un guardado que nunca contesta deja esperando los redibujos (sin timeout).
@@ -25,7 +19,6 @@ entrega 3. Ninguno pierde datos: en el peor caso una nota queda en
   fallado (el aviso se pierde; antes también se perdía el valor).
 - Al reabrir un modal después de Esc, el diálogo mismo toma el foco y muestra
   un borde blanco.
-- La pista del idioma de la interfaz quedó en dos renglones.
 
 ## Código
 
