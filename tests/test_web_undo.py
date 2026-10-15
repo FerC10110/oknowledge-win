@@ -199,7 +199,7 @@ def test_undo_after_the_note_was_pasted_again_is_blocked(s):
     answer = s.client.post(f"/undo/{token}", headers=JSON)
     assert answer.status_code == 409
     assert answer.json() == {"ok": False, "error":
-                             "It could not be restored: there is already another note with that link"}
+                             "Nothing was restored: still in the trash/ folder of your vault"}
     assert len(list(trash_dir(s.cfg).glob("*.md"))) == 1
 
 
@@ -229,7 +229,7 @@ def test_a_lot_with_one_blocked_says_both(s):
     body = s.client.post(f"/undo/{token}", headers=JSON).json()
 
     assert body == {"ok": True, "restored": ["b2"], "skipped": ["a1"],
-                    "notice": "Restored · 1 not: there is already another note with that link"}
+                    "notice": "Restored · 1 not restored, still in the trash/ folder of your vault"}
 
 
 # --- undo with the indexes behind --------------------------------------------------
@@ -262,8 +262,8 @@ def test_an_undo_with_stale_indexes_and_one_blocked_says_both(s, monkeypatch):
     body = s.client.post(f"/undo/{token}", headers=JSON).json()
 
     assert body["restored"] == ["b2"] and body["skipped"] == ["a1"]
-    assert body["notice"] == ("Restored · 1 not: there is already another note with that "
-                              "link. The indexes could not be rebuilt: run `oknowledge "
+    assert body["notice"] == ("Restored · 1 not restored, still in the trash/ folder of your vault. "
+                              "The indexes could not be rebuilt: run `oknowledge "
                               "reindex` once the folder is writable again.")
 
 
@@ -278,7 +278,7 @@ def test_without_a_script_the_stale_partial_undo_keeps_its_counts(s, monkeypatch
     location = answer.headers["location"]
     assert location == "/?notice=restored-one-partial-indexes-stale&n=1&m=1"
     page = s.client.get(location).text
-    assert "Restored · 1 not: there is already another note" in page
+    assert "Restored · 1 not restored, still in the trash/ folder of your vault" in page
     assert "oknowledge reindex" in page
 
 
@@ -292,8 +292,8 @@ def test_a_stale_undo_of_several_with_some_blocked_counts_both(s, monkeypatch):
 
     body = s.client.post(f"/undo/{token}", headers=JSON).json()
 
-    assert body["notice"] == ("2 restored · 1 not: there is already another note with that "
-                              "link. The indexes could not be rebuilt: run `oknowledge "
+    assert body["notice"] == ("2 restored · 1 not restored, still in the trash/ folder of your vault. "
+                              "The indexes could not be rebuilt: run `oknowledge "
                               "reindex` once the folder is writable again.")
 
 
@@ -324,3 +324,34 @@ def test_two_undos_at_once_through_the_web_restore_once(s, monkeypatch):
     assert gone.json() == {"ok": False, "error": "It can no longer be undone"}
     assert len([n for n in all_notes(s.cfg) if n.id == "a1"]) == 1
     assert list(trash_dir(s.cfg).glob("*.md")) == []
+
+
+def test_a_note_left_behind_for_another_reason_is_not_blamed_on_another_note(s):
+    """A symlink at the old address (or an error) also leaves a note in
+    trash/: the notice says where it is, not a reason it cannot know."""
+    one = delete_note(s.cfg, "a1", "es")
+    two = delete_note(s.cfg, "b2", "es")
+    token = undo.remember(s.cfg, [("a1", "links", one), ("b2", "links", two)])
+    one.source.symlink_to(one.source.parent / "elsewhere.md")
+
+    body = s.client.post(f"/undo/{token}", headers=JSON).json()
+
+    assert body["restored"] == ["b2"] and body["skipped"] == ["a1"]
+    assert "another note" not in body["notice"]
+    assert body["notice"] == "Restored · 1 not restored, still in the trash/ folder of your vault"
+
+
+def test_the_left_behind_notices_say_it_in_spanish(isolated_ui_language):
+    from oknowledge.i18n import translator
+    from oknowledge.web.app import NOTICES
+
+    t = translator("es")
+    assert t(NOTICES["undo-blocked"]) == "No se restauró nada: sigue en la carpeta trash/ del vault"
+    assert t(NOTICES["restored-one-partial"], 1, 2) == \
+        "Restaurado · 2 sin restaurar, en la carpeta trash/ del vault"
+    assert t(NOTICES["restored-partial"], 3, 1) == \
+        "3 restaurados · 1 sin restaurar, en la carpeta trash/ del vault"
+    for code in ("restored-one-partial-indexes-stale", "restored-partial-indexes-stale"):
+        said = t(NOTICES[code], 3, 1)
+        assert "sin restaurar, en la carpeta trash/ del vault." in said
+        assert "oknowledge reindex" in said and "otra nota" not in said

@@ -593,12 +593,12 @@ STRINGS = {
         "Restored": "Restaurado",
         "%1 restored": "%1 restaurados",
         "It can no longer be undone": "Ya no se puede deshacer",
-        "It could not be restored: there is already another note with that link":
-            "No se pudo restaurar: ya hay otra nota con ese link",
-        "Restored · %2 not: there is already another note with that link":
-            "Restaurado · %2 no: ya hay otra nota con ese link",
-        "%1 restored · %2 not: there is already another note with that link":
-            "%1 restaurados · %2 no: ya hay otra nota con ese link",
+        "Nothing was restored: still in the trash/ folder of your vault":
+            "No se restauró nada: sigue en la carpeta trash/ del vault",
+        "Restored · %2 not restored, still in the trash/ folder of your vault":
+            "Restaurado · %2 sin restaurar, en la carpeta trash/ del vault",
+        "%1 restored · %2 not restored, still in the trash/ folder of your vault":
+            "%1 restaurados · %2 sin restaurar, en la carpeta trash/ del vault",
         # The shortcuts help (delivery 3, spec §3.2).
         "Keyboard shortcuts": "Atajos de teclado",
         "Search or paste a link": "Buscar o pegar un link",
@@ -626,16 +626,18 @@ STRINGS = {
         "once the folder is writable again.":
             "Restaurado, pero no se pudieron rehacer los índices. Corré "
             "`oknowledge reindex` cuando la carpeta vuelva a ser escribible.",
-        "Restored · %2 not: there is already another note with that link. The indexes "
-        "could not be rebuilt: run `oknowledge reindex` once the folder is writable again.":
-            "Restaurado · %2 no: ya hay otra nota con ese link. No se pudieron rehacer "
-            "los índices: corré `oknowledge reindex` cuando la carpeta vuelva a ser "
-            "escribible.",
-        "%1 restored · %2 not: there is already another note with that link. The indexes "
-        "could not be rebuilt: run `oknowledge reindex` once the folder is writable again.":
-            "%1 restaurados · %2 no: ya hay otra nota con ese link. No se pudieron rehacer "
-            "los índices: corré `oknowledge reindex` cuando la carpeta vuelva a ser "
-            "escribible.",
+        "Restored · %2 not restored, still in the trash/ folder of your vault. The "
+        "indexes could not be rebuilt: run `oknowledge reindex` once the folder is "
+        "writable again.":
+            "Restaurado · %2 sin restaurar, en la carpeta trash/ del vault. No se "
+            "pudieron rehacer los índices: corré `oknowledge reindex` cuando la "
+            "carpeta vuelva a ser escribible.",
+        "%1 restored · %2 not restored, still in the trash/ folder of your vault. The "
+        "indexes could not be rebuilt: run `oknowledge reindex` once the folder is "
+        "writable again.":
+            "%1 restaurados · %2 sin restaurar, en la carpeta trash/ del vault. No se "
+            "pudieron rehacer los índices: corré `oknowledge reindex` cuando la "
+            "carpeta vuelva a ser escribible.",
         "Improvements…": "Mejoras…",
         "Expansion…": "Ampliación…",
         "Regenerating…": "Regenerando…",

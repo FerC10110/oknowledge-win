@@ -129,25 +129,26 @@ NOTICES = {
     # which is also true after the 5 s are gone.
     "deleted": "Deleted",
     "undo-gone": "It can no longer be undone",
-    "undo-blocked": "It could not be restored: there is already another note "
-                    "with that link",
+    # Why a note stayed behind is not known here (another note took its
+    # link, a symlink, an error...): the notices say where it is instead.
+    "undo-blocked": "Nothing was restored: still in the trash/ folder of your vault",
     "restored-one": "Restored",
     "restored": "%1 restored",
-    "restored-one-partial": "Restored · %2 not: there is already another note "
-                            "with that link",
-    "restored-partial": "%1 restored · %2 not: there is already another note "
-                        "with that link",
+    "restored-one-partial": "Restored · %2 not restored, still in the trash/ folder "
+                            "of your vault",
+    "restored-partial": "%1 restored · %2 not restored, still in the trash/ folder "
+                        "of your vault",
     "restored-indexes-stale": "Restored, but the indexes could not be rebuilt. "
                               "Run `oknowledge reindex` once the folder is "
                               "writable again.",
     # Both at once: the notes that did not come back are not to be lost
     # behind the stale indexes (the JSON lists them, the toast must too).
     "restored-one-partial-indexes-stale":
-        "Restored · %2 not: there is already another note with that link. The "
+        "Restored · %2 not restored, still in the trash/ folder of your vault. The "
         "indexes could not be rebuilt: run `oknowledge reindex` once the folder "
         "is writable again.",
     "restored-partial-indexes-stale":
-        "%1 restored · %2 not: there is already another note with that link. The "
+        "%1 restored · %2 not restored, still in the trash/ folder of your vault. The "
         "indexes could not be rebuilt: run `oknowledge reindex` once the folder "
         "is writable again.",
     "settings-failed": "The settings could not be saved. Check that the config "
