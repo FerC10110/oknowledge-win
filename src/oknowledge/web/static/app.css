@@ -716,6 +716,51 @@ html:not(.js) .js-only { display: none !important; }
   .links-scroll { overflow: visible; padding: 8px 16px 16px; }
   .links-column .row { min-height: 44px; }
   .links-column .row .x, .links-column .row .add { min-width: 44px; min-height: 44px; }
+  /* §8 Ajustes: the same <dialog>, the whole screen. */
+  .modal.settings { width: 100vw; height: 100vh; height: 100dvh; max-width: none; max-height: none;
+    margin: 0; border: 0; border-radius: 0;
+    padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom); }
+  .settings-head { flex-wrap: wrap; gap: 4px 12px; padding: 8px 8px 0 16px; }
+  .settings-note { flex-basis: 100%; order: 3; margin: 0; }
+  .settings-close { flex: none; width: 44px; min-width: 44px; height: 44px; margin-left: auto; }
+  .settings-tabs { overflow-x: auto; scrollbar-width: none; gap: 18px; padding: 8px 16px 0; }
+  .settings-tabs a { flex: none; display: flex; align-items: center; min-height: 44px;
+    padding: 0; white-space: nowrap; }
+  .settings-pane { padding: 16px; }
+  .settings-pane .engine-row { grid-template-columns: 20px minmax(0, 1fr); }
+  .settings-pane .engine-row .model-box, .settings-pane .engine-tools { grid-column: 1 / -1; }
+  .settings-pane .engine-tools { flex-wrap: wrap; white-space: normal; }
+  .settings-pane input:not([type=checkbox]):not([type=radio]):not([type=file]),
+  .settings-pane select { font-size: 16px; min-height: 44px; }
+  .setting { flex-direction: column; align-items: stretch; gap: 8px; }
+  .setting .seg { display: flex; }
+  .setting .seg label { flex: 1; }
+  .setting .seg label span { display: flex; align-items: center; justify-content: center; min-height: 44px; }
+  .cat-row { grid-template-columns: 8px minmax(0, 1fr) auto; }
+  .cat-row input { grid-column: 1 / -1; }
+  .drop { padding: 20px 16px; }
+  .drop .btn, .settings-pane .link-button { min-height: 44px; }
+
+  /* §8 menus: a sheet from the bottom, the whole width; a tap on the
+     backdrop lands on the summary and closes it. */
+  .menu-list, .menu.up .menu-list, .menu.more .menu-list, .idea-ai .menu-list,
+  .list-head .sort .menu-list, .bulk .menu-list {
+    position: fixed; left: 0; right: 0; bottom: 0; top: auto; min-width: 0; max-height: 60dvh;
+    border-radius: 14px 14px 0 0; padding: 8px 8px max(8px, env(safe-area-inset-bottom));
+    z-index: 45; }
+  .menu[open] > summary::before { content: ""; position: fixed; inset: 0; background: #0009; z-index: 44; cursor: default; }
+  .menu-list button, .menu-list a, .submenu > summary { min-height: 44px; }
+  .menu-list .marks button { min-width: 44px; justify-content: center; }
+  .menu-new input { font-size: 16px; min-height: 44px; }
+
+  /* §9 the toast: at the top, under the notch, two lines if it must. */
+  .toast { top: calc(env(safe-area-inset-top) + 12px); max-width: calc(100vw - 32px); white-space: normal; width: max-content; }
+  .toast button { min-height: 44px; margin: -12px 0; }
+
+  /* §11 the old pages: nothing wider than the screen. */
+  .legacy-main { overflow-wrap: anywhere; }
+  .legacy-main table { display: block; max-width: 100%; overflow-x: auto; }
+  .legacy-main pre { max-width: 100%; overflow-x: auto; }
 } /* end of the phone */
 
 /* A phone on its side, a tablet: the same column, wider grids (§1, §5). */
@@ -732,5 +777,5 @@ html:not(.js) .js-only { display: none !important; }
 
 /* A finger: what only a keyboard uses is not drawn (§1, §4). */
 @media (pointer: coarse) {
-  .key, .enter-hint, .unified .hint, [data-modal="keys"] { display: none; }
+  .key, .enter-hint, .unified .hint, [data-modal="keys"], .drop-title { display: none; }
 }

@@ -425,3 +425,40 @@ def test_an_idea_scrolls_as_a_page_with_its_rows_scrolling_sideways():
     assert ".idea-ai .label { display: none; }" in phone
     assert re.search(r"\.idea-text textarea \{[^}]*min-height: 40dvh;[^}]*font-size: 16px;", phone)
     assert re.search(r"\.idea-results \.tabs \{[^}]*overflow-x: auto;", phone)
+
+
+# --- Task 7: Ajustes, menus, toast, old pages (spec §8, §9, §11) ------------------------------
+
+def test_settings_fills_the_phone():
+    phone = block(static("app.css"), PHONE)
+    rule = re.search(r"\.modal\.settings \{[^}]*\}", phone).group(0)
+    for part in ("width: 100vw;", "height: 100dvh;", "max-width: none;", "max-height: none;",
+                 "margin: 0;", "border: 0;", "border-radius: 0;"):
+        assert part in rule, part
+    assert re.search(r"\.settings-tabs \{[^}]*overflow-x: auto;", phone)
+    assert re.search(r"\.setting \{[^}]*flex-direction: column;", phone)
+
+
+def test_a_menu_opens_as_a_sheet_from_the_bottom():
+    phone = block(static("app.css"), PHONE)
+    sheet = re.search(r"\.menu-list, [^{]*\{[^}]*\}", phone).group(0)
+    for part in ("position: fixed;", "left: 0;", "right: 0;", "bottom: 0;", "top: auto;",
+                 "min-width: 0;", "max-height: 60dvh;", "border-radius: 14px 14px 0 0;",
+                 "max(8px, env(safe-area-inset-bottom))", "z-index: 45;"):
+        assert part in sheet, part
+    # Every placement the desktop gives a menu is overridden by name.
+    for sel in (".menu.up .menu-list", ".menu.more .menu-list", ".idea-ai .menu-list",
+                ".list-head .sort .menu-list", ".bulk .menu-list"):
+        assert sel in sheet, sel
+    assert re.search(r'\.menu\[open\] > summary::before \{ content: ""; position: fixed; inset: 0;'
+                     r' background: #0009; z-index: 44;', phone)
+
+
+def test_the_toast_stays_at_the_top_and_may_wrap():
+    rule = re.search(r"\.toast \{[^}]*\}", block(static("app.css"), PHONE)).group(0)
+    assert "top: calc(env(safe-area-inset-top) + 12px);" in rule
+    assert "max-width: calc(100vw - 32px);" in rule and "white-space: normal;" in rule
+
+
+def test_a_finger_is_not_asked_to_drop_a_file():
+    assert ".drop-title" in block(static("app.css"), "@media (pointer: coarse) {")
