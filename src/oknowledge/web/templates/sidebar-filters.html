@@ -1,0 +1,13 @@
+{# A section's own sidebar groups (Ocio's TIPO and ESTADO, the ideas'
+   ESTADO): `filters` is a list of {"title", "rows": [{"href", "label",
+   "dot", "count", "on"}]}. Drawn in the sidebar, and again inside Ocio's
+   column answer, which shell.js swaps in (final review I-1). Each group is
+   a choice of its own (data-apart): a click lights its row only there. #}
+{% for group in filters|default([]) %}
+  <nav class="group" data-apart aria-label="{{ t(group.title) }}">
+    <p class="group-title">{{ t(group.title) }}</p>
+    {% for row in group.rows %}
+      <a href="{{ row.href }}" data-nav class="filter{% if row.on %} on{% endif %}"><i class="dot" style="background: {{ row.dot }}"></i><span>{{ t(row.label) }}</span><b class="count mono">{{ row.count }}</b></a>
+    {% endfor %}
+  </nav>
+{% endfor %}

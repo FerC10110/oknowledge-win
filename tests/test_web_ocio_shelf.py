@@ -228,3 +228,43 @@ def test_the_library_does_not_show_the_cards(client, a_card_in_the_shelf):
 
 def test_a_link_never_offers_it(client, a_link_in_the_library):
     assert "/describe" not in client.get(f"/item/{a_link_in_the_library.id}").text
+
+
+def side_groups(html):
+    """The sidebar's filter groups, as drawn."""
+    return re.findall(r'<nav class="group".*?</nav>', html, re.S)
+
+
+def test_the_column_brings_the_sidebar_of_its_filter(cfg, client):
+    """Final review I-1: a filter changed without a reload redraws TIPO and
+    ESTADO from the column's answer, the same as a full page load draws them."""
+    put(cfg, 1, "Alien"), put(cfg, 2, "Dune", kind="book", category="Libros")
+    column = client.get("/ocio/lista?tipo=book").text
+    fresh = column[column.index('<template id="side-filters">'):column.index("</template>")]
+    assert ">To read<" in fresh and ">Reading<" in fresh and ">To watch<" not in fresh
+    # ESTADO keeps the kind, and the kind is the row lit.
+    assert re.search(r'href="/ocio\?tipo=book&(amp;)?estado=pending"', fresh)
+    assert re.search(r'class="filter on"><i[^>]*></i><span>Books<', fresh)
+    page = client.get("/ocio?tipo=book").text
+    side = page[page.index('<aside class="sidebar"'):page.index("</aside>")]
+    assert side_groups(fresh) == side_groups(side) and len(side_groups(fresh)) == 2
+
+
+def test_both_filters_stay_in_the_column_sidebar(cfg, client):
+    put(cfg, 1, "Alien"), put(cfg, 2, "Dune", kind="book", category="Libros")
+    column = client.get("/ocio/lista?tipo=book&estado=pending").text
+    fresh = column[column.index('<template id="side-filters">'):column.index("</template>")]
+    # TIPO keeps the state, as card_filters writes it; both rows are lit.
+    assert re.search(r'href="/ocio\?tipo=movie&(amp;)?estado=pending"', fresh)
+    assert re.search(r'class="filter on"><i[^>]*></i><span>Books<', fresh)
+    assert re.search(r'class="filter on"><i[^>]*></i><span>To read<', fresh)
+
+
+def test_more_of_the_column_does_not_bring_the_sidebar(cfg, client):
+    put(cfg, 1, "Alien")
+    assert "side-filters" not in client.get("/ocio/lista?desde=60").text
+
+
+def test_the_page_draws_the_groups_once(cfg, client):
+    put(cfg, 1, "Alien")
+    assert "side-filters" not in client.get("/ocio").text

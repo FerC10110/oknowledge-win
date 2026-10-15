@@ -170,3 +170,24 @@ def test_enter_cancels_the_live_filter_before_searching_the_catalogs():
 def test_only_the_start_of_a_run_is_kept_quiet():
     body = between(SCRIPT.read_text(encoding="utf-8"), 'form[data-inline]', "// --- links being read")
     assert "answer.runs" in body and "dataset.runs" not in body
+
+
+def test_a_list_that_brings_its_sidebar_groups_swaps_them_in():
+    """Final review I-1: Ocio's TIPO and ESTADO are redrawn by the server with
+    the list, inside the list's own sequence guard, and only when the answer
+    brings them (the library and the ideas do not)."""
+    text = SCRIPT.read_text(encoding="utf-8")
+    body = between(text, "function loadList", "function markCurrent")
+    assert body.index("if (mine !== asked) return;") < body.index("sideFilters()")
+    swap = between(text, "function sideFilters", "\n  }\n")
+    assert 'list.querySelector("template#side-filters")' in swap
+    assert "if (!fresh) return;" in swap
+    assert 'querySelectorAll("nav.group")' in swap and "fresh.content" in swap
+
+
+def test_a_filter_click_lights_its_row_only_in_its_own_group():
+    """Ocio's groups are apart (data-apart): a TIPO click leaves ESTADO lit.
+    The library's groups are one choice, so a click there clears them all."""
+    body = between(SCRIPT.read_text(encoding="utf-8"), "function setActive", "\n  }\n")
+    assert 'link.closest(".sidebar .group[data-apart]")' in body
+    assert '".sidebar .filter.on"' in body

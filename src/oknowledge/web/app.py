@@ -1879,9 +1879,13 @@ def create_app(cfg: Config) -> FastAPI:
     @app.get("/ocio/lista", response_class=HTMLResponse)
     def card_column(request: Request, desde: str = ""):
         """The centre column alone: the live search and "show more" (spec §3)."""
-        shown = card_listing(CardView.from_query(request.query_params))
+        view = CardView.from_query(request.query_params)
+        shown = card_listing(view)
         if not desde:
-            return page(request, "ocio-list.html", **shown)
+            # TIPO and ESTADO come with the list: their words, counts and
+            # links follow the filter (final review I-1).
+            return page(request, "ocio-list.html", side_filters=card_filters(shelf.notes, view),
+                        **shown)
         try:
             start = max(0, int(desde))
         except ValueError:

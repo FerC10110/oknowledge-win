@@ -67,6 +67,7 @@
       .then(function (html) {
         if (mine !== asked) return;
         list.innerHTML = html;
+        sideFilters();
         var moved = picked !== shownAsked;
         if (moved) {
           var sel = here().searchParams.get("sel");
@@ -90,6 +91,20 @@
         watch();
       })
       .catch(function () { location.href = target.href; });
+  }
+
+  // Ocio's column answer brings TIPO and ESTADO for its filter (final
+  // review I-1): their words (a book is read), counts, links (each keeps
+  // the other's choice) and lit rows, as a full page load draws them.
+  // Swapped under loadList's own guard, so only the newest list's land.
+  function sideFilters() {
+    var fresh = list.querySelector("template#side-filters");
+    if (!fresh) return;
+    fresh.remove();
+    var sidebar = document.querySelector(".sidebar");
+    if (!sidebar) return;
+    sidebar.querySelectorAll("nav.group").forEach(function (old) { old.remove(); });
+    sidebar.insertBefore(fresh.content, sidebar.querySelector(".foot"));
   }
 
   function markCurrent(id) {
@@ -239,8 +254,12 @@
     panel.replaceChildren(p);
   }
 
+  // The library's groups are one choice: a click clears them all. Ocio's
+  // TIPO and ESTADO are apart: a click lights its row in its own group.
   function setActive(link) {
-    document.querySelectorAll(".sidebar .filter.on").forEach(function (a) { a.classList.remove("on"); });
+    var apart = link.closest(".sidebar .group[data-apart]");
+    (apart || document).querySelectorAll(apart ? ".filter.on" : ".sidebar .filter.on")
+      .forEach(function (a) { a.classList.remove("on"); });
     if (link.closest(".sidebar")) link.classList.add("on");
   }
 

@@ -33,3 +33,7 @@
       <p>{{ t('Type a title in the box above and search the catalogs.') }}</p></div>
   {% endif %}
 </div>
+{# Ocio's TIPO and ESTADO for this filter, in the column's answer alone
+   (the page draws them in the sidebar): shell.js swaps them in (final
+   review I-1). #}
+{% if side_filters is defined %}<template id="side-filters">{% with filters = side_filters %}{% include "sidebar-filters.html" %}{% endwith %}</template>{% endif %}
