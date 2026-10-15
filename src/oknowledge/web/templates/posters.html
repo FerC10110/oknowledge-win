@@ -19,8 +19,8 @@
     </span>
     <span class="title" dir="auto">{{ note.title }}</span>
     <span class="meta">
-      {%- set year = (note.published or '')[:4] -%}
-      {%- if year|length == 4 and year.isdigit() %}<span>{{ year }}</span>{% endif -%}
+      {%- set year = note|year_of -%}
+      {%- if year %}<span>{{ year }}</span>{% endif -%}
       {%- if note.score %}<span class="stars-shown" aria-label="{{ [note.score, 5]|min }}/5">{% for n in range(1, [note.score, 5]|min + 1) %}<i class="star on">{% include "icon-star.html" %}</i>{% endfor %}</span>{% endif -%}
       {%- if note.rating %}<span class="rating">{{ note.source|catalog_name }} {{ note.rating }}</span>{% endif -%}
     </span>

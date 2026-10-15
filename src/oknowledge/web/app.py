@@ -75,7 +75,8 @@ from .shelf_view import (AI_BUTTONS, CARD_CHIP, CARD_DOTS, IDEA_DOTS, IDEA_WORDS
                          SECTION_NAMES,
                          SORTS, TAB_OF, TABS, WORKING, CardView, IdeaView, card_filters,
                          catalog_name, choose_cards, choose_ideas, excerpt, idea_filters,
-                         idea_url, poster_fill, scope_of, tab_of, web_domain, words_for)
+                         idea_url, poster_fill, scope_of, tab_of, web_domain, words_for,
+                         year_of)
 from .working import Working
 
 WEB = files("oknowledge").joinpath("web")
@@ -555,6 +556,7 @@ def see_other(path: str, **params) -> RedirectResponse:
     join = "&" if "?" in path else "?"
     return RedirectResponse(path + join + query, status_code=303)
 
+
 GONE = "That is not there any more."
 """What a script is told when the note it was editing has gone."""
 
@@ -865,6 +867,7 @@ def create_app(cfg: Config) -> FastAPI:
     templates.env.filters["dot"] = dot
     templates.env.filters["catalog_name"] = catalog_name
     templates.env.filters["poster_fill"] = poster_fill
+    templates.env.filters["year_of"] = year_of
     templates.env.filters["tint"] = tint
     templates.env.filters["short_date"] = short_date
     templates.env.filters["paragraphs"] = paragraphs
@@ -2496,11 +2499,11 @@ def create_app(cfg: Config) -> FastAPI:
         """What an idea's screen shows (spec §2)."""
         tab, scope, home = tab_of(pestana), scope_of(alcance), ideas_back(back)
         running, failed = working.of(note.id)
-        library.refresh()
+        links = links_context(note, q)     # it refreshes the library
         present = {entry.path.stem for entry in library.entries}
         params = {"pestana": tab, "alcance": scope, "back": home, "q": q}
         return {
-            **links_context(note, q),
+            **links,
             "note": note, "tab": tab, "scope": scope, "back": home, "q": q,
             "url": lambda **changes: idea_url(note.id, **{**params, **changes}),
             "running": running, "failed": failed,

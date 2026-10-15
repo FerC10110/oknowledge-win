@@ -23,6 +23,3 @@ en `2026-10-14-rediseno-biblioteca-pendientes.md`.
 
 ## Código
 
-- `links_context` vuelve a correr `library.refresh()`.
-- `posters.html` vuelve a parsear el año en vez de usar `year_of`.
-- Una línea en blanco de más antes de `GONE` en `app.py`.
