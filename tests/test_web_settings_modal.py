@@ -89,3 +89,36 @@ def test_the_fragment_and_the_page_carry_the_same_hooks(client):
     for hook in ("data-settings-root", 'data-settings-tab="idioma"', "data-settings-rename",
                  "data-settings-drop", "data-settings-action"):
         assert hook in fragment and hook in page, hook
+
+
+# Fix round 1 of the review.
+
+def test_closing_the_modal_while_a_rename_is_out_reloads_once_it_lands():
+    text = SETTINGS.read_text(encoding="utf-8")
+    renaming = between(text, "function renames", "function drops")
+    assert "pendingRename = " in renaming
+    closing = between(text, 'modal.addEventListener("close"', "});")
+    assert "pendingRename" in closing and "location.reload()" in closing
+
+
+def test_a_redraw_waits_for_the_saves_still_out():
+    text = SETTINGS.read_text(encoding="utf-8")
+    assert "whenIdle()" in between(text, "function redraw", "function bind")
+    saving = between(text, "function autosave", "function syncKeep")
+    assert "hold()" in saving and "release()" in saving
+
+
+def test_a_rename_that_landed_can_be_sent_again():
+    renaming = between(SETTINGS.read_text(encoding="utf-8"), "function renames", "function drops")
+    landed = between(renaming, "renamed = true", ".catch(")
+    assert "sending = false" in landed
+
+
+def test_an_action_button_waits_for_its_answer():
+    acting = between(SETTINGS.read_text(encoding="utf-8"), "function actions", "function renames")
+    assert "disabled = true" in acting and "disabled = false" in acting
+
+
+def test_a_pane_does_not_send_the_same_thing_twice_in_a_row():
+    saving = between(SETTINGS.read_text(encoding="utf-8"), "function autosave", "function syncKeep")
+    assert "lastSent" in saving

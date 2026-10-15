@@ -9,6 +9,20 @@
   var modal = document.getElementById("settings-modal");
   var lastTab = "";
   var renamed = false;
+  var pendingRename = null;   // a rename sent and not answered yet: true if it landed
+
+  // Saves still out. A redraw waits for them: drawn before one lands, the
+  // box would show the old value and the next change would send it back.
+  var inflight = 0;
+  var idle = [];
+  function hold() { inflight += 1; }
+  function release() {
+    inflight -= 1;
+    if (!inflight) idle.splice(0).forEach(function (resume) { resume(); });
+  }
+  function whenIdle() {
+    return inflight ? new Promise(function (resume) { idle.push(resume); }) : Promise.resolve();
+  }
 
   function toast(text) { if (text && ok.toast) ok.toast(text); }
 
@@ -51,24 +65,36 @@
 
   // --- a pane saves itself -----------------------------------------------------------
   // The whole pane, on every change. One request at a time: a change while
-  // one is out is sent when it lands, with what the pane holds by then.
+  // one is out is sent when it lands, with what the pane holds by then. The
+  // same pane twice in a row (Enter fires change and submit) is sent once.
   function autosave(form) {
     var busy = false;
     var again = false;
+    var lastSent = "";
     function save() {
       if (busy) { again = true; return; }
       busy = true;
-      ok.send(form.getAttribute("action"), new FormData(form))
+      hold();
+      send();
+    }
+    function send() {
+      var data = new FormData(form);
+      var payload = new URLSearchParams(data).toString();
+      if (payload === lastSent) { done(); return; }
+      lastSent = payload;
+      ok.send(form.getAttribute("action"), data)
         .then(function (body) {
           if (body.reload) { location.reload(); return; }
           toast(body.notice);
           syncKeep(form);
         })
-        .catch(function (error) { toast(error.message); })
-        .then(function () {
-          busy = false;
-          if (again) { again = false; save(); }
-        });
+        .catch(function (error) { lastSent = ""; toast(error.message); })
+        .then(done);
+    }
+    function done() {
+      if (again) { again = false; send(); return; }
+      busy = false;
+      release();
     }
     form.addEventListener("change", save);
     form.addEventListener("submit", function (event) { event.preventDefault(); save(); });
@@ -87,9 +113,15 @@
     root.querySelectorAll("form[data-settings-action]").forEach(function (form) {
       form.addEventListener("submit", function (event) {
         event.preventDefault();
+        // The button (it may sit outside the form, form="…") waits for the
+        // answer: a double click on "Analizar" is one batch, not two.
+        var button = event.submitter || form.querySelector('[type="submit"]');
+        if (button && button.disabled) return;
+        if (button) button.disabled = true;
         ok.send(form.getAttribute("action"), new FormData(form, event.submitter || undefined))
-          .then(function (body) { toast(body.notice); redraw(root, onPage); })
-          .catch(function (error) { toast(error.message); });
+          .then(function (body) { toast(body.notice); return redraw(root, onPage); })
+          .catch(function (error) { toast(error.message); })
+          .then(function () { if (button) button.disabled = false; });
       });
     });
   }
@@ -116,13 +148,18 @@
           return;
         }
         sending = true;
-        ok.send(form.getAttribute("action"), new FormData(form))
+        pendingRename = ok.send(form.getAttribute("action"), new FormData(form))
           .then(function (body) {
             renamed = true;
+            sending = false;
+            // Until the redraw lands (or if it fails) the row is the new name.
+            known[known.indexOf(old)] = name;
+            form.elements.old.value = old = name;
             toast(body.notice);
             redraw(root, onPage);
+            return true;
           })
-          .catch(function (error) { sending = false; toast(error.message); });
+          .catch(function (error) { sending = false; toast(error.message); return false; });
       }
       box.addEventListener("change", rename);
       form.addEventListener("submit", function (event) { event.preventDefault(); rename(); });
@@ -155,8 +192,11 @@
   // The body again, as the server draws it now (models found, a .env
   // created, a category renamed), on the tab that was open.
   function redraw(root, onPage) {
-    return fetch("/settings/panel?tab=" + encodeURIComponent(lastTab),
-                 { headers: { Accept: "text/html" } })
+    return whenIdle()
+      .then(function () {
+        return fetch("/settings/panel?tab=" + encodeURIComponent(lastTab),
+                     { headers: { Accept: "text/html" } });
+      })
       .then(function (r) { if (!r.ok) throw new Error(r.status); return r.text(); })
       .then(function (html) {
         var box = document.createElement("template");
@@ -208,6 +248,7 @@
     if (!modal) { location.href = "/settings"; return; }
     var key = tab || lastTab || "motores";
     renamed = false;
+    pendingRename = null;
     modal.replaceChildren();
     modal.classList.add("loading");
     ok.openModal(modal);
@@ -235,7 +276,12 @@
       if (active && modal.contains(active) && active.blur) active.blur();
     });
     // A category renamed changes the list and the sidebar under the modal.
-    modal.addEventListener("close", function () { if (renamed) location.reload(); });
+    // Closing blurs the box first, so a rename may still be out: the page
+    // reloads once it lands.
+    modal.addEventListener("close", function () {
+      if (renamed) { location.reload(); return; }
+      if (pendingRename) pendingRename.then(function (landed) { if (landed) location.reload(); });
+    });
   }
 
   // The page /settings: the same fragment, bound in place.
