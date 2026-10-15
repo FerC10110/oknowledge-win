@@ -76,7 +76,7 @@
       <button class="btn" data-nojs>{{ t('Save') }}</button>
     </form>
   </section>
-  <div class="chips tags">
+  <div class="chips tags card-tags">
     {% for tag in note.tags %}
       <form method="post" action="/item/{{ note.id|slug }}/tags" data-inline class="chip">
         <span>#{{ tag }}</span>
