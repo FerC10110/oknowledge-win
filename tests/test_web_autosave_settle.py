@@ -382,3 +382,37 @@ await advance(1000); await tick();
 out.later = sent.map((s) => s.text);
 """)
     assert out["atOnce"] == ["ab"] and out["later"] == ["ab", "abc"]
+
+
+# --- the model's title and a focused title box (polish, Ideas) -------------------------------
+
+def test_the_model_s_title_lands_in_an_empty_box_that_has_the_focus(clock):
+    out = clock("""
+document.activeElement = field;
+out.empty = field.oknowledgeSettle("VPN familiar");
+out.value = field.value;
+""")
+    assert out["empty"] is True and out["value"] == "VPN familiar"
+
+
+def test_the_model_s_title_waits_while_somebody_types_in_the_box(clock):
+    out = clock("""
+document.activeElement = field;
+field.value = "Mi tí";
+out.typing = field.oknowledgeSettle("VPN familiar");
+out.value = field.value;
+""")
+    assert out["typing"] is False and out["value"] == "Mi tí"
+
+
+def test_a_box_with_text_saved_and_the_focus_keeps_it(clock):
+    """Text that is the box's own, saved or not: the focus means it may be
+    edited next, and the model does not take it."""
+    out = clock("""
+field.value = "Mío"; handlers.blur(); await tick();
+answer(true); await tick(); await tick(); await tick();
+document.activeElement = field;
+out.kept = field.oknowledgeSettle("VPN familiar");
+out.value = field.value;
+""")
+    assert out["kept"] is False and out["value"] == "Mío"

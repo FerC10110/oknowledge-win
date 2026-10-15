@@ -6,24 +6,6 @@ Detalles menores que las revisiones encontraron y que no entraron en la
 entrega 2. Ninguno pierde datos. Los de la entrega 1 que siguen abiertos están
 en `2026-10-14-rediseno-biblioteca-pendientes.md`.
 
-## Ocio
-
-
-## Panel y autoguardado
-
-- Una respuesta de `/actions/state` más lenta que 3 s se descarta por vieja;
-  un servidor muy lento podría no llegar a mostrar "Listo".
-
-## Ideas
-
-- "+ etiqueta" pierde el foco después de Enter. El título que propone la IA
-  espera mientras el campo de título vacío tiene el foco.
-
-## Biblioteca
-
-- Un link de orden fuera de la barra lateral borra el resaltado de la barra
-  (ya pasaba antes de esta entrega).
-
 ## Tests flojos
 
 - Varios tests de JS (`shell.js`, `autosave.js`, `idea.js`) sólo buscan texto

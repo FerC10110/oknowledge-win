@@ -163,13 +163,17 @@
   var bar = document.getElementById("idea-ai");
   var running = (bar && bar.dataset.running || "").split(" ").filter(Boolean);
   var polling = null;
-  // Each poll is numbered and only the newest answer counts: one that left
-  // before an action started (or that is overtaken by a newer one) does not
-  // know about it, and would say it ended.
+  // Each poll is numbered. An answer counts when it is newer than the last
+  // one that counted and left after the last action started: one that left
+  // before (or one overtaken by a newer answer) does not know about that
+  // run, and would say it ended. Not its age: a server slower than the
+  // interval still gets its answers through.
   var ticks = 0;
+  var applied = 0;          // the newest poll whose answer counted
+  var since = 0;            // the last poll number taken by a start
 
   function started(action) {
-    ticks += 1;                        // what is on its way predates this run
+    since = ++ticks;                   // what is on its way predates this run
     if (running.indexOf(action) < 0) running.push(action);
     openTab(TAB_OF[action] || "resumen");
     refresh(["idea-ai", "idea-results"]);
@@ -210,7 +214,8 @@
       })
       .then(function (state) {
         if (!state) return;
-        if (mine !== ticks) return;
+        if (mine <= since || mine <= applied) return;
+        applied = mine;
         var ended = running.filter(function (a) { return state.running.indexOf(a) < 0; });
         var now = document.getElementById("idea-ai") || bar;
         ended.forEach(function (action) {

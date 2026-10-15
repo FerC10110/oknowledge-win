@@ -141,6 +141,7 @@ def test_only_the_newest_poll_answer_counts():
     """Fix round 1: an answer that left before an action started, or that
     arrives after a newer one, must not say that action ended."""
     tick = between(IDEA, "function tick", "function gone")
-    assert "var mine = ++ticks;" in tick and "if (mine !== ticks) return;" in tick
+    # By number, not age (polish): tests/test_web_idea_js.py runs the races.
+    assert "var mine = ++ticks;" in tick and "if (mine <= since || mine <= applied) return;" in tick
     started = between(IDEA, "function started", "function poll")
-    assert "ticks += 1;" in started
+    assert "since = ++ticks;" in started

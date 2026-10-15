@@ -203,9 +203,11 @@
       });
     }
     // A value from elsewhere (the model named the idea): taken only when
-    // nobody is typing in the field and nothing of theirs is unsaved.
+    // nothing of theirs is unsaved and nobody is typing in the field -- an
+    // empty box with the focus has nothing typed yet, and takes it too.
     field.oknowledgeSettle = function (value) {
-      if (document.activeElement === field || field.value !== saved || inflight) return false;
+      if (field.value !== saved || inflight || timer) return false;
+      if (document.activeElement === field && field.value !== "") return false;
       field.value = value;
       saved = value;
       return true;
