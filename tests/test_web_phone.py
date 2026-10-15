@@ -462,3 +462,13 @@ def test_the_toast_stays_at_the_top_and_may_wrap():
 
 def test_a_finger_is_not_asked_to_drop_a_file():
     assert ".drop-title" in block(static("app.css"), "@media (pointer: coarse) {")
+
+
+# --- Task 8: Ajustes waits for its back before reloading (Ruling 14) --------------------------
+
+def test_a_rename_reloads_only_after_the_layer_has_gone():
+    js = static("settings.js")
+    head = js.index('modal.addEventListener("close"')
+    body = js[head:js.index("\n    });", head)]                # the listener's own end
+    assert "ok.layers ? ok.layers.settled() : Promise.resolve()" in body
+    assert "after.then(function () { location.reload(); })" in body

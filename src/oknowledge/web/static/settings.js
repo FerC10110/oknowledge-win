@@ -297,10 +297,14 @@
     });
     // A category renamed changes the list and the sidebar under the modal.
     // Closing blurs the box first, so a rename may still be out: the page
-    // reloads once it lands.
+    // reloads once it lands -- and, on the phone, once the modal's history
+    // entry has gone (app.js goes back first, delivery 4 Ruling 14).
     modal.addEventListener("close", function () {
-      if (renamed) { location.reload(); return; }
-      if (pendingRename) pendingRename.then(function (landed) { if (landed) location.reload(); });
+      var after = ok.layers ? ok.layers.settled() : Promise.resolve();
+      var rename = renamed ? Promise.resolve(true) : pendingRename;
+      if (rename) rename.then(function (landed) {
+        if (landed) after.then(function () { location.reload(); });
+      });
     });
   }
 

@@ -145,6 +145,10 @@
 
   function openModal(dialog) {
     if (!dialog || dialog.open) return;
+    // On the phone Ajustes is a layer: back closes it (delivery 4, §8). Not
+    // over another layer -- the detail covers the top bar anyway.
+    if (dialog.id === "settings-modal" && phone() &&
+        !openLayer("settings", function () { if (dialog.open) dialog.close(); })) return;
     closeMenus();
     dialog.showModal();
     raise();
@@ -176,6 +180,63 @@
     if (event.target.matches && event.target.matches("dialog.modal[open]")) event.target.close();
   });
 
+  // --- the phone (docs/2026-10-15-rediseno-celular-design.md §1, §6.3, §8) -----------
+  // One breakpoint for the CSS and every script.
+  var narrow = window.matchMedia ? window.matchMedia("(max-width: 60rem)") : null;
+  function phone() { return !!(narrow && narrow.matches); }
+
+  // A layer is a screen drawn over the page (the detail, Ajustes) that the
+  // browser's back closes. One at a time. `open` gives it a history entry;
+  // `adopt` takes one the page started with, which has an entry of its own
+  // only if history.state says so (a forward, a reload of our entry).
+  var layer = null;          // {name, onClose, pushed}
+  var leaving = null;        // a back() under way, as a Promise
+  var landed = null;         // ...and its resolve
+
+  function openLayer(name, onClose, url) {
+    if (layer) return false;
+    history.pushState({ layer: name }, "", url || location.href);
+    layer = { name: name, onClose: onClose, pushed: true };
+    return true;
+  }
+
+  function adoptLayer(name, onClose) {
+    if (layer) return false;
+    layer = { name: name, onClose: onClose,
+              pushed: !!(history.state && history.state.layer === name) };
+    return true;
+  }
+
+  // The layer on top goes: by back() when it has its entry (popstate below
+  // does the rest), else at once, in place. Never off the site.
+  function closeLayer() {
+    if (!layer) return leaving || Promise.resolve();
+    if (layer.pushed && history.state && history.state.layer === layer.name) {
+      if (!leaving) leaving = new Promise(function (resolve) { landed = resolve; });
+      history.back();
+      return leaving;
+    }
+    var top = layer;
+    layer = null;
+    top.onClose("close");
+    return Promise.resolve();
+  }
+
+  window.addEventListener("popstate", function () {
+    var top = layer;
+    layer = null;
+    if (top) top.onClose("back");
+    if (landed) { var done = landed; landed = null; leaving = null; done(); }
+  });
+
+  // ✕, Esc and a tap on the backdrop close the dialog; on the phone its
+  // entry goes with it. Bound now, before settings.js binds its own "close"
+  // (which reloads after a rename once this back() has landed, Ruling 14).
+  var settingsDialog = document.getElementById("settings-modal");
+  if (settingsDialog) settingsDialog.addEventListener("close", function () {
+    if (layer && layer.name === "settings") closeLayer();
+  });
+
   // --- keys (spec §4) -----------------------------------------------------------------
   // Where a key is text, not a command. A checkbox or a radio is not typing:
   // with the focus on a ticked box, j, x and ⌫ still work.
@@ -203,6 +264,10 @@
     }
     var active = document.activeElement;
     if (key === "Escape") {
+      // A layer (delivery 4, §6.3): after the modal (which closes itself),
+      // before the menus -- and a sheet open over it goes with it. A field
+      // being typed in is let go first, so its text saves (Ruling 13).
+      if (layer && !typing(active)) { closeMenus(); closeLayer(); return; }
       if (closeMenus()) return;
       if (typing(active)) { active.blur(); return; }
       if (ok.keys.Escape) ok.keys.Escape(event);
@@ -229,6 +294,10 @@
   ok.closeMenus = closeMenus;
   ok.openModal = openModal;
   ok.raiseToast = raise;
+  ok.phone = phone;
+  ok.layers = { open: openLayer, adopt: adoptLayer, close: closeLayer,
+                top: function () { return layer ? layer.name : ""; },
+                settled: function () { return leaving || Promise.resolve(); } };
 
   // The toast the server drew after a redirect: taken over and timed here,
   // and its Deshacer sent as JSON (spec §2). Without this file it is a form.

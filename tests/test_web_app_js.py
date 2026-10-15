@@ -118,6 +118,7 @@ let dialog = null;
 const field = (type) => ({ tagName: "INPUT", type, isContentEditable: false, closest: () => null,
                            blur() { out.blurred = (out.blurred || 0) + 1; } });
 global.window = global;
+global.addEventListener = () => {};
 global.location = { href: "/", pathname: "/", reload() {} };
 global.document = {
   body: { dataset: {}, tagName: "BODY" },
@@ -216,6 +217,7 @@ const toastEl = {
   appendChild() {}, querySelector: () => null,
 };
 global.window = global;
+global.addEventListener = () => {};
 global.location = { href: "/", pathname: "/", reload() { out.reloaded = true; } };
 global.FormData = function () {};
 global.document = {
@@ -296,6 +298,7 @@ const toastEl = {
   matches: (sel) => sel === ":popover-open" && open,
 };
 global.window = global;
+global.addEventListener = () => {};
 global.location = { href: "/", pathname: "/", reload() {} };
 global.document = {
   body,
@@ -375,3 +378,161 @@ def test_the_settings_modal_puts_the_toast_back_after_drawing_its_content():
     assert "raiseToast();" in between(text, "function failed", "ok.openSettings")
     loaded = between(opening, "modal.innerHTML = html;", ".catch")
     assert "raiseToast();" in loaded
+
+
+# --- delivery 4: layers (docs/2026-10-15-rediseno-celular-design.md §6.3, §8) --------------
+
+LAYERS_HARNESS = r"""
+const source = require("fs").readFileSync(process.argv[2], "utf8");
+const out = {};
+const win = {};
+const handlers = {};
+global.window = global;
+global.addEventListener = (type, fn) => { (win[type] = win[type] || []).push(fn); };
+// A history of same-document entries: back() pops one and fires popstate later.
+const entries = [{ state: null, url: "/" }];
+let at = 0;
+global.location = { get href() { return "http://x" + entries[at].url; }, pathname: "/",
+                    reload() { out.reloaded = true; } };
+global.history = {
+  get state() { return entries[at].state; },
+  pushState(state, _, url) { entries.splice(at + 1); entries.push({ state, url: url.replace("http://x", "") }); at++; },
+  replaceState(state, _, url) { entries[at] = { state, url: url.replace("http://x", "") }; },
+  back() {
+    if (at === 0) { out.leftSite = true; return; }
+    at--;
+    setTimeout(() => (win.popstate || []).forEach((fn) => fn({ state: entries[at].state })), 0);
+  },
+};
+let narrow = true;
+global.matchMedia = () => ({ get matches() { return narrow; } });
+const modalOn = {};
+const modal = {
+  id: "settings-modal", open: false,
+  showModal() { this.open = true; },
+  close() { if (!this.open) return; this.open = false; (modalOn.close || []).forEach((fn) => fn()); },
+  addEventListener: (type, fn) => { (modalOn[type] = modalOn[type] || []).push(fn); },
+};
+global.document = {
+  body: { dataset: {}, tagName: "BODY" },
+  addEventListener: (type, fn) => { (handlers[type] = handlers[type] || []).push(fn); },
+  getElementById: (id) => (id === "settings-modal" ? modal : null),
+  querySelector: () => null,
+  querySelectorAll: () => [],
+};
+document.activeElement = document.body;
+eval(source);
+const ok = window.oknowledge;
+const tick = () => new Promise((r) => setTimeout(r, 5));
+function press(key) {
+  const event = { key, defaultPrevented: false, isComposing: false, metaKey: false, ctrlKey: false,
+                  altKey: false, preventDefault() { this.defaultPrevented = true; } };
+  (handlers.keydown || []).forEach((fn) => fn(event));
+}
+(async () => {
+  out.phone = ok.phone();
+  // 1. A panel layer: its own entry; back closes it and the URL is the list's.
+  const closed = [];
+  out.opened = ok.layers.open("panel", (how) => closed.push(how), "/?sel=a1");
+  out.urlOpen = entries[at].url;
+  out.second = ok.layers.open("settings", () => closed.push("settings"));   // one at a time
+  history.back();
+  await tick();
+  out.afterBack = [closed.slice(), ok.layers.top(), entries[at].url];
+  // 2. Ajustes on the phone: ✕ (the dialog's close) goes back once.
+  ok.openModal(modal);
+  out.settingsPushed = [modal.open, ok.layers.top(), entries.length, at];
+  modal.close();
+  await ok.layers.settled();
+  await tick();
+  out.closeWentBack = [ok.layers.top(), at, out.leftSite === true];
+  // ... and the browser's back closes the dialog.
+  ok.openModal(modal);
+  history.back();
+  await tick();
+  out.backClosedModal = [modal.open, ok.layers.top(), at];
+  // 3. A layer the page started with (a reload with sel=): closed in place.
+  const adopted = [];
+  ok.layers.adopt("panel", (how) => adopted.push(how));
+  const where = at;
+  await ok.layers.close();
+  out.adoptedClose = [adopted, at === where, out.leftSite === true];
+  // ... unless the entry is ours (a forward, a reload of our entry): then back.
+  ok.layers.open("panel", (how) => closed.push("p:" + how), "/?sel=b2");
+  history.back(); await tick();
+  history.state;                                   // the list's entry again
+  at++;                                            // forward, by hand
+  ok.layers.adopt("panel", (how) => closed.push("fwd:" + how));
+  await ok.layers.close();
+  await tick();
+  out.adoptedOwnEntry = [closed[closed.length - 1], at];
+  // 4. Esc: a field being typed in is blurred first; the next Esc closes.
+  ok.layers.open("panel", (how) => closed.push("esc:" + how), "/?sel=a1");
+  document.activeElement = { tagName: "INPUT", type: "text", isContentEditable: false, closest: () => null,
+                             blur() { out.blurred = true; document.activeElement = document.body; } };
+  press("Escape");
+  await tick();
+  out.escInField = [out.blurred === true, ok.layers.top()];
+  press("Escape");
+  await tick();
+  out.escClosesLayer = [ok.layers.top(), closed[closed.length - 1]];
+  // 5. A desktop: Ajustes makes no entry.
+  narrow = false;
+  const length = entries.length;
+  ok.openModal(modal);
+  out.desktop = [modal.open, entries.length === length, ok.layers.top()];
+  console.log(JSON.stringify(out));
+  process.exit(0);
+})();
+"""
+
+
+@pytest.fixture(scope="module")
+def layers(tmp_path_factory):
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not installed")
+    harness = tmp_path_factory.mktemp("layers") / "harness.js"
+    harness.write_text(LAYERS_HARNESS, encoding="utf-8")
+    done = subprocess.run([node, str(harness), str(APP)], capture_output=True, text=True,
+                          timeout=30, check=False)
+    assert done.returncode == 0, done.stderr
+    return json.loads(done.stdout.strip().splitlines()[-1])
+
+
+def test_the_phone_is_one_breakpoint(layers):
+    assert layers["phone"] is True
+    assert 'matchMedia("(max-width: 60rem)")' in APP.read_text(encoding="utf-8")
+
+
+def test_a_layer_has_its_entry_and_back_closes_it(layers):
+    assert layers["opened"] is True and layers["urlOpen"] == "/?sel=a1"
+    assert layers["afterBack"] == [["back"], "", "/"]
+
+
+def test_one_layer_at_a_time(layers):
+    assert layers["second"] is False
+
+
+def test_settings_on_the_phone_is_a_layer_closed_by_x_or_back(layers):
+    """Review Focus 3: ✕ goes back exactly once, and never off the site."""
+    assert layers["settingsPushed"] == [True, "settings", 2, 1]
+    assert layers["closeWentBack"] == ["", 0, False]
+    assert layers["backClosedModal"] == [False, "", 0]
+
+
+def test_a_layer_the_page_started_with_closes_in_place(layers):
+    assert layers["adoptedClose"] == [["close"], True, False]
+
+
+def test_a_layer_on_its_own_entry_goes_back_even_when_adopted(layers):
+    assert layers["adoptedOwnEntry"] == ["fwd:back", 0]
+
+
+def test_esc_blurs_a_field_before_it_closes_the_layer(layers):
+    assert layers["escInField"] == [True, "panel"]
+    assert layers["escClosesLayer"] == ["", "esc:back"]
+
+
+def test_a_desktop_makes_no_history_for_settings(layers):
+    assert layers["desktop"] == [True, True, ""]
