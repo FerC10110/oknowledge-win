@@ -30,6 +30,10 @@ LIFETIME = dt.timedelta(hours=24)
 """How long a lot can be used. The toast offers it for 5 s; the rest is for
 the no-JS form left open in a tab, and for nothing else."""
 
+SKEW = dt.timedelta(minutes=5)
+"""How far in the future a lot may be dated and still count: the clock
+stepping back a little (NTP) must not cost the Undo just offered."""
+
 TOKEN = re.compile(r"[A-Za-z0-9_-]{22}")
 """secrets.token_urlsafe(16): the only thing that ever names a file here."""
 
@@ -77,10 +81,11 @@ def _at(lot: dict) -> dt.datetime | None:
 
 
 def _young(at: dt.datetime, now: dt.datetime) -> bool:
-    """Within LIFETIME of `now`, and not after it. A date in the future
-    means the clock went back since: no age can be told, and a lot that
-    counted as fresh would never expire, so it counts as expired."""
-    return dt.timedelta(0) <= now - at <= LIFETIME
+    """Within LIFETIME of `now`, and not more than SKEW after it. A date
+    further in the future means the clock went back a lot since: no age can
+    be told, and a lot that counted as fresh would never expire, so it counts
+    as expired."""
+    return -SKEW <= now - at <= LIFETIME
 
 
 def _fresh(lot: dict | None, now: dt.datetime) -> bool:

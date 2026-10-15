@@ -315,3 +315,29 @@ def test_two_undos_of_one_lot_at_once_restore_it_once(tmp_path, monkeypatch):
     assert done[0].restored == ["a1", "a2"]
     assert len(list(cfg.links.dir.glob("*.md"))) == 2
     assert list((cfg.root / "trash").glob("*.md")) == []
+
+
+def test_a_small_step_back_of_the_clock_keeps_a_fresh_lot(tmp_path):
+    """NTP nudging the clock back a little must not cost the Undo just
+    offered: a lot up to undo.SKEW in the future still counts."""
+    cfg = make(tmp_path)
+    moved = put(cfg, "a1")
+    token = undo.remember(cfg, [("a1", "links", moved)], now=NOW + dt.timedelta(seconds=1))
+    undo.remember(cfg, [("b2", "links", put(cfg, "b2"))], now=NOW)    # purges first
+
+    assert (undo.folder() / f"{token}.json").exists()
+    assert undo.alive(token, now=NOW)
+    assert undo.alive(token, now=NOW + dt.timedelta(seconds=1) - undo.SKEW)
+    assert not undo.alive(token, now=NOW - undo.SKEW)
+    assert undo.restore(cfg, token, "es", no_lock, now=NOW).restored == ["a1"]
+
+
+def test_an_unreadable_lot_a_little_in_the_future_is_kept(tmp_path):
+    import os
+    undo.folder().mkdir(parents=True)
+    path = undo.folder() / ("y" * 22 + ".json")
+    path.write_text("not json", encoding="utf-8")
+    soon = (NOW + dt.timedelta(seconds=30)).timestamp()
+    os.utime(path, (soon, soon))
+
+    assert undo.purge(now=NOW) == 0 and path.exists()
