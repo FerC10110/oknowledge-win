@@ -9,14 +9,9 @@ entrega 3. Ninguno pierde datos: en el peor caso una nota queda en
 
 ## Deshacer y papelera
 
-- Si al restaurar falla el borrado de la copia en `trash/` (después de haber
-  vuelto la nota a su lugar), Deshacer la cuenta como "no restaurada" y no
-  reconstruye ese estante. La nota sí volvió, y la copia queda en `trash/`.
 - Un error inesperado a mitad de un Deshacer corta la vuelta: el resto del lote
   queda en `trash/` y no se reconstruyen los estantes que ya volvieron.
 - Un lote con fecha futura (el reloj volvió atrás) nunca se purga.
-- Si una carpeta del vault es un symlink colgado, la nota podría volver con
-  otro nombre (el chequeo de symlink mira la ruta ya resuelta).
 - Con los índices sin reconstruir, el aviso de Deshacer dice "índices
   desactualizados" y no menciona las notas que no volvieron (el JSON sí las
   lista).

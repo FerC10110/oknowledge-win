@@ -196,3 +196,85 @@ def test_a_trash_file_that_vanishes_before_the_link_leaves_nothing(tmp_path, mon
     assert restore_note(cfg, "a1", moved.source, moved.target, "es") is False
     assert not path.exists()
     assert not list(path.parent.glob("*.md"))          # no placeholder either
+
+
+def test_without_hard_links_a_name_taken_by_someone_else_wins(tmp_path, monkeypatch):
+    """The fallback reserves the name with O_EXCL: a file that appeared there
+    first is left alone and the note stays in trash/."""
+    cfg = make(tmp_path)
+    path, moved = trashed(cfg)
+    before = moved.target.read_bytes()
+
+    def unsupported_and_raced(src, dst):
+        open(dst, "w", encoding="utf-8").write("theirs\n")
+        raise OSError(errno.EPERM, "Operation not permitted")
+    monkeypatch.setattr(os, "link", unsupported_and_raced)
+
+    assert restore_note(cfg, "a1", moved.source, moved.target, "es") is False
+    assert path.read_text(encoding="utf-8") == "theirs\n"
+    assert moved.target.read_bytes() == before
+
+
+def fail_unlink_in_trash(cfg, monkeypatch):
+    real = type(cfg.root).unlink
+    trash = trash_dir(cfg).resolve()
+
+    def unlink(self, missing_ok=False):
+        if self.parent.resolve() == trash:
+            raise PermissionError(errno.EACCES, "Permission denied", str(self))
+        return real(self, missing_ok=missing_ok)
+    monkeypatch.setattr(type(cfg.root), "unlink", unlink)
+
+
+def test_a_trash_copy_that_cannot_be_deleted_still_counts_as_restored(tmp_path, monkeypatch):
+    cfg = make(tmp_path)
+    path, moved = trashed(cfg)
+    before = moved.target.read_bytes()
+    fail_unlink_in_trash(cfg, monkeypatch)
+    calls = count_rebuilds(monkeypatch)
+
+    assert restore_note(cfg, "a1", moved.source, moved.target, "es") is True
+
+    assert path.read_bytes() == before
+    assert moved.target.exists()                    # the leftover, purged with trash/
+    assert [shelf.name for shelf in calls] == ["links"]
+
+
+def test_a_leftover_trash_copy_cannot_come_back_twice(tmp_path, monkeypatch):
+    cfg = make(tmp_path)
+    path, moved = trashed(cfg)
+    with monkeypatch.context() as patched:
+        fail_unlink_in_trash(cfg, patched)
+        assert restore_note(cfg, "a1", moved.source, moved.target, "es") is True
+    path.write_text(path.read_text(encoding="utf-8") + "\nEditada.\n", encoding="utf-8")
+    live = path.read_bytes()
+
+    assert restore_note(cfg, "a1", moved.source, moved.target, "es") is False
+
+    assert path.read_bytes() == live and moved.target.exists()
+    assert len(list(path.parent.glob("*.md"))) == 1
+
+
+def test_a_dangling_symlink_at_the_old_address_is_refused(tmp_path):
+    """resolve() would follow it to another name in the same folder, and the
+    note would come back as that name."""
+    cfg = make(tmp_path)
+    path, moved = trashed(cfg)
+    elsewhere = path.parent / "elsewhere.md"
+    path.symlink_to(elsewhere)
+
+    assert restore_note(cfg, "a1", moved.source, moved.target, "es") is False
+
+    assert not elsewhere.exists() and path.is_symlink()
+    assert moved.target.exists()
+
+
+def test_a_trash_copy_reached_through_a_symlink_is_refused(tmp_path):
+    cfg = make(tmp_path)
+    path, moved = trashed(cfg)
+    real = moved.target.with_name("real.md")
+    moved.target.rename(real)
+    moved.target.symlink_to(real)
+
+    assert restore_note(cfg, "a1", moved.source, moved.target, "es") is False
+    assert not path.exists() and real.exists()

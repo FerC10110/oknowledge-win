@@ -14,6 +14,7 @@ Three rules, and they all live here for a reason: the vault belongs to the user.
 from __future__ import annotations
 
 import contextlib
+import logging
 import os
 import re
 import secrets
@@ -32,6 +33,8 @@ from .marks import clean_mark
 from .model import Mention, Note
 from .queue import Locked
 from .urls import search_url
+
+log = logging.getLogger(__name__)
 
 MARKER = "oknowledge"
 MARKER_VERSION = 1
@@ -923,6 +926,11 @@ def restore_note(cfg: Config, link_id: str, source: Path, target: Path, language
     trash/.
     """
     shelf = shelf or cfg.links
+    # Before resolve(): a symlink at either end would be followed to another
+    # name -- a dangling one at `source` would bring the note back as its
+    # target. A restore never goes through a link.
+    if Path(source).is_symlink() or Path(target).is_symlink():
+        return False
     try:
         trashed = ensure_inside_root(cfg, Path(target))
         back = ensure_inside_root(cfg, Path(source))
@@ -954,7 +962,14 @@ def restore_note(cfg: Config, link_id: str, source: Path, target: Path, language
             back.unlink(missing_ok=True)
             raise
     else:
-        trashed.unlink()
+        # The note is back; a copy left in trash/ is harmless (trash/ is
+        # emptied by hand, like any other deleted note), and the id check
+        # above -- the note is on the shelf again -- keeps it from ever
+        # coming back a second time or over the live one.
+        try:
+            trashed.unlink()
+        except OSError as error:
+            log.warning("restored %s, but its copy in trash/ stays: %s", link_id, error)
     if rebuild:
         _finish(cfg, language, True, shelf)
     return True
