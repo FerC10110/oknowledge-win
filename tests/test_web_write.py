@@ -27,6 +27,8 @@ from oknowledge.vault import (
 from oknowledge.web.app import create_app
 
 WRITE_ROUTES = [
+    # A bulk action. A cross-site POST here would move or delete many notes at once.
+    ("/bulk/delete", {"ids": ["a1"]}),
     # Taking a delete back. A cross-site POST here would put notes back into
     # this vault.
     ("/undo/" + "A" * 22, {}),

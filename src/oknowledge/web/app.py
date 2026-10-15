@@ -53,7 +53,7 @@ from ..models_cache import remember as remember_models
 from ..queue import Locked, Queue
 from ..trace import trace_run
 from ..urls import is_search_url, link_id, normalize
-from ..vault import ACTIONS, IDEA_STATES, MAX_RELATED
+from ..vault import ACTIONS, IDEA_STATES, MAX_RELATED, states_for
 from ..vault import (
     BadCategory, IndexesStale, ProtectedNote, clean_category, delete_note,
     find_note, note_path, rebuild_indexes, rename_category, update_note,
@@ -100,6 +100,7 @@ NOTICES = {
                     'and none of \\ / : * ? " < > |',
     "bad-mark": "That is not an emoji the mark can be.",
     "bad-kind": "That is not a type a card can have.",
+    "bad-state": "That is not a state it can be in.",
     "renamed-one": "1 note moved.",
     "renamed": "%1 notes moved.",
     "merged-one": "1 note merged into a category that was already there.",
@@ -243,6 +244,31 @@ MISSING = "missing"
 
 SECTION_HOMES = {"links": "/", "ocio": "/ocio", "ideas": "/ideas"}
 """Where a shelf's notes are listed: where a delete and a Deshacer go."""
+
+BULK_ACTIONS = ("category", "kind", "state", "mark", "delete")
+"""What the floating bar can do to the ticked items (spec §5.1)."""
+
+BULK_HOMES = {"category": "/", "mark": "/", "kind": "/ocio", "state": "/ideas", "delete": "/"}
+"""Where a bulk action's redirect goes when no `back` came with it."""
+
+
+def bulk_words(t, action: str, done: int, failed: int, label: str = "",
+               unstar: bool = False) -> str:
+    """What a bulk action says (spec §5.1), in words: it names a category,
+    a kind or a state, which a NOTICES key cannot carry in its numbers."""
+    if action == "delete":
+        said = t("Deleted") if done == 1 else t("%1 deleted", done)
+    elif action == "mark":
+        if unstar:
+            said = t("Favorite removed from %1", done)
+        else:
+            said = t("1 marked as favorite") if done == 1 else t("%1 marked as favorites", done)
+    else:
+        said = t("1 moved to %2", done, label) if done == 1 else t("%1 moved to %2", done, label)
+    if failed:
+        said += " · " + (t("1 could not be changed") if failed == 1
+                         else t("%1 could not be changed", failed))
+    return said
 
 
 class Edited(NamedTuple):
@@ -451,7 +477,7 @@ GONE = "That is not there any more."
 """What a script is told when the note it was editing has gone."""
 
 FAILURES = {"undo-gone": 404, "undo-blocked": 409, "bad-category": 400, "bad-mark": 400,
-            "bad-kind": 400, "bad-collection": 400,
+            "bad-kind": 400, "bad-state": 400, "nothing-picked": 400, "bad-collection": 400,
             "title-empty": 400, "busy": 409, "idea-full": 409,
             "cannot-search": 409, "no-such-idea": 404, "write-failed": 500}
 """The notices that mean nothing was written, and the status each is
@@ -1111,14 +1137,20 @@ def create_app(cfg: Config) -> FastAPI:
         shelves.refresh()
         return Edited(done, True, value)
 
+    def move_one(link_id: str, category: str, rebuild: bool = True) -> Edited:
+        """A link to another category: the route's body, and each id of a
+        bulk move. The name is checked by the caller, once."""
+        return edit(link_id, lambda cfg, language: update_note(
+            cfg, link_id, language, category=category, rebuild=rebuild),
+            "saved", "indexes-stale")
+
     @app.post("/item/{link_id}/category")
     def move(request: Request, link_id: str, category: str = Form("")):
         if clean_category(category) is None:
             # Before the lock, so a refused name creates nothing anywhere --
             # not even the lock file. update_note() checks it again anyway.
             return answer(request, item_url(link_id), notice="bad-category")
-        result = edit(link_id, lambda cfg, language: update_note(
-            cfg, link_id, language, category=category), "saved", "indexes-stale")
+        result = move_one(link_id, category)
         if result.notice == MISSING:
             raise HTTPException(status_code=404, detail="no such link")
         return answer(request, item_url(link_id), notice=result.notice)
@@ -1177,9 +1209,23 @@ def create_app(cfg: Config) -> FastAPI:
             background.add_task(rewrite, current["cfg"], link_id)
         return answer(request, item_url(link_id), "rewriting")
 
+    def restate_one(link_id: str, state: str) -> Edited:
+        """A card's or an idea's state: the route's body, and each id of a
+        bulk change. A link has no state: it is MISSING here, as its route
+        has always said with a 404."""
+        shelves, which = held_by(link_id)
+        if which.name == "links":
+            return Edited(MISSING, False)
+        return edit(link_id, lambda cfg, language: update_note(
+            cfg, link_id, language, shelf=cfg.shelf(which.name), state=state),
+            "saved", "indexes-stale", shelves=shelves)
+
     @app.post("/item/{link_id}/mine/state")
     def set_state(request: Request, link_id: str, state: str = Form("")):
-        return mine(request, link_id, state=state)
+        result = restate_one(link_id, state)
+        if result.notice == MISSING:
+            raise HTTPException(status_code=404, detail="no such card")
+        return answer(request, item_url(link_id), notice=result.notice)
 
     @app.post("/item/{link_id}/mine/score")
     def set_score(request: Request, link_id: str, score: str = Form("")):
@@ -1231,6 +1277,14 @@ def create_app(cfg: Config) -> FastAPI:
             raise HTTPException(status_code=404, detail="no such idea")
         return answer(request, item_url(link_id), result.notice)
 
+    def mark_one(link_id: str, mark: str, held=None) -> Edited:
+        """Your one emoji on a note: the route's body, and each id of a bulk
+        star. `held` is the (Library, Shelf) the caller already looked up."""
+        shelves, which = held or held_by(link_id)
+        return edit(link_id, lambda cfg, language: update_note(
+            cfg, link_id, language, shelf=cfg.shelf(which.name), mark=mark),
+            "", "indexes-stale", shelves=shelves)
+
     @app.post("/item/{link_id}/mark")
     def set_mark(request: Request, link_id: str, mark: str = Form(""), back: str = Form("")):
         """Your one emoji on a note, on any shelf. Back to the card it was
@@ -1252,12 +1306,19 @@ def create_app(cfg: Config) -> FastAPI:
 
         if clean_mark(mark) is None:
             return to_card("bad-mark")
-        result = edit(link_id, lambda cfg, language: update_note(
-            cfg, link_id, language, shelf=cfg.shelf(which.name), mark=mark),
-            "", "indexes-stale", shelves=shelves)
+        result = mark_one(link_id, mark, (shelves, which))
         if result.notice == MISSING:
             raise HTTPException(status_code=404, detail="no such note")
         return to_card(result.notice)
+
+    def retype_one(link_id: str, kind: str, rebuild: bool = True) -> Edited:
+        """A card's type and the category that goes with it: the route's
+        body, and each id of a bulk change. The kind is checked by the caller."""
+        def retype(cfg, language):
+            names = cards.CATEGORIES.get(language, cards.CATEGORIES["en"])
+            return update_note(cfg, link_id, language, shelf=cfg.ocio, kind=kind,
+                               category=names[kind], rebuild=rebuild)
+        return edit(link_id, retype, "saved", "indexes-stale", shelves=shelf)
 
     @app.post("/item/{link_id}/kind")
     def change_kind(request: Request, link_id: str, kind: str = Form("")):
@@ -1269,12 +1330,7 @@ def create_app(cfg: Config) -> FastAPI:
         home = f"/ocio?sel={quote(link_id, safe='')}"
         if kind not in cards.KINDS:
             return answer(request, home, "bad-kind")
-
-        def retype(cfg, language):
-            names = cards.CATEGORIES.get(language, cards.CATEGORIES["en"])
-            return update_note(cfg, link_id, language, shelf=cfg.ocio, kind=kind,
-                               category=names[kind])
-        result = edit(link_id, retype, "saved", "indexes-stale", shelves=shelf)
+        result = retype_one(link_id, kind)
         if result.notice == MISSING:
             raise HTTPException(status_code=404, detail="no such card")
         return answer(request, home, result.notice)
@@ -1347,6 +1403,104 @@ def create_app(cfg: Config) -> FastAPI:
             code = "restored-one" if n == 1 else "restored"
         return answer(request, home, code, n=n, m=m or None,
                       extra={"restored": result.restored, "skipped": result.skipped})
+
+    @app.post("/bulk/{action}")
+    def bulk(request: Request, action: str, ids: list[str] = Form([]),
+             category: str = Form(""), new_category: str = Form(""),
+             kind: str = Form(""), state: str = Form(""), mark: str = Form(""),
+             back: str = Form("")):
+        """One action over the ticked items (spec §5.1).
+
+        Each id goes through the function its own route uses, under its own
+        lock. The value is checked once, before the first id: a refused one
+        writes nothing. The indexes are rebuilt once per shelf at the end,
+        not once per note. An id that is gone, on another shelf or busy is
+        counted in `failed` and the others still land.
+        """
+        if action not in BULK_ACTIONS:
+            raise HTTPException(status_code=404, detail="no such action")
+        live = current["cfg"]
+        t = translator(ui_language())
+        home = local_path(back) or BULK_HOMES[action]
+        picked = list(dict.fromkeys(one for one in ids if one))
+        if not picked:
+            return answer(request, home, "nothing-picked")
+        label, unstar = "", False
+
+        def restate_checked(link: str) -> Edited:
+            shelves, which = held_by(link)
+            note = shelves.by_id(link)
+            if note is None or which.name == "links":
+                return Edited(MISSING, False)
+            if state not in states_for(note.type):
+                return Edited("bad-state", False)
+            return restate_one(link, state)
+
+        if action == "category":
+            label = clean_category(category.strip() or new_category.strip())
+            if label is None:
+                return answer(request, home, "bad-category")
+            one = lambda link: (move_one(link, label, rebuild=False), "links")
+        elif action == "kind":
+            if kind not in cards.KINDS:
+                return answer(request, home, "bad-kind")
+            label = t(KIND_NAMES[kind])
+            one = lambda link: (retype_one(link, kind, rebuild=False), "ocio")
+        elif action == "state":
+            if state not in IDEA_STATES:
+                return answer(request, home, "bad-state")
+            label = t(IDEA_WORDS[state])
+            one = lambda link: (restate_checked(link), "")
+        elif action == "mark":
+            if mark != "⭐":
+                return answer(request, home, "bad-mark")
+            library.refresh()
+            present = [n for n in (library.by_id(link) for link in picked) if n is not None]
+            unstar = bool(present) and all(n.mark == "⭐" for n in present)
+            wanted = "" if unstar else "⭐"
+            one = lambda link: (mark_one(link, wanted, (library, live.links)), "links")
+        else:
+            one = lambda link: delete_one(link, rebuild=False)
+
+        done, failed, refused, touched, lot = [], [], [], set(), []
+        for link in picked:
+            result, name = one(link)
+            if result.landed:
+                done.append(link)
+                touched.add(name)
+                if action == "delete":
+                    lot.append((link, name, result.value))
+            else:
+                failed.append(link)
+                refused.append(result.notice)
+        stale = False
+        if action in ("category", "kind", "delete") and done:
+            for name in sorted(touched):
+                try:
+                    rebuild_indexes(live, live.language, live.shelf(name))
+                except OSError as error:
+                    log.warning("the indexes could not be rebuilt: %s", error)
+                    stale = True
+            for each in (library, shelf, ideas):
+                each.refresh()
+        if not done:
+            worst = next((code for code in refused if code != MISSING), None)
+            if worst is None:
+                raise HTTPException(status_code=404, detail="none of them is there")
+            return answer(request, home, worst)
+        token = keep_lot(lot) if lot else None
+        if not wants_json(request):
+            if action == "delete":
+                where = local_path(back) or SECTION_HOMES.get(lot[0][1], "/")
+                return see_other(where, notice="trashed", undo=token)
+            return see_other(home, notice="saved")
+        said = bulk_words(t, action, len(done), len(failed), label, unstar)
+        if stale:
+            said += " · " + t(NOTICES["indexes-stale"])
+        body = {"ok": True, "notice": said, "done": done, "failed": failed}
+        if token:
+            body["undo"] = token
+        return JSONResponse(body)
 
     @app.post("/item/{link_id}/reprocess")
     def reprocess(request: Request, background: BackgroundTasks, link_id: str,

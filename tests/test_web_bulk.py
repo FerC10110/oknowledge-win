@@ -1,0 +1,246 @@
+"""Bulk actions (spec §5.1): each id goes through its own route's rule and
+lock, a refused value writes nothing, the indexes are rebuilt once per shelf,
+and an id that is gone (or on another shelf, or busy) is counted, not fatal."""
+
+import re
+from types import SimpleNamespace
+
+import pytest
+from fastapi.testclient import TestClient
+
+from oknowledge.config import Config
+from oknowledge.ideas import new_idea
+from oknowledge.model import Note
+from oknowledge.queue import Queue
+from oknowledge.vault import find_note, index_path, note_path, rebuild_indexes, trash_dir, write_note
+from oknowledge.web.app import create_app
+
+JSON = {"Accept": "application/json"}
+CARD1, CARD2 = "c00000000001", "c00000000002"
+
+
+def link(id, title, category):
+    return Note(id=id, url=f"https://e.com/{id}", title=title, category=category, tags=[],
+                type="article", source="e.com", saved="2026-10-03", summary="s")
+
+
+@pytest.fixture
+def s(tmp_path):
+    vault = tmp_path / "vault"
+    (vault / "oknowledge" / "links").mkdir(parents=True)
+    cfg = Config(vault=vault)
+    for id, title, category in (("a1", "WireGuard", "Redes"), ("b2", "Masa madre", "Cocina"),
+                                ("c3", "SSH", "Redes")):
+        write_note(cfg, link(id, title, category), "es")
+    for id, kind, category in ((CARD1, "movie", "Películas"), (CARD2, "book", "Libros")):
+        card = Note(id=id, url=f"https://www.imdb.com/title/{id}", title=f"Ficha {id}",
+                    category=category, tags=[], type=kind, source="imdb.com",
+                    saved="2026-10-01", summary="s", engine="")
+        write_note(cfg, card, "es", path=note_path(cfg, card, shelf=cfg.ocio))
+    ideas = []
+    for n in (1, 2):
+        idea = new_idea(f"Idea {n}.", f"Idea {n}", "2026-10-13",
+                        f"2026-10-13T00:00:00.00000{n}+00:00")
+        write_note(cfg, idea, "es", path=note_path(cfg, idea, shelf=cfg.ideas))
+        ideas.append(idea.id)
+    for shelf in (cfg.links, cfg.ocio, cfg.ideas):
+        rebuild_indexes(cfg, "es", shelf=shelf)
+    return SimpleNamespace(cfg=cfg, client=TestClient(create_app(cfg)), ideas=ideas,
+                           vault=vault)
+
+
+def post(s, action, **data):
+    return s.client.post(f"/bulk/{action}", data=data, headers=JSON)
+
+
+def snapshot(root):
+    return {str(p.relative_to(root)): p.read_bytes() for p in sorted(root.rglob("*")) if p.is_file()}
+
+
+# --- move ------------------------------------------------------------------------
+
+def test_a_bulk_move_moves_each_and_says_where(s):
+    answer = post(s, "category", ids=["a1", "b2", "c3"], category="Seguridad")
+    assert answer.json() == {"ok": True, "notice": "3 moved to Seguridad",
+                             "done": ["a1", "b2", "c3"], "failed": []}
+    assert {find_note(s.cfg, i)[1].category for i in ("a1", "b2", "c3")} == {"Seguridad"}
+    assert index_path(s.cfg, "Seguridad").exists()
+    assert not index_path(s.cfg, "Redes").exists() and not index_path(s.cfg, "Cocina").exists()
+
+
+def test_one_moved_is_said_in_the_singular(s):
+    assert post(s, "category", ids=["a1"], category="Seguridad").json()["notice"] == \
+        "1 moved to Seguridad"
+
+
+def test_a_new_category_typed_in_the_bar_is_used(s):
+    post(s, "category", ids=["a1"], category="", new_category="Hogar")
+    assert find_note(s.cfg, "a1")[1].category == "Hogar"
+
+
+def test_ids_that_are_gone_or_on_another_shelf_are_counted_as_failed(s):
+    body = post(s, "category", ids=["a1", "zzz", CARD1], category="Seguridad").json()
+    assert body["done"] == ["a1"] and body["failed"] == ["zzz", CARD1]
+    assert body["notice"] == "1 moved to Seguridad · 2 could not be changed"
+    assert find_note(s.cfg, CARD1, s.cfg.ocio)[1].category == "Películas"
+
+
+def test_bulk_move_with_an_id_deleted_meanwhile(s):
+    path = find_note(s.cfg, "b2")[0]
+    path.unlink()                                  # gone in Obsidian since the page was drawn
+    body = post(s, "category", ids=["a1", "b2"], category="Seguridad").json()
+    assert body["done"] == ["a1"] and body["failed"] == ["b2"]
+    assert not path.exists() and find_note(s.cfg, "b2") is None
+
+
+# --- refused values -----------------------------------------------------------------
+
+@pytest.mark.parametrize("action,data,error", [
+    ("category", {"category": "a/b"}, "cannot be used"),
+    ("kind", {"kind": "opera"}, "type"),
+    ("state", {"state": "abandonada"}, "state"),
+    ("mark", {"mark": "🦄"}, "emoji"),
+])
+def test_a_refused_value_writes_nothing(s, action, data, error):
+    before = snapshot(s.vault)
+    answer = post(s, action, ids=["a1", CARD1, *s.ideas], **data)
+    assert answer.status_code == 400 and error in answer.json()["error"]
+    assert snapshot(s.vault) == before
+
+
+def test_nothing_ticked_is_refused(s):
+    answer = post(s, "delete")
+    assert answer.status_code == 400
+    assert answer.json()["error"] == "No cards were selected, so nothing changed."
+
+
+def test_an_action_nobody_knows_is_a_404(s):
+    assert s.client.post("/bulk/explode", data={"ids": ["a1"]}, headers=JSON).status_code == 404
+
+
+# --- one rebuild per shelf ------------------------------------------------------------
+
+def test_one_rebuild_per_shelf(s, monkeypatch):
+    calls = []
+    monkeypatch.setattr("oknowledge.web.app.rebuild_indexes",
+                        lambda cfg, language, shelf=None: calls.append(shelf.name))
+    monkeypatch.setattr("oknowledge.vault.rebuild_indexes",
+                        lambda *a, **k: pytest.fail("rebuilt once per note"))
+
+    post(s, "category", ids=["a1", "b2", "c3"], category="Seguridad")
+    post(s, "kind", ids=[CARD1, CARD2], kind="series")
+    post(s, "delete", ids=["a1", CARD1, s.ideas[0]])
+
+    assert calls == ["links", "ocio", "ideas", "links", "ocio"]
+
+
+def test_a_failed_rebuild_is_added_to_the_words(s, monkeypatch):
+    def boom(cfg, language, shelf=None):
+        raise OSError(28, "No space left on device")
+    monkeypatch.setattr("oknowledge.web.app.rebuild_indexes", boom)
+    body = post(s, "category", ids=["a1"], category="Seguridad").json()
+    assert body["ok"] is True
+    assert body["notice"].startswith("1 moved to Seguridad · Saved, but the indexes")
+
+
+# --- kind, state, mark ----------------------------------------------------------------
+
+def test_kind_retypes_the_cards(s):
+    body = post(s, "kind", ids=[CARD1, CARD2], kind="series").json()
+    assert body["notice"] == "2 moved to Series"
+    for card in (CARD1, CARD2):
+        note = find_note(s.cfg, card, s.cfg.ocio)[1]
+        assert (note.type, note.category) == ("series", "Series")
+
+
+def test_state_changes_the_ideas_and_not_a_link(s):
+    body = post(s, "state", ids=[*s.ideas, "a1"], state="doing").json()
+    assert body["done"] == s.ideas and body["failed"] == ["a1"]
+    assert body["notice"] == "2 moved to under way · 1 could not be changed"
+    assert {find_note(s.cfg, i, s.cfg.ideas)[1].state for i in s.ideas} == {"doing"}
+
+
+def test_dropped_is_not_a_state_a_card_can_have(s):
+    answer = post(s, "state", ids=[CARD1], state="dropped")
+    assert answer.status_code == 400
+    assert find_note(s.cfg, CARD1, s.cfg.ocio)[1].state == ""
+
+
+def marks(s, *ids):
+    return [find_note(s.cfg, i)[1].mark for i in ids]
+
+
+def test_the_star_goes_on_all_unless_all_have_it(s):
+    s.client.post("/item/a1/mark", data={"mark": "⭐"})
+    assert post(s, "mark", ids=["a1", "b2"], mark="⭐").json()["notice"] == \
+        "2 marked as favorites"
+    assert marks(s, "a1", "b2") == ["⭐", "⭐"]
+    assert post(s, "mark", ids=["a1", "b2"], mark="⭐").json()["notice"] == \
+        "Favorite removed from 2"
+    assert marks(s, "a1", "b2") == ["", ""]
+
+
+def test_one_star_is_said_in_the_singular(s):
+    assert post(s, "mark", ids=["a1"], mark="⭐").json()["notice"] == "1 marked as favorite"
+
+
+def test_the_star_is_for_links_only(s):
+    answer = post(s, "mark", ids=[CARD1], mark="⭐")
+    assert answer.status_code == 404
+
+
+# --- delete ----------------------------------------------------------------------------
+
+def test_a_bulk_delete_gives_one_token_for_all(s):
+    body = post(s, "delete", ids=["a1", "b2", CARD1]).json()
+    assert body["notice"] == "3 deleted" and body["done"] == ["a1", "b2", CARD1]
+    back = s.client.post(f"/undo/{body['undo']}", headers=JSON).json()
+    assert back["notice"] == "3 restored"
+    assert sorted(back["restored"]) == sorted(["a1", "b2", CARD1])
+    assert find_note(s.cfg, "a1") and find_note(s.cfg, CARD1, s.cfg.ocio)
+
+
+def test_one_deleted_says_deleted(s):
+    assert post(s, "delete", ids=["a1"]).json()["notice"] == "Deleted"
+
+
+def test_bulk_delete_with_an_id_deleted_meanwhile(s):
+    find_note(s.cfg, "b2")[0].unlink()
+    body = post(s, "delete", ids=["a1", "b2"]).json()
+    assert body["done"] == ["a1"] and body["failed"] == ["b2"]
+    assert body["notice"] == "Deleted · 1 could not be changed"
+    assert len(list(trash_dir(s.cfg).glob("*.md"))) == 1
+
+
+def test_all_gone_is_a_404_with_the_words(s):
+    answer = post(s, "delete", ids=["zzz", "yyy"])
+    assert answer.status_code == 404
+    assert answer.json() == {"ok": False, "error": "That is not there any more."}
+
+
+def test_a_busy_link_is_skipped(s):
+    with Queue().lock("a1"):
+        body = post(s, "category", ids=["a1", "b2"], category="Seguridad").json()
+    assert body["done"] == ["b2"] and body["failed"] == ["a1"]
+
+
+def test_all_busy_is_a_409(s):
+    with Queue().lock("a1"):
+        answer = post(s, "delete", ids=["a1"])
+    assert answer.status_code == 409
+    assert find_note(s.cfg, "a1") is not None
+
+
+# --- without a script --------------------------------------------------------------
+
+def test_without_a_script_it_goes_back_with_saved(s):
+    answer = s.client.post("/bulk/category", data={"ids": ["a1"], "category": "Seguridad",
+                                                   "back": "/?vista=lista"},
+                           follow_redirects=False)
+    assert answer.headers["location"] == "/?vista=lista&notice=saved"
+
+
+def test_a_bulk_delete_without_a_script_offers_undo(s):
+    answer = s.client.post("/bulk/delete", data={"ids": [CARD1]}, follow_redirects=False)
+    assert re.fullmatch(r"/ocio\?notice=trashed&undo=[A-Za-z0-9_-]{22}",
+                        answer.headers["location"])
