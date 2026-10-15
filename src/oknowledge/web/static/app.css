@@ -548,3 +548,8 @@ html:not(.js) .js-only { display: none !important; }
 .bulk .bulk-clear { color: var(--t5); }
 .bulk .menu-list { bottom: calc(100% + 8px); left: 0; min-width: 200px; }
 .bulk .menu-new { margin: 4px 6px 6px; }
+
+/* --- delivery 4: the phone (docs/2026-10-15-rediseno-celular-design.md) --- */
+/* Drawn on every page, shown only under 60rem: off on a desktop, where
+   display: none keeps them out of the grid. */
+.topbar, .tabbar { display: none; }

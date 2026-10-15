@@ -43,6 +43,6 @@
   {% include "sidebar-filters.html" %}
   <nav class="foot">
     <button type="button" class="foot-link js-only" data-modal="keys">{{ t('Shortcuts') }} <kbd class="key mono">?</kbd></button>
-    <a href="/settings" class="foot-link" data-modal="settings">{{ t('Settings') }}{% if batch.running %} <b class="mono">{{ batch.done }}/{{ batch.total }}</b>{% elif batch.busy %} <b class="mono">{{ batch.busy|length }}</b>{% endif %}</a>
+    <a href="/settings" class="foot-link" data-modal="settings">{{ t('Settings') }}{% include "batch-count.html" %}</a>
   </nav>
 </aside>

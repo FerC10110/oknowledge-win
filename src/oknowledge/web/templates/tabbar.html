@@ -1,0 +1,11 @@
+{# The phone's sections (spec §2.1), on every page, shown only under 60rem.
+   Favoritos is the library filtered by ★ (the sidebar's own condition):
+   lit instead of Biblioteca there. The old pages light none. #}
+{% set fav = side.section == 'links' and view is defined and view.mark == '⭐' and not view.searching %}
+<nav class="tabbar" aria-label="{{ t('Sections') }}">
+  {%- for key, href, name in (("links", "/", t("Library")), ("ocio", "/ocio", t("Leisure")),
+                              ("ideas", "/ideas", t("Ideas")), ("fav", "/?mark=%E2%AD%90", t("Favorites"))) %}
+    {%- set on = fav if key == 'fav' else (side.section == key and not (key == 'links' and fav)) %}
+  <a href="{{ href }}"{% if on %} class="on" aria-current="page"{% endif %}>{{ name }}</a>
+  {%- endfor %}
+</nav>

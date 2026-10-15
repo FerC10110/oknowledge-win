@@ -1,0 +1,7 @@
+{# The phone's top bar (docs/2026-10-15-rediseno-celular-design.md §2.1): on
+   every page, shown only under 60rem. "Ajustes" opens the modal (app.js) and
+   says how far a batch is, as the sidebar's does. #}
+<header class="topbar">
+  <a class="logo" href="/">oknowledge</a>
+  <a href="/settings" class="topbar-settings" data-modal="settings">{{ t('Settings') }}{% include "batch-count.html" %}</a>
+</header>
