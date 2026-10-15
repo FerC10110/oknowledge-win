@@ -781,6 +781,9 @@ html:not(.js) .js-only { display: none !important; }
   #list.selecting .rows .sub .dot { left: 44px; }
   .idea-shelf #list.selecting .rows .hit { padding-left: 58px; }
   #list.selecting .poster .chip.kind { left: 48px; }
+  /* A long press on an item is the mode's way in (select.js): no text
+     selection, no callout over it. */
+  #list .item { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
   /* The bar takes the tabs' place, the whole width (§9). */
   .bulk { position: fixed; left: 8px; right: 8px; bottom: max(8px, env(safe-area-inset-bottom));
     transform: none; width: auto; justify-content: space-between; z-index: 35; }

@@ -655,3 +655,14 @@ def test_the_detail_s_tag_is_touched_44px_tall():
     assert re.search(r"\.detail \.chips \.chip > a \{[^}]*position: relative;", phone)
     # 15px tall: -15px above and below make it 45 (-14px, as the ✕ has, is 43).
     assert re.search(r'\.detail \.chips \.chip > a::after \{ content: ""; position: absolute; inset: -15px 0; \}', phone)
+
+
+# --- phone follow-ups (spec §9, §15): the long press, Ocio's short hint ---------------------
+
+def test_a_long_pressed_item_has_no_callout_on_the_phone():
+    """The press is the mode's: no text selection, no iOS callout. Only in the phone block."""
+    phone = block(static("app.css"), PHONE)
+    rule = re.search(r"#list \.item \{[^}]*\}", phone).group(0)
+    for part in ("-webkit-touch-callout: none;", "-webkit-user-select: none;", "user-select: none;"):
+        assert part in rule, part
+

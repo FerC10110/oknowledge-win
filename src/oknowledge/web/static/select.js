@@ -66,11 +66,71 @@
     drawMode();
   }
 
+  // An item's box, from anything inside its link: the same item a tap in the
+  // mode ticks. One being analysed has none.
+  function boxOf(target) {
+    var hit = target && target.closest && target.closest("a.hit");
+    var li = hit && hit.closest("li.item");
+    return (li && li.querySelector('input[type="checkbox"][name="ids"]')) || null;
+  }
+
+  // A long press (~500 ms, under 10 px of wobble) on an item is the other way
+  // in, on the phone only: the mode on, that item ticked, and the one click
+  // its release brings swallowed. Pointer events: a finger, a pen, a mouse.
+  var HOLD = 500, SLOP = 10;
+  var press = null;         // {box, x, y, timer, fired}
+  var swallow = false;      // the click after a fired press
+
+  function onPhone() { return ok.phone ? ok.phone() : !!(narrow && narrow.matches); }
+
+  function letGo() {
+    if (press && !press.fired) clearTimeout(press.timer);
+    press = null;
+  }
+
+  function fire() {
+    if (!press || selecting()) { press = null; return; }
+    press.fired = true;
+    swallow = true;
+    mode(true);
+    toggle(press.box.value, true);
+  }
+
+  list.addEventListener("pointerdown", function (event) {
+    swallow = false;          // a click that never came is not waited for
+    letGo();
+    if (event.button > 0 || event.isPrimary === false || selecting() || !onPhone()) return;
+    var box = boxOf(event.target);
+    if (!box) return;
+    press = { box: box, x: event.clientX, y: event.clientY, fired: false };
+    press.timer = setTimeout(fire, HOLD);
+  });
+
+  // A scroll moves the finger: no press.
+  list.addEventListener("pointermove", function (event) {
+    if (!press || press.fired) return;
+    if (Math.hypot(event.clientX - press.x, event.clientY - press.y) > SLOP) letGo();
+  });
+
+  list.addEventListener("pointerup", letGo);
+  list.addEventListener("pointercancel", letGo);
+
+  // No browser menu (nor callout) for the press that went into the mode.
+  list.addEventListener("contextmenu", function (event) {
+    if (press && press.fired) event.preventDefault();
+  });
+
   // On #list, in the capture phase: before shell.js's click on the document,
   // so a tap in the mode ticks and never opens the item.
   list.addEventListener("click", function (event) {
     var target = event.target;
     if (!target || !target.closest) return;
+    if (swallow) {          // a long press's release: neither opens nor unticks
+      swallow = false;
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
     if (target.closest("[data-select-mode]")) {
       event.preventDefault();
       if (selecting()) clear(); else mode(true);

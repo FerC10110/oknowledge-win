@@ -408,3 +408,126 @@ def test_growing_past_the_phone_leaves_the_mode(widened):
     assert widened["left"] == ["(max-width: 60rem)", False, False, True, "Seleccionar"]
     assert widened["tapOpens"] is False
     assert widened["backNarrow"] is False
+
+
+# --- phone follow-ups: a long press also enters the mode, in node ---------------------
+
+TIMER_PREFIX = r"""
+let clock = 0;
+const timers = [];
+global.setTimeout = (fn, ms) => { timers.push({ fn, at: clock + (ms || 0) }); return timers.length; };
+global.clearTimeout = (id) => { if (timers[id - 1]) timers[id - 1].fn = null; };
+function advance(ms) {
+  clock += ms;
+  timers.forEach((t) => { if (t.fn && t.at <= clock) { const fn = t.fn; t.fn = null; fn(); } });
+}
+"""
+
+LONG_SUFFIX = r"""
+const long = {};
+function press(type, target, x, y, extra) {
+  const event = Object.assign({ type, target, clientX: x, clientY: y, pointerId: 1, isPrimary: true,
+                                button: 0, pointerType: "touch", defaultPrevented: false, stopped: false,
+                                preventDefault() { this.defaultPrevented = true; },
+                                stopPropagation() { this.stopped = true; } }, extra || {});
+  (listeners["list:" + type] || []).forEach((fn) => fn(event));
+  return event;
+}
+// A tap held less than the press: nothing.
+press("pointerdown", a.hit, 100, 100); advance(300); press("pointerup", a.hit, 100, 100);
+long.shortTap = [classes.has("selecting"), tap(a.hit).defaultPrevented];
+long.bareMenu = press("contextmenu", a.hit, 100, 100).defaultPrevented;
+// Held, wobbling a few px: the mode, the item ticked.
+press("pointerdown", a.hit, 100, 100); advance(300); press("pointermove", a.hit, 106, 104); advance(250);
+long.held = [classes.has("selecting"), a.box.checked, button.textContent, button.attrs["aria-pressed"], bar.hidden];
+long.menu = press("contextmenu", a.hit, 106, 104).defaultPrevented;
+press("pointerup", a.hit, 106, 104);
+const swallowed = tap(a.hit);
+long.clickSwallowed = [swallowed.defaultPrevented, swallowed.stopped, a.box.checked, classes.has("selecting")];
+const other = tap(b.hit);
+long.nextTapTicks = [other.defaultPrevented, b.box.checked, a.box.checked];
+// In the mode a long press adds nothing: its click is a tap like any other.
+press("pointerdown", b.hit, 50, 50); advance(700); press("pointerup", b.hit, 50, 50);
+const again = tap(b.hit);
+long.inMode = [again.defaultPrevented, b.box.checked, a.box.checked, classes.has("selecting")];
+ok.keys.Escape();
+// A scroll: the finger moved past 10 px.
+press("pointerdown", a.hit, 100, 100); advance(200); press("pointermove", a.hit, 100, 125); advance(600);
+press("pointerup", a.hit, 100, 125);
+long.scroll = [classes.has("selecting"), a.box.checked];
+// The browser took the gesture.
+press("pointerdown", a.hit, 100, 100); advance(200); press("pointercancel", a.hit, 100, 100); advance(600);
+long.cancelled = [classes.has("selecting"), a.box.checked];
+// Released before the time: gone, even if the timer would have run.
+press("pointerdown", a.hit, 100, 100); advance(100); press("pointerup", a.hit, 100, 100); advance(600);
+long.released = classes.has("selecting");
+// One being analysed has no box: ignored.
+press("pointerdown", pending, 100, 100); advance(700);
+long.pending = [classes.has("selecting"), press("contextmenu", pending, 100, 100).defaultPrevented];
+press("pointerup", pending, 100, 100);
+long.pendingTap = tap(pending).defaultPrevented;
+// A mouse's right button is not a press.
+press("pointerdown", a.hit, 100, 100, { button: 2, pointerType: "mouse" }); advance(700);
+long.rightButton = classes.has("selecting");
+press("pointerup", a.hit, 100, 100, { button: 2, pointerType: "mouse" });
+// The desktop: nothing at all.
+media.matches = false;
+press("pointerdown", a.hit, 100, 100); advance(700);
+long.desktop = [classes.has("selecting"), a.box.checked, press("contextmenu", a.hit, 100, 100).defaultPrevented];
+press("pointerup", a.hit, 100, 100);
+long.desktopTap = tap(a.hit).defaultPrevented;
+console.log(JSON.stringify(long));
+"""
+
+
+@pytest.fixture(scope="module")
+def long_press(tmp_path_factory):
+    import json
+    import shutil
+    import subprocess
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not installed")
+    harness = tmp_path_factory.mktemp("long") / "harness.js"
+    harness.write_text(MEDIA_PREFIX + TIMER_PREFIX + MODE_HARNESS + LONG_SUFFIX, encoding="utf-8")
+    done = subprocess.run([node, str(harness), str(SELECT)], capture_output=True, text=True,
+                          timeout=30, check=False)
+    assert done.returncode == 0, done.stderr
+    return json.loads(done.stdout.strip().splitlines()[-1])
+
+
+def test_a_short_tap_is_not_a_long_press(long_press):
+    assert long_press["shortTap"] == [False, False]
+    assert long_press["bareMenu"] is False
+    assert long_press["released"] is False
+
+
+def test_a_long_press_enters_the_mode_and_ticks_the_item(long_press):
+    assert long_press["held"] == [True, True, "Cancelar", "true", False]
+    assert long_press["menu"] is True
+
+
+def test_the_click_after_a_long_press_is_swallowed_once(long_press):
+    """It must neither open the item (shell.js) nor untick it (the mode's tap)."""
+    assert long_press["clickSwallowed"] == [True, True, True, True]
+    assert long_press["nextTapTicks"] == [True, True, True]
+
+
+def test_a_long_press_in_the_mode_adds_nothing(long_press):
+    assert long_press["inMode"] == [True, False, True, True]
+
+
+def test_a_scroll_or_a_cancel_is_not_a_long_press(long_press):
+    assert long_press["scroll"] == [False, False]
+    assert long_press["cancelled"] == [False, False]
+    assert long_press["rightButton"] is False
+
+
+def test_a_long_press_ignores_one_being_analysed(long_press):
+    assert long_press["pending"] == [False, False]
+    assert long_press["pendingTap"] is False
+
+
+def test_the_desktop_has_no_long_press(long_press):
+    assert long_press["desktop"] == [False, False, False]
+    assert long_press["desktopTap"] is False
