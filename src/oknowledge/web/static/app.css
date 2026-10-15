@@ -757,8 +757,10 @@ html:not(.js) .drop-file::file-selector-button { height: 32px; margin-right: 10p
   .setting .seg { display: flex; }
   .setting .seg label { flex: 1; }
   .setting .seg label span { display: flex; align-items: center; justify-content: center; min-height: 44px; }
+  /* The count beside the box, a link that looks like one, a finger wide. */
   .cat-row { grid-template-columns: 8px minmax(0, 1fr) auto; }
-  .cat-row input { grid-column: 1 / -1; }
+  .cat-row a.count { display: flex; align-items: center; justify-content: center;
+    min-width: 44px; min-height: 44px; color: var(--acc); text-decoration: underline; }
   .drop { padding: 20px 16px; }
   .drop .btn, .settings-pane .link-button { min-height: 44px; }
 

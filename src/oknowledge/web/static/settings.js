@@ -39,9 +39,14 @@
   function toast(text) { if (text && ok.toast) ok.toast(text); }
 
   // A save that never answers fails, so the redraws waiting for it go on.
+  // The error says it timed out: the answer may still come (see autosave).
   function within(promise) {
     return new Promise(function (resolve, reject) {
-      var timer = setTimeout(function () { reject(new Error(texts.saveFailed || "")); }, SAVE_MS);
+      var timer = setTimeout(function () {
+        var error = new Error(texts.saveFailed || "");
+        error.late = true;
+        reject(error);
+      }, SAVE_MS);
       promise.then(function (body) { clearTimeout(timer); resolve(body); },
                    function (error) { clearTimeout(timer); reject(error); });
     });
@@ -107,15 +112,24 @@
       var payload = new URLSearchParams(data).toString();
       if (payload === lastSent) { done(); return; }
       lastSent = payload;
-      within(ok.send(form.getAttribute("action"), data))
-        .then(function (body) {
-          landed(form);
-          if (body.reload) { location.reload(); return; }
-          toast(body.notice);
-          syncKeep(form);
+      var sent = ok.send(form.getAttribute("action"), data);
+      within(sent)
+        .then(saved)
+        .catch(function (error) {
+          lastSent = "";
+          failed(form, error.message);
+          toast(error.message);
+          // Timed out, it may still land: then it saved after all (the
+          // error goes, and a new interface language still reloads).
+          if (error.late) sent.then(saved, function () {});
         })
-        .catch(function (error) { lastSent = ""; failed(form, error.message); toast(error.message); })
         .then(done);
+    }
+    function saved(body) {
+      landed(form);
+      if (body.reload) { location.reload(); return; }
+      toast(body.notice);
+      syncKeep(form);
     }
     function done() {
       if (again) { again = false; send(); return; }
@@ -242,7 +256,7 @@
       .catch(function () { /* what is on screen stays; the next change tries again */ });
   }
 
-  // The page's ✕ is a link home. The click's blur has just sent the field
+  // The page's ✕ is a link home; a category's count, a link to its list. The click's blur has just sent the field
   // typed in: leaving at once could cut that save off, so it goes once the
   // saves (and the renames) have landed. If the last save of a form failed,
   // it stays and says so again: leaving would lose the notice and the value.
@@ -271,6 +285,9 @@
                   !event.altKey;
       var close = onPage && plain && event.target.closest("a[data-close]");
       if (close) { event.preventDefault(); leave(close); return; }
+      // Its click blurred a box whose rename is now out (review M2).
+      var away = plain && event.target.closest("a[data-leave]");
+      if (away) { event.preventDefault(); leave(away); return; }
       var tab = event.target.closest("a[data-settings-tab]");
       if (!tab || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey) return;
       event.preventDefault();

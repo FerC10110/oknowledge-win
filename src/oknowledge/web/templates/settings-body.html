@@ -183,7 +183,7 @@
               {# The others offered as it is typed: renaming into one merges. #}
               <input name="new" value="{{ name }}" required autocomplete="off" list="settings-categories"
                      aria-label="{{ t('Rename') }}: {{ name }}">
-              <a class="count mono" href="/?category={{ name|urlencode }}"
+              <a class="count mono" href="/?category={{ name|urlencode }}" data-leave
                  title="{{ t('See the links in %1', name) }}" aria-label="{{ t('See the links in %1', name) }}">{{ count }}</a>
               <button type="submit" class="btn" data-nojs>{{ t('Save') }}</button>
             </form>

@@ -104,3 +104,21 @@ def test_the_interface_language_hint_is_in_spanish(client, isolated_ui_language)
 
 def test_the_settings_dialog_draws_no_ring_when_it_has_the_focus():
     assert any("outline: none" in r for r in rule(".modal.settings:focus"))
+
+
+# --- review M2/M3: the count waits for saves, and is a real target on the phone ----------
+
+def test_each_categorys_link_is_marked_to_wait_for_the_saves(client):
+    body = client.get("/settings/panel?tab=categorias").text
+    links = re.findall(r'<a class="count mono" href="/\?category=[^"]+"[^>]*>', body)
+    assert links and all("data-leave" in link for link in links)
+
+
+def test_on_the_phone_the_count_is_a_marked_44px_target_beside_the_box():
+    phone = CSS[CSS.index("@media (max-width: 60rem)"):]
+    drawn = [r for r in re.findall(r"[^{}]*\{[^{}]*\}", phone) if ".cat-row" in r.split("{")[0]]
+    count = " ".join(r for r in drawn if "a.count" in r.split("{")[0])
+    assert "min-width: 44px" in count and "min-height: 44px" in count
+    assert "text-decoration: underline" in count and "var(--acc)" in count
+    box = " ".join(r for r in drawn if r.split("{")[0].strip().endswith(".cat-row input"))
+    assert "grid-column: 1 / -1" not in box

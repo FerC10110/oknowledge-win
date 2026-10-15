@@ -103,13 +103,16 @@ function makeRoot(tab) {
     ? renames.map((f) => f.elements.old) : sel === "form[data-settings-rename]" ? renames : []);
   const close = own(el("A", { closest: (sel) => (sel === "a[data-close]" ? close : null) }));
   close.setAttribute("href", "/");
+  // A category's count: a link to its list (review M2).
+  const count = own(el("A", { closest: (sel) => (sel === "a[data-leave]" ? count : null) }));
+  count.setAttribute("href", "/?category=Redes");
   root.querySelectorAll = (sel) => (sel === "a[data-settings-tab]" ? links
     : sel === "form[data-settings]" ? [form] : []);
   root.querySelector = (sel) => (sel === "a[data-settings-tab].on" ? links.find((a) => a.classList.contains("on"))
     : sel === '[data-settings-pane="categorias"]' ? pane : null);
   root.contains = (x) => x === root || inside.has(x);
   root.replaceWith = (fresh) => { root.isConnected = false; if (root.onReplace) root.onReplace(fresh); };
-  root.parts = { links, form, renames, close };
+  root.parts = { links, form, renames, close, count };
   return root;
 }
 
@@ -182,6 +185,10 @@ function rename(root, from, to) {
   const form = root.parts.renames.find((f) => f.elements.old.value === from);
   form.elements.new.value = to;
   form.elements.new.fire("change");
+}
+function clickCount(root) {
+  return root.fire("click", { target: root.parts.count, metaKey: false, ctrlKey: false,
+                              shiftKey: false, altKey: false });
 }
 function clickClose(root) {
   return root.fire("click", { target: root.parts.close, metaKey: false, ctrlKey: false,
@@ -395,3 +402,41 @@ ok.openSettings("idioma"); await settle();
 out.fetched = fetches.length;
 """)
     assert out["fetched"] == 0
+
+
+# --- review M1: a save that lands after its timeout still counts --------------------------
+
+def test_a_late_answer_after_the_timeout_honours_its_reload(tmp_path):
+    out = run(tmp_path, OPEN + """
+root.parts.form.fire("change");
+tick(); await settle();
+out.failedFirst = out.toasts.slice();
+sends[0].answer({ reload: true }); await settle();
+""", categories=["Redes"])
+    assert out["failedFirst"] == ["SAVE FAILED"] and out["reloads"] == 1
+
+
+def test_a_late_success_clears_the_error_the_pages_close_would_repeat(tmp_path):
+    out = run(tmp_path, """
+const root = pageRoot;
+root.parts.form.fire("change");
+tick(); await settle();
+sends[0].answer({ notice: "SAVED" }); await settle();
+clickClose(root); await settle();
+""", page=True)
+    assert out["toasts"] == ["SAVE FAILED", "SAVED"] and out["navigated"] == "/"
+
+
+# --- review M2: a category's link waits for the rename its blur sent ------------------------
+
+@pytest.mark.parametrize("page", [True, False])
+def test_a_categorys_link_waits_for_the_rename_out(tmp_path, page):
+    start = "const root = pageRoot;" if page else OPEN
+    out = run(tmp_path, start + """
+rename(root, "Redes", "Otra");
+const event = clickCount(root); await settle();
+out.waiting = [event.defaultPrevented, out.navigated];
+sends[0].answer({ moved: 1 }); await settle();
+""", page=page, tab="categorias", categories=["Redes"])
+    assert out["waiting"] == [True, None]
+    assert out["navigated"] == "/?category=Redes"
