@@ -124,7 +124,7 @@
           var onScreen = panel.querySelector("[data-panel]");
           // Not over a catalog search the URL still names (Ocio): the list
           // was reloaded under it, the search was not left.
-          if (current && !target.searchParams.get("buscar") &&
+          if (serverPick && !target.searchParams.get("buscar") &&
               (!onScreen || onScreen.dataset.panel !== serverPick)) loadPanel(serverPick, true);
         }
         observe();
@@ -380,6 +380,11 @@
         var value = here().searchParams.get(name);
         if (value) url.searchParams.set(name, value);
       });
+      // The pick goes along: kept if it matches, the first one if not, and
+      // with no matches it stays in the panel and the URL, so clearing the
+      // search comes back to it.
+      var pick = panel && here().searchParams.get("sel");
+      if (pick) url.searchParams.set("sel", pick);
       loadList(url.href);
     }, 250);
   });
@@ -531,8 +536,8 @@
             toast(state.status === "failed" ? failedAs : doneAs);
             // What the user picked, not what is on screen: that is still the
             // old panel while a newer pick is on its way.
-            var shown = panel && panel.querySelector("[data-panel]");
-            if (shown && shown.dataset.panel === id && stillPicked(id)) loadPanel(id, true);
+            var inPanel = panel && panel.querySelector("[data-panel]");
+            if (inPanel && inPanel.dataset.panel === id && stillPicked(id)) loadPanel(id, true);
             loadList(here().href, true, "refresh");
           })
           .catch(function () { /* try again in three seconds */ });

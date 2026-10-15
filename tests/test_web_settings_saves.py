@@ -144,3 +144,71 @@ def test_a_refused_rename_is_a_400_to_a_script(client):
     answer = client.post("/categories/rename", data={"old": "Networking", "new": "a/b"},
                          headers=JSON)
     assert answer.status_code == 400 and "cannot be used" in answer.json()["error"]
+
+
+# --- final fix pass: the page's ✕ waits for the saves, in node ----------------------------
+
+CLOSE_HARNESS = r"""
+const source = require("fs").readFileSync(process.argv[2], "utf8");
+const on = {};
+const listen = (name) => (type, fn) => { on[name + ":" + type] = fn; };
+const form = { addEventListener: listen("form"), getAttribute: () => "/settings/motores",
+               querySelector: () => null };
+const link = { href: "http://x/", getAttribute: () => "/" };
+const root = {
+  addEventListener: listen("root"),
+  querySelector: () => null,
+  querySelectorAll: (sel) => (sel === "form[data-settings]" ? [form] : []),
+};
+global.window = global;
+global.location = { href: "/settings", pathname: "/settings" };
+global.history = { replaceState() {} };
+global.FormData = function () { return { model: "nuevo" }; };
+global.document = {
+  body: { dataset: {} }, activeElement: null,
+  getElementById: () => null,
+  querySelector: (sel) => (sel === ".settings-body[data-settings-root]" ? root : null),
+};
+let answer = null;
+window.oknowledge = { toast() {}, send: () => new Promise((r) => { answer = r; }) };
+eval(source);
+const out = {};
+(async () => {
+  on["form:change"]();                                 // the blur of the click saves
+  const event = { button: 0, metaKey: false, ctrlKey: false, shiftKey: false, altKey: false,
+                  target: { closest: (sel) => (sel === "a[data-close]" ? link : null) },
+                  defaultPrevented: false, preventDefault() { this.defaultPrevented = true; } };
+  on["root:click"](event);
+  await new Promise((r) => setTimeout(r, 10));
+  out.whileSaving = [event.defaultPrevented, location.href];
+  answer({ notice: "" });
+  await new Promise((r) => setTimeout(r, 10));
+  out.saved = location.href;
+  console.log(JSON.stringify(out));
+  process.exit(0);
+})();
+"""
+
+
+@pytest.fixture(scope="module")
+def closing(tmp_path_factory):
+    import json
+    import shutil
+    import subprocess
+    from pathlib import Path
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not installed")
+    script = (Path(__file__).resolve().parent.parent / "src" / "oknowledge" / "web" / "static"
+              / "settings.js")
+    harness = tmp_path_factory.mktemp("closing") / "harness.js"
+    harness.write_text(CLOSE_HARNESS, encoding="utf-8")
+    done = subprocess.run([node, str(harness), str(script)], capture_output=True, text=True,
+                          timeout=30, check=False)
+    assert done.returncode == 0, done.stderr
+    return json.loads(done.stdout.strip().splitlines()[-1])
+
+
+def test_the_pages_close_waits_for_a_save_still_out(closing):
+    assert closing["whileSaving"] == [True, "/settings"]
+    assert closing["saved"] == "/"

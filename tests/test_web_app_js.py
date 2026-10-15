@@ -219,7 +219,7 @@ global.window = global;
 global.location = { href: "/", pathname: "/", reload() { out.reloaded = true; } };
 global.FormData = function () {};
 global.document = {
-  body: { dataset: { saveFailed: "No se pudo guardar" }, tagName: "BODY" },
+  body: { dataset: { saveFailed: "No se pudo guardar" }, tagName: "BODY", appendChild() {} },
   addEventListener() {},
   getElementById: (id) => (id === "toast" ? toastEl : null),
   createElement: () => ({ textContent: "", className: "", addEventListener() {} }),
@@ -272,3 +272,106 @@ def test_the_keys_help_opens_on_its_grid_and_not_on_the_close_button(client):
     body = client.get("/").text
     found = re.search(r'<dialog id="keys-help".*?</dialog>', body, re.S).group(0)
     assert '<dl class="keys-grid" tabindex="-1" autofocus>' in found
+
+
+# --- final fix pass: the toast above a modal, in node ------------------------------------
+
+TOP_HARNESS = r"""
+const source = require("fs").readFileSync(process.argv[2], "utf8");
+const log = [];
+const handlers = {};
+let open = false;
+const holder = (name) => ({ name, appendChild(kid) {
+  open = false;                                      // a popover moved is hidden
+  kid.parentNode = this; log.push("into " + name); } });
+const body = Object.assign(holder("body"), { dataset: {}, tagName: "BODY" });
+const dialog = Object.assign(holder("dialog"), { open: false,
+  showModal() { this.open = true; log.push("modal"); }, close() { this.open = false; },
+  contains(kid) { return kid.parentNode === this; } });
+const toastEl = {
+  hidden: true, popover: null, parentNode: body, classList: { add() {}, remove() {} },
+  replaceChildren() {}, appendChild() {}, querySelector: () => null,
+  showPopover() { if (open) throw new Error("already open"); open = true; log.push("show"); },
+  hidePopover() { if (!open) throw new Error("not open"); open = false; log.push("hide"); },
+  matches: (sel) => sel === ":popover-open" && open,
+};
+global.window = global;
+global.location = { href: "/", pathname: "/", reload() {} };
+global.document = {
+  body,
+  addEventListener: (type, fn) => { (handlers[type] = handlers[type] || []).push(fn); },
+  getElementById: (id) => (id === "toast" ? toastEl : null),
+  createElement: () => ({ textContent: "", className: "", addEventListener() {} }),
+  querySelector: (sel) => (sel === "dialog[open]" && dialog.open ? dialog : null),
+  querySelectorAll: () => [],
+};
+eval(source);
+const ok = window.oknowledge;
+const out = {};
+ok.toast("uno");
+out.first = [toastEl.popover, log.slice()];
+ok.toast("dos");
+out.second = log.slice();
+log.length = 0;
+ok.openModal(dialog);
+out.modal = [log.slice(), toastEl.parentNode.name];
+log.length = 0;
+ok.toast("desde el modal");
+out.inModal = [log.slice(), toastEl.parentNode.name];
+log.length = 0;
+dialog.close();
+(handlers.close || []).forEach((fn) => fn({ target: dialog }));
+out.closed = [log.slice(), toastEl.parentNode.name];
+console.log(JSON.stringify(out));
+process.exit(0);
+"""
+
+
+@pytest.fixture(scope="module")
+def top(tmp_path_factory):
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not installed")
+    harness = tmp_path_factory.mktemp("top") / "harness.js"
+    harness.write_text(TOP_HARNESS, encoding="utf-8")
+    done = subprocess.run([node, str(harness), str(APP)], capture_output=True, text=True,
+                          timeout=30, check=False)
+    assert done.returncode == 0, done.stderr
+    return json.loads(done.stdout.strip().splitlines()[-1])
+
+
+def test_the_toast_is_shown_in_the_top_layer(top):
+    assert top["first"] == ["manual", ["show"]]
+
+
+def test_a_new_toast_goes_on_top_again(top):
+    assert top["second"] == ["show", "hide", "show"]
+
+
+def test_a_modal_opened_under_a_toast_does_not_cover_it(top):
+    # Inside the modal: drawn above its backdrop and not inert under it.
+    assert top["modal"] == [["modal", "into dialog", "show"], "dialog"]
+
+
+def test_a_toast_said_from_the_modal_is_inside_it(top):
+    assert top["inModal"] == [["hide", "show"], "dialog"]
+
+
+def test_the_toast_goes_back_to_the_page_when_the_modal_closes(top):
+    assert top["closed"] == [["into body", "show"], "body"]
+
+
+def test_without_javascript_the_toast_is_no_popover(client):
+    # A [popover] the server drew would stay hidden with no script to show it.
+    toast = re.search(r'<div id="toast"[^>]*>', client.get("/").text).group(0)
+    assert "popover" not in toast
+
+
+def test_the_settings_modal_puts_the_toast_back_after_drawing_its_content():
+    # modal.innerHTML / replaceChildren take out a toast that sits inside it.
+    text = (STATIC / "settings.js").read_text(encoding="utf-8")
+    opening = between(text, "ok.openSettings = function", "ok.bindSettings")
+    assert opening.count("raiseToast();") >= 1
+    assert "raiseToast();" in between(text, "function failed", "ok.openSettings")
+    loaded = between(opening, "modal.innerHTML = html;", ".catch")
+    assert "raiseToast();" in loaded

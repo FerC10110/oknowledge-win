@@ -167,3 +167,86 @@ def test_the_panel_empties_when_no_pick_is_left():
     # Moved out, or deleted, with nothing left to pick: the panel empties.
     assert "if (next) ok.list.pick(next); else ok.list.empty();" in sending
     assert "if (mine && !after) ok.list.empty();" in sending
+
+
+# --- final fix pass: one bulk send at a time, in node --------------------------------------
+
+SENDING_HARNESS = r"""
+const source = require("fs").readFileSync(process.argv[2], "utf8");
+const out = { sends: [], toasts: [], undos: [] };
+const listeners = {};
+const on = (name) => (type, fn) => { (listeners[name + ":" + type] = listeners[name + ":" + type] || []).push(fn); };
+const button = (formaction) => ({ disabled: false, getAttribute: (a) => (a === "formaction" ? formaction : null) });
+const del = button("/bulk/delete"), star = button("/bulk/mark"), clr = button(null);
+const boxes = ["a1", "b2"].map((value) => ({ value, checked: false, matches: () => true, closest: () => null }));
+const bar = {
+  hidden: true, dataset: { one: "1", many: "%1" }, elements: { back: { value: "" } },
+  addEventListener: on("bar"), getAttribute: () => "/bulk/category",
+  querySelector: (sel) => (sel === "[data-count]" ? { textContent: "" }
+                           : sel === 'button[formaction="/bulk/delete"]' ? del : null),
+  querySelectorAll: (sel) => [del, star, clr],
+  classList: { toggle() {}, add() {}, remove() {} },
+};
+const list = { addEventListener: on("list"), querySelectorAll: () => boxes, classList: { toggle() {} } };
+global.window = global;
+global.location = { pathname: "/", search: "" };
+global.FormData = function () { this.delete = () => {}; this.append = () => {}; };
+global.document = { getElementById: (id) => ({ bulk: bar, list: list }[id] || null) };
+let answer = null;
+window.oknowledge = {
+  keys: {}, closeMenus() {}, toast: (t) => out.toasts.push(t),
+  offerUndo: (t, token) => out.undos.push(token),
+  send: (url) => { out.sends.push(url); return new Promise((r) => { answer = r; }); },
+  list: { current: () => "", shown: () => [], reload: () => Promise.resolve(), pick() {}, empty() {} },
+};
+eval(source);
+const ok = window.oknowledge;
+const tick = (id) => listeners["list:change"].forEach((fn) => fn({ target: boxes.find((b) => b.value === id) && Object.assign(boxes.find((b) => b.value === id), { checked: true }) }));
+const press = (key, repeat) => ok.keys[key]({ key, repeat: !!repeat });
+const click = (submitter) => listeners["bar:submit"].forEach((fn) => fn({ preventDefault() {}, submitter }));
+(async () => {
+  tick("a1"); tick("b2");
+  out.repeat = press("Backspace", true);
+  out.afterRepeat = out.sends.length;
+  press("Backspace");
+  out.disabled = [del.disabled, star.disabled, clr.disabled];
+  press("Backspace"); press("Delete"); click(del); click(star);
+  out.whileSending = out.sends.slice();
+  answer({ notice: "Borradas", undo: "tok" });
+  await new Promise((r) => setTimeout(r, 10));
+  out.enabled = [del.disabled, star.disabled, clr.disabled];
+  out.after = out.undos.slice();
+  console.log(JSON.stringify(out));
+  process.exit(0);
+})();
+"""
+
+
+@pytest.fixture(scope="module")
+def sending(tmp_path_factory):
+    import json
+    import shutil
+    import subprocess
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not installed")
+    harness = tmp_path_factory.mktemp("sending") / "harness.js"
+    harness.write_text(SENDING_HARNESS, encoding="utf-8")
+    done = subprocess.run([node, str(harness), str(SELECT)], capture_output=True, text=True,
+                          timeout=30, check=False)
+    assert done.returncode == 0, done.stderr
+    return json.loads(done.stdout.strip().splitlines()[-1])
+
+
+def test_a_held_backspace_does_not_delete(sending):
+    assert sending["afterRepeat"] == 0
+
+
+def test_a_bulk_send_is_one_at_a_time(sending):
+    assert sending["whileSending"] == ["/bulk/delete"]
+    assert sending["after"] == ["tok"]
+
+
+def test_the_bar_is_disabled_while_sending_and_back_after(sending):
+    assert sending["disabled"] == [True, True, True]
+    assert sending["enabled"] == [False, False, False]

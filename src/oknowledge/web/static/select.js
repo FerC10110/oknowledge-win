@@ -11,6 +11,7 @@
   var list = document.getElementById("list");
   if (!bar || !list) return;
   var picked = [];          // ids, in the order they were ticked
+  var sending = false;      // a bulk action is out: the next waits for its answer
 
   function boxes() {
     return Array.prototype.slice.call(list.querySelectorAll('input[type="checkbox"][name="ids"]'));
@@ -66,8 +67,16 @@
     submit(event.submitter);
   });
 
+  // While one is out the bar is off: a second ⌫ or click on Borrar would
+  // split the lot, and part of it would have no Deshacer.
+  function busy(on) {
+    sending = on;
+    bar.classList.toggle("sending", on);
+    Array.prototype.forEach.call(bar.querySelectorAll("button"), function (b) { b.disabled = on; });
+  }
+
   function submit(submitter) {
-    if (!picked.length) return;
+    if (!picked.length || sending) return;
     var url = (submitter && submitter.getAttribute("formaction")) || bar.getAttribute("action");
     bar.elements.back.value = location.pathname + location.search;
     var data = new FormData(bar, submitter || undefined);
@@ -81,8 +90,10 @@
     var cur = ok.list.current();
     var mine = picked.indexOf(cur) >= 0;
     var after = deleting || mine ? pickAfter() : "";
+    busy(true);
     ok.send(url, data)
       .then(function (body) {
+        busy(false);
         clear();
         if (deleting) {
           ok.offerUndo(body.notice, body.undo, function (back) {
@@ -105,6 +116,7 @@
         });
       })
       .catch(function (error) {
+        busy(false);
         ok.toast(error.message);
         // All of them gone meanwhile: the list says so.
         if (error.status === 404) { clear(); ok.list.reload(); }
@@ -136,8 +148,10 @@
     toggle(id, picked.indexOf(id) < 0);
   };
 
-  ok.keys.Backspace = ok.keys.Delete = function () {
+  // A held key repeats: only the first press deletes.
+  ok.keys.Backspace = ok.keys.Delete = function (event) {
     if (!picked.length) return false;
+    if (sending || (event && event.repeat)) return;
     submit(bar.querySelector('button[formaction="/bulk/delete"]'));
   };
 

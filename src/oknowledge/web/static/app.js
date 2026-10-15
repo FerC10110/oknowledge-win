@@ -12,12 +12,43 @@
   // --- the toast (spec §2) ------------------------------------------------------
   var timer = null;
 
-  function box() { return document.getElementById("toast"); }
+  // Kept by reference: inside a modal, a redraw of its content may take it
+  // out of the page for a moment, and the next toast puts it back.
+  var toastEl = document.getElementById("toast");
+  function box() { return toastEl; }
+
+  // Where it is drawn: inside the open modal, if any, so the modal's
+  // backdrop does not dim it and the rest of the page being inert under the
+  // modal does not take it along (its Deshacer stays clickable); else the
+  // page. In the top layer, as a manual popover, shown last: above the modal.
+  // Moved, a popover is hidden; shown again (hide, then show) it goes above
+  // whatever went up since. Only this file makes it a popover: a [popover]
+  // the server drew would stay hidden without JavaScript.
+  function place(el) {
+    var home = openDialog() || document.body;
+    if (el.parentNode !== home) home.appendChild(el);
+  }
+
+  function onTop(el) {
+    place(el);
+    if (!el.showPopover) return;
+    if (el.popover !== "manual") el.popover = "manual";
+    if (el.matches(":popover-open")) el.hidePopover();
+    el.showPopover();
+  }
+
+  // A modal opened or closed: the toast goes with it, still on top.
+  function raise() {
+    var el = box();
+    if (!el) return;
+    if (el.hidden) place(el); else onTop(el);
+  }
 
   function hide() {
     clearTimeout(timer);
     var el = box();
     if (!el) return;
+    if (el.showPopover && el.matches(":popover-open")) el.hidePopover();
     el.hidden = true;
     el.replaceChildren();
   }
@@ -42,6 +73,7 @@
       el.appendChild(button);
     }
     el.hidden = false;
+    onTop(el);
     timer = setTimeout(hide, opts.ms || (opts.action ? 5000 : 2200));
   }
 
@@ -105,10 +137,17 @@
   // --- the modals (spec §3) ------------------------------------------------------
   function openDialog() { return document.querySelector("dialog[open]"); }
 
+  // "close" does not bubble: caught on its way down.
+  document.addEventListener("close", function (event) {
+    var el = box();
+    if (el && event.target.contains && event.target.contains(el)) raise();
+  }, true);
+
   function openModal(dialog) {
     if (!dialog || dialog.open) return;
     closeMenus();
     dialog.showModal();
+    raise();
   }
 
   function toggleKeys() {
@@ -189,6 +228,7 @@
   ok.offerUndo = offerUndo;
   ok.closeMenus = closeMenus;
   ok.openModal = openModal;
+  ok.raiseToast = raise;
 
   // The toast the server drew after a redirect: taken over and timed here,
   // and its Deshacer sent as JSON (spec §2). Without this file it is a form.
@@ -197,6 +237,7 @@
     if (!el || el.hidden) return;
     var form = el.querySelector("form.toast-undo");
     el.classList.add("live");
+    onTop(el);
     timer = setTimeout(hide, form ? 5000 : 2200);
     if (!form) return;
     form.addEventListener("submit", function (event) {

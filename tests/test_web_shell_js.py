@@ -191,3 +191,35 @@ def test_a_filter_click_lights_its_row_only_in_its_own_group():
     body = between(SCRIPT.read_text(encoding="utf-8"), "function setActive", "\n  }\n")
     assert 'link.closest(".sidebar .group[data-apart]")' in body
     assert '".sidebar .filter.on"' in body
+
+
+# --- final fix pass ------------------------------------------------------------------
+
+def test_a_list_with_no_matches_does_not_empty_the_panel():
+    # 55466c5 renamed the local to serverPick: the guard must read it, not the
+    # always-truthy current() function, or a search with no matches loads
+    # panel "" and drops sel.
+    text = SCRIPT.read_text(encoding="utf-8")
+    landing = between(text, "function loadList", "function sideFilters")
+    assert "if (serverPick && !target.searchParams.get(\"buscar\")" in landing
+    assert "if (current &&" not in landing
+
+
+def test_no_local_shadows_the_list_helpers():
+    import re
+    text = re.sub(r"^\s*//.*$", "", SCRIPT.read_text(encoding="utf-8"), flags=re.M)
+    # current() and shown() are functions: a local of either name, or either
+    # read as a value, is a leftover of the names before 55466c5.
+    for name in ("current", "shown"):
+        assert not re.search(rf"\bvar {name}\b", text), name
+        assert not re.search(rf"(?<![.\w]){name}\s*(&&|\|\||\.|\?)", text), name
+
+
+def test_a_search_carries_the_pick():
+    # A search with no matches leaves the note in the panel; clearing it must
+    # come back to that note, not to the first one: the search asks with the
+    # sel it was typed under (the server falls back to the first visible).
+    text = SCRIPT.read_text(encoding="utf-8")
+    typed = between(text, 'field.addEventListener("input"', 'form.addEventListener("submit"')
+    assert 'var pick = panel && here().searchParams.get("sel");' in typed
+    assert 'if (pick) url.searchParams.set("sel", pick);' in typed

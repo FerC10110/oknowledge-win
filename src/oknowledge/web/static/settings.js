@@ -26,6 +26,10 @@
 
   function toast(text) { if (text && ok.toast) ok.toast(text); }
 
+  // The toast lives inside the open modal (app.js): drawing the modal's
+  // content takes it out, and this puts it back.
+  function raiseToast() { if (ok.raiseToast) ok.raiseToast(); }
+
   // --- tabs -----------------------------------------------------------------------
   function showTab(root, key, onPage) {
     root.querySelectorAll("a[data-settings-tab]").forEach(function (a) {
@@ -209,12 +213,26 @@
       .catch(function () { /* what is on screen stays; the next change tries again */ });
   }
 
+  // The page's ✕ is a link home. The click's blur has just sent the field
+  // typed in: leaving at once could cut that save off, so it goes once the
+  // saves (and a rename) have landed.
+  function leave(link) {
+    var active = document.activeElement;
+    if (active && active.blur) active.blur();
+    Promise.all([whenIdle(), pendingRename])
+      .then(function () { location.href = link.getAttribute("href"); });
+  }
+
   function bind(root, onPage) {
     if (!root) return;
     root.querySelectorAll("[data-nojs]").forEach(function (el) { el.hidden = true; });
     var on = root.querySelector("a[data-settings-tab].on");
     lastTab = on ? on.dataset.settingsTab : lastTab;
     root.addEventListener("click", function (event) {
+      var plain = event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey &&
+                  !event.altKey;
+      var close = onPage && plain && event.target.closest("a[data-close]");
+      if (close) { event.preventDefault(); leave(close); return; }
       var tab = event.target.closest("a[data-settings-tab]");
       if (!tab || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey) return;
       event.preventDefault();
@@ -241,6 +259,7 @@
     foot.className = "modal-failed-foot";
     foot.appendChild(close);
     modal.replaceChildren(p, foot);
+    raiseToast();
     close.focus();
   }
 
@@ -258,6 +277,7 @@
         if (!modal.open) return;
         modal.classList.remove("loading");
         modal.innerHTML = html;
+        raiseToast();
         bind(modal.querySelector("[data-settings-root]"), false);
       })
       .catch(function () {
