@@ -623,13 +623,13 @@ def test_a_finger_hides_shortcuts_even_in_the_sidebar():
 
 def test_ocio_s_head_keeps_its_buttons_on_the_count_s_row():
     """Spec §4: in Ocio the "N fichas sin reescribir" notice takes a row of its
-    own *below*, and Seleccionar and "Recientes ▾" stay on the right of
-    "Ocio · N". The notice sits inside the count's span, so the span gives its
+    own *below* (the sort joins it there, see the polish batch F test), and
+    Seleccionar stays on the right of "Ocio · N". The notice sits inside the count's span, so the span gives its
     parts to the head and the notice is ordered last."""
     phone = block(static("app.css"), PHONE)
     assert ".list-head > span:has(> .unrewritten) { display: contents; }" in phone
     assert re.search(r"\.list-head > span:has\(> \.unrewritten\) > b \{[^}]*margin-right: auto;", phone)
-    assert re.search(r"\.list-head \.unrewritten \{[^}]*flex-basis: 100%;[^}]*order: 1;", phone)
+    assert re.search(r"\.list-head \.unrewritten \{[^}]*order: 1;", phone)
 
 
 # --- Final review fixes ------------------------------------------------------------------
@@ -679,3 +679,46 @@ def test_app_js_swaps_the_hint_with_the_breakpoint():
     app = static("app.js")
     assert "[data-short-placeholder]" in app
     assert "shortPlaceholder" in app
+
+
+# --- polish batch F: taps and sizes (docs/2026-10-15-rediseno-celular-pendientes.md) ---------
+
+def test_the_phone_draws_no_tap_box_and_shows_a_pressed_state_instead():
+    phone = block(static("app.css"), PHONE)
+    assert re.search(r":root \{ -webkit-tap-highlight-color: transparent; \}", phone)
+    pressed = re.findall(r"([^{}]*:active[^{}]*)\{", phone)
+    heads = " ".join(pressed)
+    for part in (".btn:active", ".fchip:active", ".tabbar a:active", ".menu-list a:active",
+                 ".menu-list button:active", ".rows .item:active", ".tiles .item:active",
+                 ".poster .hit:active .art", ".btn.primary:active"):
+        assert part in heads, part
+    # Only the phone block: a desktop keeps the browser's own behaviour.
+    assert "tap-highlight" not in static("app.css").replace(phone, "")
+
+
+def test_the_detail_s_x_is_a_44px_zone_and_wrapped_rows_stay_clear_of_each_other():
+    phone = block(static("app.css"), PHONE)
+    # 14px tall: -15px above and below; -6px aside on a 32px-wide one.
+    assert re.search(r'\.detail \.chips \.chip button::after \{ content: ""; position: absolute; inset: -15px -6px; \}', phone)
+    # A zone stands 11px outside its chip: rows 22px apart never share a pixel.
+    assert re.search(r"\.detail \.chips \{ row-gap: 22px; \}", phone)
+
+
+def test_a_sheet_holds_the_page_still_and_keeps_its_own_scroll():
+    phone = block(static("app.css"), PHONE)
+    assert "html:has(.menu[open]) { overflow: hidden; }" in phone
+    assert re.search(r"\.menu-list \{ overscroll-behavior: contain; \}", phone)
+
+
+def test_ocio_s_sort_shares_the_notice_s_row():
+    phone = block(static("app.css"), PHONE)
+    notice = re.search(r"\.list-head \.unrewritten \{[^}]*\}", phone).group(0)
+    assert "flex-basis" not in notice and "order: 1;" in notice
+    assert re.search(r"\.list-head:has\(\.unrewritten\) \.sort \{[^}]*order: 2;[^}]*margin-left: auto;", phone)
+
+
+def test_a_settings_segment_grows_with_its_words_instead_of_breaking_one():
+    phone = block(static("app.css"), PHONE)
+    assert re.search(r"\.setting \.seg label \{ flex: 1 1 auto; \}", phone)
+    span = re.search(r"\.setting \.seg label span \{[^}]*\}", phone).group(0)
+    assert "overflow-wrap: normal;" in span and "word-break: normal;" in span

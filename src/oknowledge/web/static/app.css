@@ -577,6 +577,18 @@ html:not(.js) .drop-file::file-selector-button { height: 32px; margin-right: 10p
    block, in (hover: none) or in (pointer: coarse): the desktop above 60rem
    does not move by a pixel. */
 @media (max-width: 60rem) {
+  /* A tap is told by :active (below), not by the browser's coloured box. */
+  :root { -webkit-tap-highlight-color: transparent; }
+  .btn:active, .fchip:active, .list-head .seg a:active, .seg label:active span, .tabbar a:active,
+  .menu-list a:active, .menu-list button:active, .submenu > summary:active, .bulk > button:active,
+  .bulk summary:active, .settings-tabs a:active, .settings-close:active, .stars.big button:active,
+  .idea-controls .stars button:active, .links-column .row .x:active, .links-column .row .add:active,
+  .detail-back:active, .topbar-settings:active, .cat-row a.count:active { background: var(--s7); color: var(--t1); }
+  .btn.primary:active { background: #d4d4da; color: #141519; }
+  .rows .item:active { background: var(--s5); }
+  .tiles .item:active { background: var(--s4); }
+  .poster .hit:active .art { filter: brightness(.8); }
+
   /* §2 the frame: top bar, the column, the tabs. The list scrolls inside. */
   .app, .app.home, .app.ocio, .app.idea-shelf, .app.idea-screen, .app.legacy {
     display: flex; flex-direction: column; height: 100vh; height: 100dvh;
@@ -640,7 +652,9 @@ html:not(.js) .drop-file::file-selector-button { height: 32px; margin-right: 10p
   /* Ocio: the notice gets its own row below; the buttons stay by the count. */
   .list-head > span:has(> .unrewritten) { display: contents; }
   .list-head > span:has(> .unrewritten) > b { margin-left: -2px; margin-right: auto; }
-  .list-head .unrewritten { flex-basis: 100%; order: 1; margin: 0; }
+  .list-head .unrewritten { order: 1; margin: 0; }
+  /* ... and the sort goes down to that row, at its right end. */
+  .list-head:has(.unrewritten) .sort { order: 2; margin-left: auto; }
   .list-head .seg a { position: relative; display: flex; align-items: center; min-height: 30px;
     padding: 0 14px; }
   .list-head .seg a::after { content: ""; position: absolute; inset: -7px 0; }
@@ -689,8 +703,13 @@ html:not(.js) .drop-file::file-selector-button { height: 32px; margin-right: 10p
   .detail-bar { flex: none; flex-wrap: wrap; padding: 10px 16px max(10px, env(safe-area-inset-bottom)); }
   .detail .btn { height: 44px; }
   .detail .btn.icon { width: 44px; }
+  /* The ✕ is 14px tall: -15px above and below make a 44px zone, -6px aside a
+     44px-wide one. The zones of a row stand 11px outside its chips (the #tag
+     link's, 45px, 11px), so rows that wrap are 22px apart: a zone never
+     reaches the row below or above. */
+  .detail .chips { row-gap: 22px; }
   .detail .chips .chip button { position: relative; min-width: 32px; }
-  .detail .chips .chip button::after { content: ""; position: absolute; inset: -14px 0; }
+  .detail .chips .chip button::after { content: ""; position: absolute; inset: -15px -6px; }
   .detail .chips .chip > a { position: relative; }
   .detail .chips .chip > a::after { content: ""; position: absolute; inset: -15px 0; }
   .detail .tag-new input { min-height: 44px; font-size: 16px; }
@@ -755,8 +774,10 @@ html:not(.js) .drop-file::file-selector-button { height: 32px; margin-right: 10p
   .settings-pane select { font-size: 16px; min-height: 44px; }
   .setting { flex-direction: column; align-items: stretch; gap: 8px; }
   .setting .seg { display: flex; }
-  .setting .seg label { flex: 1; }
-  .setting .seg label span { display: flex; align-items: center; justify-content: center; min-height: 44px; }
+  /* A segment grows with its words: "Herramientas" is never broken in two. */
+  .setting .seg label { flex: 1 1 auto; }
+  .setting .seg label span { display: flex; align-items: center; justify-content: center; min-height: 44px;
+    padding: 3px 8px; text-align: center; overflow-wrap: normal; word-break: normal; }
   /* The count beside the box, a link that looks like one, a finger wide. */
   .cat-row { grid-template-columns: 8px minmax(0, 1fr) auto; }
   .cat-row a.count { display: flex; align-items: center; justify-content: center;
@@ -772,6 +793,11 @@ html:not(.js) .drop-file::file-selector-button { height: 32px; margin-right: 10p
     border-radius: 14px 14px 0 0; padding: 8px 8px max(8px, env(safe-area-inset-bottom));
     z-index: 45; }
   .menu[open] > summary::before { content: ""; position: fixed; inset: 0; background: #0009; z-index: 44; cursor: default; }
+  /* The backdrop does not scroll, so a drag on it would pan the page under it
+     (an idea and the old pages scroll as pages): the page holds still while a
+     sheet is open, and the sheet's own scroll stops at its ends. */
+  html:has(.menu[open]) { overflow: hidden; }
+  .menu-list { overscroll-behavior: contain; }
   .menu-list button, .menu-list a, .submenu > summary { min-height: 44px; }
   .menu-list .marks button { min-width: 44px; justify-content: center; }
   .menu-new input { font-size: 16px; min-height: 44px; }
