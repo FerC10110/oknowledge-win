@@ -21,7 +21,7 @@ from collections.abc import Callable
 from typing import NamedTuple
 from urllib.parse import parse_qsl, quote, urlencode, urlsplit
 
-from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi import BackgroundTasks, Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.exception_handlers import http_exception_handler
 from fastapi.responses import (
     FileResponse, HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse,
@@ -179,6 +179,10 @@ NOTICES = {
                 "you want and paste that one.",
     "batch-started": "Analysing. This page comes back on its own; you can close it.",
     "batch-running": "A batch is already running. This page shows how it is going.",
+    # The same start, said to a script: the modal stays open and the toast
+    # says what started (spec §3.1); "this page comes back" would be false.
+    "analysing": "Analysing %1 links",
+    "analysing-one": "Analysing 1 link",
     "nothing-owed": "Every link has been analysed. Nothing to do.",
     # A collection is never a file name, so the rule is only about a name
     # that would be nothing at all once the spaces are taken out.
@@ -250,6 +254,16 @@ BULK_ACTIONS = ("category", "kind", "state", "mark", "delete")
 
 BULK_HOMES = {"category": "/", "mark": "/", "kind": "/ocio", "state": "/ideas", "delete": "/"}
 """Where a bulk action's redirect goes when no `back` came with it."""
+
+SETTINGS_TABS = (("motores", "Engines"), ("idioma", "Language and saving"),
+                 ("importar", "Import"), ("categorias", "Categories"))
+"""Settings' four panes (spec §3.1), by the key their URL carries. The
+labels are t() keys: the template asks for them through this table."""
+
+
+def settings_url(tab: str) -> str:
+    """Where a settings write goes back to: its own pane, or the page."""
+    return f"/settings?tab={tab}" if tab in dict(SETTINGS_TABS) else "/settings"
 
 
 def bulk_words(t, action: str, done: int, failed: int, label: str = "",
@@ -479,7 +493,8 @@ GONE = "That is not there any more."
 FAILURES = {"undo-gone": 404, "undo-blocked": 409, "bad-category": 400, "bad-mark": 400,
             "bad-kind": 400, "bad-state": 400, "nothing-picked": 400, "bad-collection": 400,
             "title-empty": 400, "busy": 409, "idea-full": 409,
-            "cannot-search": 409, "no-such-idea": 404, "write-failed": 500}
+            "cannot-search": 409, "no-such-idea": 404, "write-failed": 500,
+            "settings-failed": 500, "env-failed": 500, "env-there": 409, "batch-running": 409}
 """The notices that mean nothing was written, and the status each is
 answered with when a script asked for JSON. Every other notice landed."""
 
@@ -496,6 +511,13 @@ RUNS = {"rewriting", "rewriting-all", "completing", "thinking"}
 """The notices that say a run started behind the page ("reload in a moment
 to read it"). Their JSON says `runs`: a script that watches the run says
 when it ends, and does not toast its start as if it had."""
+
+
+async def sent_fields(request: Request) -> frozenset[str]:
+    """Which form fields arrived, empty ones included. FastAPI hands an empty
+    optional field over as None, the same as an absent one, and Settings has to
+    tell "this pane has no such box" from "the box was emptied"."""
+    return frozenset((await request.form()).keys())
 
 
 def wants_json(request: Request) -> bool:
@@ -1739,7 +1761,7 @@ def create_app(cfg: Config) -> FastAPI:
         return page(request, "categories.html")
 
     @app.post("/categories/rename")
-    def rename(old: str = Form(...), new: str = Form(...)):
+    def rename(request: Request, old: str = Form(...), new: str = Form(...)):
         live = current["cfg"]
         library.refresh()
         target = clean_category(new)
@@ -1752,13 +1774,13 @@ def create_app(cfg: Config) -> FastAPI:
             # finishes mid-rename is skipped and reported, not overwritten.
             result = rename_category(live, old, new, live.language, lock=link_lock)
         except BadCategory:
-            return see_other("/categories", notice="bad-category")
+            return answer(request, settings_url("categorias"), "bad-category")
         except IndexesStale as error:
             log.warning("the indexes could not be rebuilt: %s", error)
             result, stale = error.done, True
         except (OSError, ProtectedNote) as error:
             log.warning("the vault could not be written: %s", error)
-            return see_other("/categories", notice="write-failed")
+            return answer(request, settings_url("categorias"), "write-failed")
         library.refresh()
         if stale and result.failed and not result.moved:
             # A vault that cannot be written fails every note AND the rebuild.
@@ -1775,8 +1797,8 @@ def create_app(cfg: Config) -> FastAPI:
             code = "merged-one" if result.moved == 1 else "merged"
         else:
             code = "renamed-one" if result.moved == 1 else "renamed"
-        return see_other("/categories", notice=code,
-                         n=result.moved, m=len(result.failed))
+        return answer(request, settings_url("categorias"), code,
+                      n=result.moved, m=len(result.failed))
 
     def config_file() -> Path:
         """The file this process reads its config from. `--config` arrives
@@ -1874,17 +1896,25 @@ def create_app(cfg: Config) -> FastAPI:
                     languages=LANGUAGES, language_names=NATIVE_NAMES)
 
     @app.post("/settings")
-    def save_settings(chain: list[str] = Form([]), language: str = Form(""),
+    def save_settings(request: Request, chain: list[str] = Form([]), language: str = Form(""),
                       default_content: str = Form(""), mentions: str = Form(""),
                       batch: str = Form(""),
                       interface: str = Form("", alias="ui_language"),
-                      opencode_model: str = Form(""), ollama_model: str = Form(""),
-                      api_model: str = Form(""), api_provider: str = Form("")):
+                      opencode_model: str | None = Form(None),
+                      ollama_model: str | None = Form(None),
+                      api_model: str | None = Form(None), api_provider: str = Form(""),
+                      tab: str = Form(""), sent: frozenset[str] = Depends(sent_fields)):
+        """One pane of Settings (spec §3.1). A field that does not arrive keeps
+        what is saved: each pane is its own form and sends only its fields. An
+        empty model box that does arrive still clears that model."""
+        where = settings_url(tab)
         saved = current["cfg"]
         engines = {name: dict(options) for name, options in saved.engines.items()}
         for name, raw in (("opencode", opencode_model), ("ollama", ollama_model),
                           ("api", api_model)):
-            model = model_name(raw)
+            if f"{name}_model" not in sent:    # not in this pane: leave it
+                continue
+            model = model_name(raw or "")
             if model is None:                  # not a name: leave what is on disk
                 continue
             if model:
@@ -1919,9 +1949,12 @@ def create_app(cfg: Config) -> FastAPI:
             # The old file is still there, untouched: save() writes atomically
             # and backs up before it writes.
             log.warning("the config could not be saved: %s", error)
-            return see_other("/settings", notice="settings-failed")
+            return answer(request, where, "settings-failed")
         current["cfg"] = updated
-        return see_other("/settings", notice="saved")
+        # The interface language is in the config here: a change of it is
+        # what makes the page reload to redraw itself in the other language.
+        changed = updated.ui_language != saved.ui_language
+        return answer(request, where, "saved", reload=changed or None)
 
     @app.get("/item/{link_id}/state")
     def link_state(link_id: str):
@@ -1959,7 +1992,7 @@ def create_app(cfg: Config) -> FastAPI:
                              "status": entry.status if entry else "unknown"})
 
     @app.post("/settings/models/{engine}")
-    def find_models(engine: str):
+    def find_models(request: Request, engine: str):
         """Ask one engine what models it has, and write down the answer.
 
         Its own tiny form, so the button can sit in the row it belongs to
@@ -1978,11 +2011,11 @@ def create_app(cfg: Config) -> FastAPI:
             found = []
         remember_models(engine, found)
         if not found:
-            return see_other("/settings", notice="models-none")
-        return see_other("/settings", notice="models-found", n=len(found))
+            return answer(request, settings_url("motores"), "models-none")
+        return answer(request, settings_url("motores"), "models-found", n=len(found))
 
     @app.post("/settings/env")
-    def make_env_file(provider: str = Form("")):
+    def make_env_file(request: Request, provider: str = Form("")):
         """An empty .env with the right variable in it, to paste a key into.
 
         The variable is the one the row you pressed needs. A form cannot nest
@@ -1998,10 +2031,10 @@ def create_app(cfg: Config) -> FastAPI:
         wanted = provider.strip()
         name = key_variable(wanted if find_provider(wanted) else saved_provider())
         if env_file_state()["exists"]:
-            return see_other("/settings", notice="env-there")
+            return answer(request, settings_url("motores"), "env-there")
         if not env.create(name, config_file()):
-            return see_other("/settings", notice="env-failed")
-        return see_other("/settings", notice="env-made")
+            return answer(request, settings_url("motores"), "env-failed")
+        return answer(request, settings_url("motores"), "env-made")
 
     # --- analysing a batch of what the import left ---------------------------
     #
@@ -2446,7 +2479,7 @@ def create_app(cfg: Config) -> FastAPI:
         return see_other("/", sel=new, notice="reading")
 
     @app.post("/retry")
-    def start_batch(background: BackgroundTasks, debug: str = Form("")):
+    def start_batch(request: Request, background: BackgroundTasks, debug: str = Form("")):
         live = current["cfg"]
         if debug:
             # This batch and no other: the box is on the page that starts a
@@ -2457,12 +2490,16 @@ def create_app(cfg: Config) -> FastAPI:
         # work the run will not find.
         waiting = len(owed(Queue())[0])
         if not waiting:
-            return see_other("/retry", notice="nothing-owed")
-        if not progress.start(min(live.batch, waiting)):
+            return answer(request, "/retry", "nothing-owed")
+        size = min(live.batch, waiting)
+        if not progress.start(size):
             # Two runs would reach for the same links and pay twice for each.
-            return see_other("/retry", notice="batch-running")
+            return answer(request, "/retry", "batch-running")
         # After the response, not before it: a batch of fifty is an hour.
         background.add_task(run_batch, live, progress, live.batch)
+        if wants_json(request):
+            return answer(request, "/retry", "analysing-one" if size == 1 else "analysing",
+                          n=size)
         return see_other("/retry", notice="batch-started")
 
     # --- importing a WhatsApp export ---------------------------------------

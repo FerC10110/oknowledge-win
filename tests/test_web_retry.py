@@ -727,3 +727,28 @@ def test_the_box_ticked_traces_this_batch_and_no_other(setup, started):
     # The server's own config is untouched: a box ticked once must not leave
     # every later run writing the full text of every page to disk.
     assert client.app.state.settings["cfg"].trace_to == ""
+
+
+# --- a batch started from Settings (delivery 3, spec §3.1) ------------------------
+
+JSON = {"Accept": "application/json"}
+
+
+def test_a_script_starting_a_batch_is_told_how_many(setup, started):
+    cfg, client = setup                       # batch=2
+    owe(3)
+    assert client.post("/retry", headers=JSON).json() == {"ok": True, "notice": "Analysing 2 links"}
+
+
+def test_a_script_starting_one_is_told_in_the_singular(setup, started):
+    cfg, client = setup
+    owe(1)
+    assert client.post("/retry", headers=JSON).json()["notice"] == "Analysing 1 link"
+
+
+def test_a_second_batch_is_a_409_to_a_script(setup, started):
+    cfg, client = setup
+    owe(3)
+    client.post("/retry", follow_redirects=False)
+    assert client.post("/retry", headers=JSON).status_code == 409
+    assert len(started) == 1
