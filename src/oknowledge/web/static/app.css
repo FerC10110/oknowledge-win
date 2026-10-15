@@ -481,3 +481,17 @@ html:not(.js) .js-only { display: none !important; }
 .cat-rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .cat-row { display: grid; grid-template-columns: 8px minmax(0, 1fr) auto auto; align-items: center; gap: 10px; }
 .where summary { cursor: pointer; color: var(--t5); font-size: 12.5px; }
+
+/* --- modals (spec §3; handoff §4-§5) ---------------------------------------- */
+.modal { background: #1b1c21; border: 1px solid #2e3038; border-radius: 14px; color: var(--t2);
+  padding: 0; box-shadow: var(--shadow); line-height: normal; }
+.modal::backdrop { background: #0009; }
+.modal-head { display: flex; align-items: center; justify-content: space-between; padding: 18px 22px 0; }
+.modal-head h2 { margin: 0; font-size: 15px; font-weight: 600; color: var(--t1); }
+.modal.keys { width: 420px; max-width: calc(100vw - 32px); }
+.keys-grid { display: grid; grid-template-columns: auto 1fr; gap: 10px 18px; margin: 0;
+  padding: 16px 22px 22px; font-size: 13px; align-items: center; }
+.keys-grid dt { display: flex; gap: 4px; }
+.keys-grid dd { margin: 0; color: var(--t3); }
+.keys-grid kbd { display: inline-block; min-width: 18px; padding: 1px 5px; border: 1px solid #2a2b32;
+  border-radius: 4px; font-size: 10px; text-align: center; color: var(--t2); }

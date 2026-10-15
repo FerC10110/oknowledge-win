@@ -8,15 +8,10 @@
   var DELAY = 1000;
   var texts = document.body.dataset;
 
+  // The one toast is app.js's (spec §2).
   function toast(text) {
-    if (!text) return;
-    document.querySelectorAll(".toast").forEach(function (old) { old.remove(); });
-    var p = document.createElement("p");
-    p.className = "notice toast";
-    p.setAttribute("role", "status");
-    p.textContent = text;
-    document.body.appendChild(p);
-    setTimeout(function () { p.remove(); }, 2700);
+    var ok = window.oknowledge;
+    if (text && ok && ok.toast) ok.toast(text);
   }
 
   // The answer of a write, as JSON. Anything that is not {"ok": true} is an
@@ -214,6 +209,12 @@
     scope.querySelectorAll("[data-autosave]").forEach(watchField);
   }
 
-  window.oknowledge = { toast: toast, post: post, bind: bind, settle: settle, dirty: dirty };
+  // app.js made window.oknowledge (the toast, the menus, the keys); this
+  // adds the saving. Never replaced: every script hangs its part on it.
+  var ok = window.oknowledge || (window.oknowledge = {});
+  ok.post = post;
+  ok.bind = bind;
+  ok.settle = settle;
+  ok.dirty = dirty;
   bind(document);
 })();

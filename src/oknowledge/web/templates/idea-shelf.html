@@ -9,7 +9,7 @@
         role="search" data-mode="ideas">
     <button type="submit" class="default-submit" tabindex="-1" aria-hidden="true"></button>
     <input type="text" name="q" id="field-q" value="{{ view.q }}" autocomplete="off"
-           aria-label="{{ t('Search your ideas') }}" placeholder="{{ t('Search your ideas') }}">
+           aria-label="{{ t('Search your ideas') }}" placeholder="{{ t('Search your ideas') }}" data-slash>
     {% if view.estado %}<input type="hidden" name="estado" value="{{ view.estado }}">{% endif %}
     {% if view.vista == 'lista' %}<input type="hidden" name="vista" value="lista">{% endif %}
     <span class="save">

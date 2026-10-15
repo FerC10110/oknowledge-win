@@ -594,6 +594,18 @@ STRINGS = {
             "Restaurado · %2 no: ya hay otra nota con ese link",
         "%1 restored · %2 not: there is already another note with that link":
             "%1 restaurados · %2 no: ya hay otra nota con ese link",
+        # The shortcuts help (delivery 3, spec §3.2).
+        "Keyboard shortcuts": "Atajos de teclado",
+        "Search or paste a link": "Buscar o pegar un link",
+        "Library · Leisure · Ideas": "Biblioteca · Ocio · Ideas",
+        "Previous / next": "Anterior / siguiente",
+        "Row up / down": "Fila arriba / abajo",
+        "Open the original link": "Abrir original",
+        "Add a tag": "Agregar etiqueta",
+        "Select": "Seleccionar",
+        "Delete the selected": "Borrar seleccionados",
+        "List / cards": "Lista / tarjetas",
+        "Close / deselect": "Cerrar / deseleccionar",
         "Restored, but the indexes could not be rebuilt. Run `oknowledge reindex` "
         "once the folder is writable again.":
             "Restaurado, pero no se pudieron rehacer los índices. Corré "

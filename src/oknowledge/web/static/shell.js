@@ -18,15 +18,10 @@
   var KEEP = ["vista", "estado", "tipo", "orden"];
   var prefixes = (form.dataset.savePrefixes || "").split(/\s+/).filter(Boolean);
 
+  // The one toast is app.js's (spec §2).
   function toast(text) {
-    if (!text) return;
-    document.querySelectorAll(".toast").forEach(function (old) { old.remove(); });
-    var p = document.createElement("p");
-    p.className = "notice toast";
-    p.setAttribute("role", "status");
-    p.textContent = text;
-    document.body.appendChild(p);
-    setTimeout(function () { p.remove(); }, 2700);
+    var ok = window.oknowledge;
+    if (text && ok && ok.toast) ok.toast(text);
   }
 
   function here() { return new URL(location.href); }
@@ -186,7 +181,7 @@
         var active = document.activeElement;
         var refocus = active && active.id && panel.contains(active) ? active.id : "";
         panel.innerHTML = html;
-        if (window.oknowledge) window.oknowledge.bind(panel);   // the note saves itself
+        if (window.oknowledge && window.oknowledge.bind) window.oknowledge.bind(panel);   // the note saves itself
         // The same card again (a rewrite ended): the box being typed in keeps the caret.
         var again = refocus && document.getElementById(refocus);
         if (again && panel.contains(again) && again.focus) {
@@ -396,29 +391,13 @@
       .catch(function () { delete link.dataset.loading; });
   }
 
-  // --- menus --------------------------------------------------------------
-  document.addEventListener("toggle", function (event) {
-    var opened = event.target;
-    if (!opened.matches || !opened.matches("details.menu") || !opened.open) return;
-    document.querySelectorAll("details.menu[open]").forEach(function (d) {
-      if (d !== opened) d.open = false;
-    });
-  }, true);
-
+  // --- menus ------------------------------------------------------------------
+  // Their rule is app.js's now, on every page (one open at a time, a click
+  // outside or Esc closes them); an inline write only closes them.
   function closeMenus() {
-    document.querySelectorAll("details.menu[open]").forEach(function (d) { d.open = false; });
+    var ok = window.oknowledge;
+    if (ok && ok.closeMenus) ok.closeMenus();
   }
-
-  document.addEventListener("click", function (event) {
-    if (!event.target.closest("details.menu")) closeMenus();
-  });
-
-  document.addEventListener("keydown", function (event) {
-    if (event.key === "Escape") {
-      closeMenus();
-      if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
-    }
-  });
 
   // --- edits in place -------------------------------------------------------
   document.addEventListener("submit", function (event) {

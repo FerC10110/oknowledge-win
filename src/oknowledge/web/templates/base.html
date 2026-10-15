@@ -11,7 +11,8 @@
 <body class="{% block body_class %}{% endblock %}" data-close="{{ t('Close') }}"
       data-save-failed="{{ t('It could not be saved') }}"
       data-done="{{ t('Done: summary written') }}"
-      data-failed="{{ t('The link could not be analysed') }}">
+      data-failed="{{ t('The link could not be analysed') }}"
+      data-undo="{{ t('Undo') }}">
   <div class="app {% block app_class %}legacy{% endblock %}">
     {% include "sidebar.html" %}
     {% block layout %}
@@ -31,8 +32,20 @@
     {%- if notice and toast %}<span class="toast-text">{{ notice }}</span>
       {%- if undo %}<form method="post" action="/undo/{{ undo }}" class="toast-undo"><input type="hidden" name="back" value="{{ undo_back }}"><button>{{ t('Undo') }}</button></form>{% endif %}
     {%- endif %}</div>
+  {# The shortcuts help (spec §3.2): drawn on every page, opened by app.js
+     with ? or "Atajos". Without JavaScript it never opens. #}
+  <dialog id="keys-help" class="modal keys" aria-labelledby="keys-title">
+    <div class="modal-head"><h2 id="keys-title">{{ t('Keyboard shortcuts') }}</h2>
+      <button type="button" class="btn icon" data-close aria-label="{{ t('Close') }}" title="{{ t('Close') }}">✕</button></div>
+    <dl class="keys-grid">
+      {%- for combo, text in KEYS_HELP %}
+      <dt>{% for key in combo %}<kbd class="mono">{{ key }}</kbd>{% endfor %}</dt><dd>{{ t(text) }}</dd>
+      {%- endfor %}
+    </dl>
+  </dialog>
   {# Not deferred: it has to fold the page before the first paint. #}
   <script src="/static/layout.js"></script>
+  <script src="/static/app.js" defer></script>
   <script src="/static/settings.js" defer></script>
   {% block scripts %}{% endblock %}
 </body>

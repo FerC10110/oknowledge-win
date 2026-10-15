@@ -221,6 +221,21 @@ NOTICES = {
 # a logo guessed wrong is worse than no logo.
 ENGINE_ICONS = ("opencode", "ollama", "api")
 
+KEYS_HELP = (
+    (("/",), "Search or paste a link"),
+    (("1", "2", "3"), "Library · Leisure · Ideas"),
+    (("j", "k", "←", "→"), "Previous / next"),
+    (("↑", "↓"), "Row up / down"),
+    (("↵",), "Open the original link"),
+    (("f",), "Favorite"),
+    (("e",), "Add a tag"),
+    (("x",), "Select"),
+    (("⌫",), "Delete the selected"),
+    (("v",), "List / cards"),
+    (("esc",), "Close / deselect"),
+)
+"""The shortcuts help (spec §3.2), in its order: the keys and a t() key."""
+
 # How long the running batch page waits before coming back. A link is tens of
 # seconds of model call, so this is about a bar that moves, not a live one, and
 # every reload is a queue listing.
@@ -805,6 +820,7 @@ def create_app(cfg: Config) -> FastAPI:
     # The engines there is an icon for. A name outside this never reaches an
     # include: `engine:` is frontmatter and frontmatter is typed by hand.
     templates.env.globals["engines"] = ENGINE_ICONS
+    templates.env.globals["KEYS_HELP"] = KEYS_HELP
     app.mount("/static", StaticFiles(directory=str(WEB.joinpath("static"))), name="static")
 
     def page(request: Request, name: str, status_code: int = 200, **context) -> HTMLResponse:

@@ -101,7 +101,7 @@
       <input type="search" name="q" id="links-q" value="{{ q }}" autocomplete="off"
              aria-label="{{ t('Search your %1 links to add', library_total) }}"
              placeholder="{{ t('Search your %1 links to add', library_total) }}"
-             data-results="/item/{{ note.id|slug }}/buscar-links">
+             data-results="/item/{{ note.id|slug }}/buscar-links" data-slash>
     </form>
   </div>
   <div class="links-scroll">{% include "idea-links.html" %}</div>

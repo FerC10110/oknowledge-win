@@ -46,7 +46,7 @@ def test_the_page_has_every_hook(client, hook):
 
 @pytest.mark.parametrize("name", ["/lista", "/panel/", "/item/", "/state", "requestSubmit",
                                   "history.replaceState", "IntersectionObserver",
-                                  "localStorage", "250", "3000", "Escape", "savePrefixes"])
+                                  "localStorage", "250", "3000", "savePrefixes"])
 def test_the_script_uses_what_the_spec_says(name):
     assert name in SCRIPT.read_text(encoding="utf-8")
 
