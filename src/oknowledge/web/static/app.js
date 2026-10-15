@@ -143,15 +143,17 @@
     if (el && event.target.contains && event.target.contains(el)) raise();
   }, true);
 
+  // True when the dialog was opened.
   function openModal(dialog) {
-    if (!dialog || dialog.open) return;
+    if (!dialog || dialog.open) return false;
     // On the phone Ajustes is a layer: back closes it (delivery 4, §8). Not
     // over another layer -- the detail covers the top bar anyway.
     if (dialog.id === "settings-modal" && phone() &&
-        !openLayer("settings", function () { if (dialog.open) dialog.close(); })) return;
+        !openLayer("settings", function () { if (dialog.open) dialog.close(); })) return false;
     closeMenus();
     dialog.showModal();
     raise();
+    return true;
   }
 
   function toggleKeys() {
@@ -202,6 +204,7 @@
 
   function adoptLayer(name, onClose) {
     if (layer) return false;
+    if (stale === name) stale = null;
     layer = { name: name, onClose: onClose,
               pushed: !!(history.state && history.state.layer === name) };
     return true;
@@ -210,7 +213,8 @@
   // The layer on top goes: by back() when it has its entry (popstate below
   // does the rest), else at once, in place. Never off the site.
   function closeLayer() {
-    if (!layer) return leaving || Promise.resolve();
+    if (leaving) return leaving;           // one back() per layer, never two
+    if (!layer) return Promise.resolve();
     if (layer.pushed && history.state && history.state.layer === layer.name) {
       if (!leaving) leaving = new Promise(function (resolve) { landed = resolve; });
       history.back();
@@ -221,6 +225,17 @@
     top.onClose("close");
     return Promise.resolve();
   }
+
+  // A reload (pull to refresh) on a layer's entry draws the page without
+  // that layer unless a script adopts it while the page loads (the detail
+  // with ?sel= does). One nobody adopted is a dead step: back from it would
+  // change nothing. It goes, by a back() to the entry it was pushed from --
+  // the same page, so nothing is drawn again.
+  var stale = (window.history && history.state && history.state.layer) || null;
+  document.addEventListener("DOMContentLoaded", function () {
+    if (stale && !layer && history.state && history.state.layer === stale) history.back();
+    stale = null;
+  });
 
   window.addEventListener("popstate", function () {
     var top = layer;

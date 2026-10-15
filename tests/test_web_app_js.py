@@ -476,6 +476,15 @@ function press(key) {
   press("Escape");
   await tick();
   out.escClosesLayer = [ok.layers.top(), closed[closed.length - 1]];
+  // 4b. Fix round 1: Ajustes is refused over a panel layer, and a second
+  // close() before the first back() lands goes back only once.
+  ok.layers.open("panel", (how) => closed.push("twice:" + how), "/?sel=c3");
+  const pushedAt = at, count = entries.length;
+  out.refusedOverPanel = [ok.openModal(modal), modal.open, entries.length === count, ok.layers.top()];
+  const first = ok.layers.close(), again = ok.layers.close();
+  await first; await again; await tick();
+  out.closeTwice = [at === pushedAt - 1, out.leftSite === true, ok.layers.top(),
+                    closed.filter((c) => c.startsWith("twice:"))];
   // 5. A desktop: Ajustes makes no entry.
   narrow = false;
   const length = entries.length;
@@ -536,3 +545,81 @@ def test_esc_blurs_a_field_before_it_closes_the_layer(layers):
 
 def test_a_desktop_makes_no_history_for_settings(layers):
     assert layers["desktop"] == [True, True, ""]
+
+
+def test_ajustes_is_refused_over_a_panel_layer(layers):
+    assert layers["refusedOverPanel"] == [False, False, True, "panel"]
+
+
+def test_closing_twice_goes_back_only_once(layers):
+    assert layers["closeTwice"] == [True, False, "", ["twice:back"]]
+
+
+# A reload on a layer's entry (pull to refresh): one nobody adopts goes, by one back().
+RELOAD_HARNESS = r"""
+const source = require("fs").readFileSync(process.argv[2], "utf8");
+const adopt = process.argv[3];                     // "" or a layer a script adopts
+const out = {};
+const win = {}, handlers = {};
+global.window = global;
+global.addEventListener = (type, fn) => { (win[type] = win[type] || []).push(fn); };
+const entries = [{ state: null, url: "/ocio" }, { state: null, url: "/" },
+                 { state: { layer: process.argv[4] }, url: "/" }];
+let at = 2;
+global.location = { get href() { return "http://x" + entries[at].url; }, pathname: "/", reload() {} };
+global.history = {
+  get state() { return entries[at].state; },
+  pushState() { throw new Error("no push"); },
+  replaceState(state) { entries[at].state = state; },
+  back() { at--; setTimeout(() => (win.popstate || []).forEach((fn) => fn({})), 0); },
+};
+global.matchMedia = () => ({ matches: true });
+global.document = {
+  body: { dataset: {}, tagName: "BODY" },
+  addEventListener: (type, fn) => { (handlers[type] = handlers[type] || []).push(fn); },
+  getElementById: () => null, querySelector: () => null, querySelectorAll: () => [],
+};
+document.activeElement = document.body;
+eval(source);
+if (adopt) window.oknowledge.layers.adopt(adopt, () => {});   // a deferred script, before DOMContentLoaded
+(handlers.DOMContentLoaded || []).forEach((fn) => fn());
+setTimeout(() => {
+  out.at = at;
+  out.top = window.oknowledge.layers.top();
+  console.log(JSON.stringify(out));
+}, 10);
+"""
+
+
+@pytest.fixture(scope="module")
+def reloads(tmp_path_factory):
+    """Both cases, run before the per-test guard against programs (as `layers`)."""
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not installed")
+    harness = tmp_path_factory.mktemp("reload") / "harness.js"
+    harness.write_text(RELOAD_HARNESS, encoding="utf-8")
+    found = {}
+    for case, adopt, state in (("dead", "", "settings"), ("adopted", "panel", "panel")):
+        done = subprocess.run([node, str(harness), str(APP), adopt, state], capture_output=True,
+                              text=True, timeout=30, check=False)
+        assert done.returncode == 0, done.stderr
+        found[case] = json.loads(done.stdout.strip().splitlines()[-1])
+    return found
+
+
+def test_a_reload_on_an_entry_nobody_adopts_drops_it(reloads):
+    """Fix round 1: Ajustes reloaded is not drawn again, so its entry goes."""
+    assert reloads["dead"] == {"at": 1, "top": ""}
+
+
+def test_a_reload_on_an_adopted_layer_keeps_its_entry(reloads):
+    assert reloads["adopted"] == {"at": 2, "top": "panel"}
+
+
+def test_settings_loads_nothing_when_ajustes_is_refused():
+    text = (STATIC / "settings.js").read_text(encoding="utf-8")
+    opening = between(text, "ok.openSettings = function", "ok.bindSettings")
+    gate = "if (!modal.open && !ok.openModal(modal)) return;"
+    assert gate in opening
+    assert opening.index(gate) < opening.index("modal.replaceChildren()") < opening.index("fetch(")

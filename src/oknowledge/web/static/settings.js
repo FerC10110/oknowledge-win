@@ -266,11 +266,13 @@
   ok.openSettings = function (tab) {
     if (!modal) { location.href = "/settings"; return; }
     var key = tab || lastTab || "motores";
+    // Refused on the phone over another layer (the detail): nothing to load.
+    if (!modal.open && !ok.openModal(modal)) return;
     renamed = false;
     pendingRename = null;
     modal.replaceChildren();
     modal.classList.add("loading");
-    ok.openModal(modal);
+    raiseToast();                          // the toast sat in what was just emptied
     fetch("/settings/panel?tab=" + encodeURIComponent(key), { headers: { Accept: "text/html" } })
       .then(function (r) { if (!r.ok) throw new Error(r.status); return r.text(); })
       .then(function (html) {
