@@ -252,3 +252,16 @@ out.focused = byId["card-note"].focused;
 out.range = byId["card-note"].range;
 """, "/ocio?sel=o1")
     assert out["focused"] and out["range"] == expected
+
+
+def test_a_sort_with_a_link_to_save_in_the_field_drops_the_old_q(tmp_path):
+    """Review M-5: the field holds a link, not a search: the list sorted is
+    the whole one, as the field shows no words to search for."""
+    out = ocio(tmp_path, """
+field.value = "https://www.imdb.com/title/tt0088247/";
+click(navLink("/ocio?q=dune&orden=titulo", { sort: true })); await settle();
+out.url = where().url;
+out.field = field.value;
+""", "/ocio?q=dune")
+    assert out["url"] == "/ocio?orden=titulo"
+    assert out["field"] == "https://www.imdb.com/title/tt0088247/"

@@ -532,8 +532,9 @@
       var orden = href.searchParams.get("orden");
       if (orden) target.searchParams.set("orden", orden); else target.searchParams.delete("orden");
       var q = field.value.trim().split(/\s+/).join(" ");
-      if (!q) target.searchParams.delete("q");
-      else if (!saves(field.value)) target.searchParams.set("q", q);
+      // A link (or "película: …") to save is not a search: no q at all.
+      if (!q || saves(field.value)) target.searchParams.delete("q");
+      else target.searchParams.set("q", q);
     } else {
       field.value = "";
       form.classList.remove("saving");
