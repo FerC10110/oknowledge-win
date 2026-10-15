@@ -9,6 +9,7 @@ comparación de capturas dio 0 píxeles con diferencia fuerte en todas.
 
 ## Tests flojos
 
-- Los tests de la capa (`shell.js`), del modo Seleccionar y de las pestañas
-  buscan texto en el código; el comportamiento lo probaron scripts de
-  Playwright que no están en el repo.
+- La capa, el modo Seleccionar y las pestañas corren en node desde la tanda
+  G. Siguen leyendo `shell.js`: el borrado desde la capa, los catálogos que
+  abren la capa, el ida y vuelta por `a[data-back]`, y los filtros gemelos de
+  la barra y la fila de chips (el harness no dibuja la barra lateral).

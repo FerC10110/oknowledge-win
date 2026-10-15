@@ -10,9 +10,13 @@ entrega 3. Ninguno pierde datos: en el peor caso una nota queda en
 ## Código
 
 - `settings_panel` arma `t`, `lang` y `batch` a mano en vez de usar `page()`.
+  Tanda G lo dejó así a propósito: `page()` refresca los tres estantes y, si
+  la biblioteca no se puede leer, devuelve `error.html` entero con 503, que
+  dentro del modal sería una página dentro de otra. Si se quiere unificar,
+  hace falta un `chrome()` con sólo `t`/`lang`/`batch` que usen los dos.
 
 ## Tests flojos
 
-- Los tests de `settings.js`, `shell.js` (teclas) y `select.js` buscan texto
-  en el código; el comportamiento lo probaron scripts de Playwright que no
-  están en el repo.
+- `select.js`, las teclas de `shell.js` y casi todo `settings.js` corren en
+  node desde la tanda G. De `settings.js` siguen leyendo el código el
+  selector de modelos, el botón de una acción y que no use `localStorage`.
