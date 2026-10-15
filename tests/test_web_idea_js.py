@@ -121,3 +121,23 @@ out.late = toasts.slice();
 """, running="improve")
     assert out["early"] == []
     assert out["late"] == ["Listo: Mejoras", "Falló: Ampliación"]
+
+
+def test_a_refresh_that_fails_after_a_write_rejects_nothing(idea):
+    """A tag added, then the screen cannot be read again (offline): refresh()
+    ends in its own catch, so the "+ tag" focus after it never sees a
+    rejection, and none goes unhandled (pendientes, batch G)."""
+    out = idea("""
+const unhandled = [];
+process.on("unhandledRejection", (e) => unhandled.push(String(e)));
+const focused = [];
+byId["tag-add"] = { focus() { focused.push(1); } };
+global.fetch = () => Promise.reject(new TypeError("Failed to fetch"));
+const form = { dataset: {}, matches: (s) => s === "form[data-json]", closest: () => null,
+               hasAttribute: () => false, classList: { contains: (c) => c === "tag-new" } };
+(docOn.submit || []).forEach((fn) => fn({ target: form, preventDefault() {} }));
+await settle(); await new Promise((r) => setTimeout(r, 20));
+out.unhandled = unhandled; out.focused = focused.length;
+""")
+    assert out["unhandled"] == []
+    assert out["focused"] == 1

@@ -10,7 +10,6 @@ entrega 3. Ninguno pierde datos: en el peor caso una nota queda en
 ## Código
 
 - `settings_panel` arma `t`, `lang` y `batch` a mano en vez de usar `page()`.
-- `idea.js`: el `refresh(...).then(...)` no atrapa el rechazo (como antes).
 
 ## Tests flojos
 
