@@ -368,7 +368,7 @@ las pestañas.
 Nada nuevo ni nada quitado. En el celular no hay ayuda visible ni hints, y las
 teclas sólo se usan con un teclado físico. Dos detalles:
 - `j`/`k`/flechas eligen el ítem (y se dibuja el cursor `.on` sólo si el último
-  evento fue de teclado: clase `keyed` en `#items`, que el primer `pointerdown`
+  evento fue de teclado: clase `keyed` en `#list` (sobrevive al redibujo de la lista), que el primer `pointerdown`
   saca) pero no abren la capa; Enter sigue abriendo el original.
 - Esc suma el paso de la capa (§6.3) y sale del modo selección (§9).
 
