@@ -591,3 +591,30 @@ def test_the_bulk_star_is_named_once(client):
     """Spec §9: on the phone the words hide behind a ★ ::before; the name stays one word."""
     bar = re.search(r'<form id="bulk".*?</form>', client.get("/").text, re.S).group(0)
     assert re.search(r'<button[^>]*class="bulk-star" aria-label="Favorite">', bar)
+
+
+# --- Task 11: the desktop (Review Focus 5) ------------------------------------------------
+
+def test_outside_its_media_blocks_delivery_4_only_hides():
+    """Every rule of the delivery-4 section that a desktop reads: the parts
+    the phone adds are hidden, the ↵ hint keeps its button's width, and a
+    custom property nobody above 60rem uses. Anything else is a leak."""
+    css = static("app.css")
+    section = css[css.index("/* --- delivery 4: the phone"):]
+    for head in (PHONE, WIDE, "@media (hover: none) {", "@media (pointer: coarse) {"):
+        section = section.replace(block(section, head), "")
+    section = re.sub(r"/\*.*?\*/", "", section, flags=re.S)
+    rules = {" ".join(rule.split()) for rule in section.split("}") if rule.strip()}
+    assert rules == {
+        ".topbar, .tabbar { display: none;", ".chip-row { display: none;",
+        ".detail-back { display: none;", ".btn:has(> .enter-hint) { gap: 0;",
+        ".select-mode { display: none;",
+        ":root { --tabbar-h: calc(60px + env(safe-area-inset-bottom));"}
+
+
+def test_a_finger_hides_shortcuts_even_in_the_sidebar():
+    """Spec §1, §4: a wide tablet with a finger keeps the sidebar, but not
+    "Atajos". `.sidebar .foot-link { display: flex }` outranks a bare
+    `[data-modal="keys"]`, so the coarse block names it inside the sidebar."""
+    coarse = block(static("app.css"), "@media (pointer: coarse) {")
+    assert '.sidebar [data-modal="keys"]' in coarse

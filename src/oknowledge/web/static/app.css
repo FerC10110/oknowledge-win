@@ -800,5 +800,5 @@ html:not(.js) .js-only { display: none !important; }
 
 /* A finger: what only a keyboard uses is not drawn (§1, §4). */
 @media (pointer: coarse) {
-  .key, .enter-hint, .unified .hint, [data-modal="keys"], .drop-title { display: none; }
+  .key, .enter-hint, .unified .hint, .sidebar [data-modal="keys"], .drop-title { display: none; }
 }
