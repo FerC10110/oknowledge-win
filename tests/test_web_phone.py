@@ -472,3 +472,78 @@ def test_a_rename_reloads_only_after_the_layer_has_gone():
     body = js[head:js.index("\n    });", head)]                # the listener's own end
     assert "ok.layers ? ok.layers.settled() : Promise.resolve()" in body
     assert "after.then(function () { location.reload(); })" in body
+
+
+# --- Task 9: the layer in shell.js (spec §6.3, §10) -----------------------------------------
+
+def between(text, start, end):
+    head = text.index(start)
+    return text[head:text.index(end, head)]
+
+
+def test_a_tap_opens_the_layer_and_a_key_does_not():
+    js = static("shell.js")
+    click = between(js, 'document.addEventListener("click"', "// --- remembered layout")
+    assert "loadPanel(link.dataset.sel, false, { push: true })" in click
+    body = between(js, "function loadPanel", "function loadCatalog")
+    assert "opts && opts.push && phone() && !isOpen() && openLayer(url)" in body
+    assert 'panel.setAttribute("aria-busy", "true")' in body
+    assert 'panel.removeAttribute("aria-busy")' in body
+    # j/k (pick), the poller and loadList never push.
+    assert re.search(r"function pick\(id\) \{\n[^}]*loadPanel\(id\);", js)
+
+
+def test_a_shut_layer_keeps_the_pick_out_of_the_url():
+    js = static("shell.js")
+    assert "if (phone() && !isOpen()) return;" in between(js, "function writePick", "\n  }\n")
+    assert "writePick(url)" in between(js, "function keepShown", "\n  }\n")
+    assert "if (phone()) return;" in between(js, "// --- the pick in the URL", "observe();")
+
+
+def test_shell_keeps_the_entry_s_state():
+    js = static("shell.js")
+    assert "replaceState(null" not in js
+    assert "history.replaceState(history.state," in js
+
+
+@pytest.mark.parametrize("name", ["idea.js", "settings.js"])
+def test_the_other_pages_keep_the_entry_s_state_too(name):
+    # A replaceState(null, …) under a layer's entry would wipe {layer, base}.
+    js = static(name)
+    assert "replaceState(null" not in js
+    assert "history.replaceState(history.state," in js
+
+
+def test_back_forward_and_the_way_back_go_through_the_layers():
+    js = static("shell.js")
+    assert 'ok.layers.open("panel", closedLayer, url.pathname + url.search)' in js
+    assert js.count('ok.layers.adopt("panel", closedLayer)') == 2      # on load, and forward
+    forward = between(js, 'window.addEventListener("popstate"', "});")
+    assert 'event.state.layer !== "panel"' in forward
+    click = between(js, 'document.addEventListener("click"', "// --- remembered layout")
+    assert 'closest("a[data-back]")' in click and 'ok.layers.top() === "panel"' in click
+
+
+def test_a_delete_from_the_layer_goes_back_to_the_list_and_opens_nothing():
+    handler = between(static("shell.js"), "// --- edits in place", "// --- links being read")
+    assert 'deleting && phone() && ok.layers && ok.layers.top() === "panel"' in handler
+    assert "ok.offerUndo(answer.notice, answer.undo, function () { ok.list.reload(); });" in handler
+    assert 'ok.layers.close().then(function () { loadList(here().href, true, "refresh"); });' in handler
+
+
+def test_an_empty_panel_does_not_stay_open():
+    assert 'if (phone() && isOpen() && ok.layers) ok.layers.close();' in between(
+        static("shell.js"), "function emptyPanel", "\n  }\n")
+
+
+def test_the_catalogs_open_the_layer_too():
+    js = static("shell.js")
+    assert "push && phone() && !isOpen() && openLayer(url)" in between(js, "function showCatalog", "function emptyPanel")
+    submit = between(js, 'form.addEventListener("submit"', "// --- more at the end")
+    assert 'loadCatalog(field.value.trim().split(/\\s+/).join(" "), undefined, true)' in submit
+
+
+def test_keys_draw_the_pick_until_a_finger_touches():
+    js = static("shell.js")
+    assert 'list.classList.add("keyed")' in between(js, "function step", "\n  }\n")
+    assert 'document.addEventListener("pointerdown", function () { list.classList.remove("keyed"); }, true);' in js

@@ -16,7 +16,7 @@
     var url = here();
     if (!value || value === fallback) url.searchParams.delete(name);
     else url.searchParams.set(name, value);
-    history.replaceState(null, "", url.pathname + url.search);
+    history.replaceState(history.state, "", url.pathname + url.search);
   }
 
   function parse(html) { return new DOMParser().parseFromString(html, "text/html"); }

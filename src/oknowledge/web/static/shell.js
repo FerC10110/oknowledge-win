@@ -90,6 +90,39 @@
     if (li) li.scrollIntoView({ block: "nearest" });
   }
 
+  // --- the phone's layer (docs/2026-10-15-rediseno-celular-design.md §6.3) ----------
+  // app.js owns the breakpoint and the history entries; this opens and
+  // shuts the detail over the list.
+  function phone() { return !!(ok.phone && ok.phone()); }
+
+  function isOpen() { return !!panel && panel.hasAttribute("data-open"); }
+
+  // Where a pick goes in the URL. On the phone a pick that is not open
+  // stays out of it (Ruling 10): a reload, or a back to this entry, would
+  // open a layer nobody asked for.
+  function writePick(url) {
+    if (phone() && !isOpen()) return;
+    history.replaceState(history.state, "", url.pathname + url.search);
+  }
+
+  // The detail over the list, with an entry of its own at `url`.
+  function openLayer(url) {
+    if (!panel || !ok.layers || !ok.layers.open("panel", closedLayer, url.pathname + url.search)) return false;
+    panel.setAttribute("data-open", "");
+    return true;
+  }
+
+  // The layer went: by back (the URL is the list's already), or in place
+  // (a page that started with sel=: it loses it here, and stays on the site).
+  function closedLayer(how) {
+    panel.removeAttribute("data-open");
+    panel.removeAttribute("aria-busy");
+    if (how !== "close") return;
+    var url = here();
+    ["sel", "buscar", "catalogo", "year"].forEach(function (name) { url.searchParams.delete(name); });
+    history.replaceState(history.state, "", url.pathname + url.search);
+  }
+
   // --- the list column ---------------------------------------------------
   var asked = 0;
   function loadList(url, keepScroll, reason) {
@@ -113,7 +146,7 @@
           var sel = here().searchParams.get("sel");
           if (sel) target.searchParams.set("sel", sel); else target.searchParams.delete("sel");
         }
-        history.replaceState(null, "", target.pathname + target.search);
+        history.replaceState(history.state, "", target.pathname + target.search);
         litTab(target.href);
         if (keepScroll) document.getElementById("list-body").scrollTop = top;
         var items = document.getElementById("items");
@@ -194,6 +227,7 @@
   // A save failed: the panel stays, with the text in its box (spec §1), and
   // the URL and the list say it is still the one shown.
   function keepShown(failed) {
+    panel.removeAttribute("aria-busy");
     toast(failed.message || texts.saveFailed);
     var onScreen = panel.querySelector("[data-panel]");
     var id = onScreen ? onScreen.dataset.panel : "";
@@ -201,7 +235,7 @@
     var url = here();
     ["buscar", "catalogo", "year"].forEach(function (name) { url.searchParams.delete(name); });
     url.searchParams.set("sel", id);
-    history.replaceState(null, "", url.pathname + url.search);
+    writePick(url);
     markCurrent(id);
   }
 
@@ -209,14 +243,17 @@
   // (an analysis that failed): its 404 empties the panel instead of
   // reloading the page, which would wipe the toast that just said so.
   var shownAsked = 0;
-  function loadPanel(id, gone) {
+  function loadPanel(id, gone, opts) {
     if (!panel) return;
     var mine = ++shownAsked;
     var url = here();
     url.searchParams.set("sel", id);
     // Ocio: a card picked ends a catalog search, on reload too.
     ["buscar", "catalogo", "year"].forEach(function (name) { url.searchParams.delete(name); });
-    history.replaceState(null, "", url.pathname + url.search);
+    // A tap on the phone opens the layer, with its own entry; anything else
+    // (keys, the poller, a list reload) loads the panel and leaves it shut.
+    if (opts && opts.push && phone() && !isOpen() && openLayer(url)) panel.setAttribute("aria-busy", "true");
+    else writePick(url);
     markCurrent(id);
     var STOP = {};
     return settled()
@@ -232,6 +269,7 @@
       })
       .then(function (html) {
         if (html === STOP || mine !== shownAsked) return;      // a newer panel was asked for since
+        panel.removeAttribute("aria-busy");
         // Typed in while this was on its way: that text is not in `html`.
         if (dirty(panel)) { loadPanel(id, gone); return; }
         if (html === null) { emptyPanel(); return; }
@@ -255,18 +293,18 @@
   // poster grid's filter and stays; `catalogo` is the kind searched. The
   // fragment takes that kind as `tipo` and the grid as `grid`, which its
   // kind links carry on.
-  function loadCatalog(q, kind) {
+  function loadCatalog(q, kind, push) {
     if (!panel) return;
     var mine = ++shownAsked;
     // The card's note leaves with the panel: it lands first (loadPanel).
     settled().then(function (failed) {
       if (mine !== shownAsked) return;
       if (failed) { keepShown(failed); return; }
-      showCatalog(q, kind, mine);
+      showCatalog(q, kind, mine, push);
     });
   }
 
-  function showCatalog(q, kind, mine) {
+  function showCatalog(q, kind, mine, push) {
     var url = here();
     var grid = url.searchParams.get("tipo") || "";
     // A kind picked in the panel, the one searched last, or the grid's
@@ -276,7 +314,8 @@
     url.searchParams.set("buscar", q);
     url.searchParams.set("catalogo", searched);
     url.searchParams.delete("sel");
-    history.replaceState(null, "", url.pathname + url.search);
+    if (push && phone() && !isOpen() && openLayer(url)) panel.setAttribute("aria-busy", "true");
+    else writePick(url);
     list.querySelectorAll("li.item.on").forEach(function (li) { li.classList.remove("on"); });
     var ask = new URLSearchParams({ q: q, tipo: searched });
     var year = url.searchParams.get("year");
@@ -286,6 +325,7 @@
       .then(function (r) { if (!r.ok) throw new Error(r.status); return r.text(); })
       .then(function (html) {
         if (mine !== shownAsked) return;
+        panel.removeAttribute("aria-busy");
         if (dirty()) { loadCatalog(q, kind); return; }
         panel.innerHTML = html;
       })
@@ -294,9 +334,11 @@
 
   function emptyPanel() {
     if (!panel) return;
+    // Nothing left to read: the phone's layer goes too (Ruling 25).
+    if (phone() && isOpen() && ok.layers) ok.layers.close();
     var url = here();
     url.searchParams.delete("sel");
-    history.replaceState(null, "", url.pathname + url.search);
+    history.replaceState(history.state, "", url.pathname + url.search);
     list.querySelectorAll("li.item.on").forEach(function (li) { li.classList.remove("on"); });
     var items = document.getElementById("items");
     if (items) items.dataset.current = "";
@@ -366,11 +408,19 @@
       loadCatalog(search ? search.dataset.search : "", kind.dataset.kind);
       return;
     }
+    // "← Biblioteca" over the layer: the browser's back, or a close in place
+    // (delivery 4, §6.3). Without a layer it stays a link to the list.
+    var back = event.target.closest("a[data-back]");
+    if (back && panel && panel.contains(back) && ok.layers && ok.layers.top() === "panel") {
+      event.preventDefault();
+      ok.layers.close();
+      return;
+    }
     var link = event.target.closest("a[data-sel], a[data-nav], a[data-view], a.more[data-more]");
     if (!link) return;
     event.preventDefault();
     if (link.dataset.sel) {
-      loadPanel(link.dataset.sel);
+      loadPanel(link.dataset.sel, false, { push: true });
     } else if (link.hasAttribute("data-view")) {
       try { localStorage.setItem(STORE, link.dataset.view); } catch (e) { /* private window */ }
       // From the URL as it is now, not the link's href: that carries the
@@ -442,7 +492,7 @@
     if (mode === "ocio" && !saves(field.value) && (catalog || field.value.trim())) {
       // Not the live filter after it: its list would take buscar off the URL.
       clearTimeout(timer);
-      if (field.value.trim()) loadCatalog(field.value.trim().split(/\s+/).join(" "));
+      if (field.value.trim()) loadCatalog(field.value.trim().split(/\s+/).join(" "), undefined, true);
       return;
     }
     if (saves(field.value)) {
@@ -489,7 +539,7 @@
         var url = here();
         url.searchParams.set("hasta", String((parseInt(from, 10) || 0) +
                                              added.length));
-        history.replaceState(null, "", url.pathname + url.search);
+        history.replaceState(history.state, "", url.pathname + url.search);
         observe();
         watch();
         told("more");
@@ -525,6 +575,14 @@
       })
       .then(function (answer) {
         if (!answer.ok) { toast(answer.error || texts.saveFailed); return; }
+        if (deleting && phone() && ok.layers && ok.layers.top() === "panel") {
+          // The phone: back to the list, which no longer has the note
+          // (delivery 4, §6.3). Deshacer brings it back to the list and opens
+          // nothing. The list reloads once the back has landed (Ruling 24).
+          ok.offerUndo(answer.notice, answer.undo, function () { ok.list.reload(); });
+          ok.layers.close().then(function () { loadList(here().href, true, "refresh"); });
+          return;
+        }
         if (deleting) {
           ok.offerUndo(answer.notice, answer.undo);
           if (next) {
@@ -606,6 +664,7 @@
   // With nothing picked, any move picks the first one. An empty list is
   // nothing to move: the key is left alone (false).
   function step(by) {
+    list.classList.add("keyed");      // the pick is drawn while keys move it (delivery 4, §10)
     var items = shown();
     if (!items.length) return false;
     var at = -1;
@@ -692,6 +751,7 @@
   // With no sel, a reload of the list would open whatever is first by then
   // (a batch adds links on top): the pick shown is written down.
   (function () {
+    if (phone()) return;            // a shut layer keeps sel out (Ruling 10)
     var items = document.getElementById("items");
     var url = here();
     // Not beside the catalog's panel (/ocio?buscar=X): #items still holds the
@@ -700,9 +760,30 @@
     if (panel && items && items.dataset.current && !url.searchParams.get("sel") &&
         !url.searchParams.get("buscar") && !catalog) {
       url.searchParams.set("sel", items.dataset.current);
-      history.replaceState(null, "", url.pathname + url.search);
+      history.replaceState(history.state, "", url.pathname + url.search);
     }
   })();
+
+  // A finger lets go of the key cursor (delivery 4, §10).
+  document.addEventListener("pointerdown", function () { list.classList.remove("keyed"); }, true);
+
+  // A page that starts with the layer open (sel= in the URL, a reload, a
+  // shared link, the redirect after saving): it is the layer on top.
+  if (isOpen() && phone() && ok.layers) ok.layers.adopt("panel", closedLayer);
+
+  // Forward again into the layer's entry: open it with what the URL names.
+  // app.js's popstate runs first and has shut whatever was on top.
+  window.addEventListener("popstate", function (event) {
+    if (!panel || !phone() || isOpen() || !ok.layers) return;
+    if (!event.state || event.state.layer !== "panel") return;
+    var url = here();
+    var sel = url.searchParams.get("sel");
+    var buscar = url.searchParams.get("buscar");
+    if (!sel && !buscar) return;
+    if (!ok.layers.adopt("panel", closedLayer)) return;
+    panel.setAttribute("data-open", "");
+    if (sel) loadPanel(sel); else loadCatalog(buscar, url.searchParams.get("catalogo"));
+  });
 
   litChipInView();
   observe();

@@ -41,7 +41,7 @@
       pane.hidden = pane.dataset.settingsPane !== key;
     });
     lastTab = key;
-    if (onPage) history.replaceState(null, "", "/settings?tab=" + encodeURIComponent(key));
+    if (onPage) history.replaceState(history.state, "", "/settings?tab=" + encodeURIComponent(key));
   }
 
   // --- the model pickers ----------------------------------------------------------
