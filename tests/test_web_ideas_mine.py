@@ -191,3 +191,14 @@ def test_the_title_and_the_text_are_ordered_apart(cfg, client):
     assert stale.json()["stale"] is True
     now = idea_now(cfg, note)
     assert (now.title, now.my_note) == ("Nombre nuevo", "Texto nuevo")
+
+
+def test_an_idea_title_from_another_page_is_written_whatever_its_revision(cfg, client):
+    """Final review I-1: revs of the title are ordered within one page only."""
+    note = put(cfg)
+    json = {"Accept": "application/json"}
+    client.post(f"/item/{note.id}/title", data={"title": "Del teléfono", "rev": "9000", "page": "p1"},
+                headers=json)
+    desk = client.post(f"/item/{note.id}/title",
+                       data={"title": "Del escritorio", "rev": "10", "page": "p2"}, headers=json)
+    assert "stale" not in desk.json() and idea_now(cfg, note).title == "Del escritorio"

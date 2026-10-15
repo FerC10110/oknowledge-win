@@ -17,6 +17,7 @@ import re
 import threading
 import time
 import unicodedata
+from collections import OrderedDict
 from importlib.resources import files
 from pathlib import Path
 from collections.abc import Callable
@@ -278,6 +279,18 @@ STALE = "stale"
 """edit()'s answer to an autosave whose revision is not newer than the last
 one written: a newer text of that field already landed, so this one is not
 written, and it is not an error either."""
+
+
+REVISIONS_KEPT = 10000
+"""How many (note, field, page) revisions the server remembers at most."""
+
+
+def ordered(field: str, page: str | None, raw: str | None) -> tuple[str, str, float] | None:
+    """An autosave's place in its page's order: the field, the page's id
+    (any text the page chose; none is a page of its own) and its rev. None
+    when there is no rev: always written."""
+    number = revision(raw)
+    return (field, page or "", number) if number is not None else None
 
 
 def revision(raw: str | None) -> float | None:
@@ -1194,15 +1207,19 @@ def create_app(cfg: Config) -> FastAPI:
                 return shelves, shelves.shelf
         return library, library.shelf
 
-    # The newest revision written of each (note, field) an autosave posts,
-    # in memory (review I-1): a save the browser gave up on can still run
-    # late on the server, and must not land over a newer text. A restart
-    # forgets them, which is safe: the page's next rev is the clock's.
-    revisions: dict[tuple[str, str], float] = {}
+    # The newest revision written of each (note, field, page) an autosave
+    # posts, in memory (review I-1): a save the browser gave up on can still
+    # run late on the server, and must not land over that page's newer text.
+    # Revs are ordered within one page only (final review I-1): they come
+    # from each device's clock, and a device whose clock is behind must not
+    # have its saves refused for another's. A restart forgets them, which is
+    # safe: the page's next rev is the clock's. The oldest entries are
+    # dropped past REVISIONS_KEPT, the same as a restart for those pages.
+    revisions: OrderedDict[tuple[str, str, str], float] = OrderedDict()
     revisions_lock = threading.Lock()
 
     def edit(link_id: str, change, done: str, stale: str, shelves=None,
-             rev: tuple[str, float] | None = None) -> Edited:
+             rev: tuple[str, str, float] | None = None) -> Edited:
         """Apply one change to one note, and say what to tell the user.
 
         `change(cfg, language)` is one of the vault's three editing functions,
@@ -1227,27 +1244,34 @@ def create_app(cfg: Config) -> FastAPI:
         shelves.refresh()
         if shelves.by_id(link_id) is None:
             return Edited(MISSING, False)
-        key = (link_id, rev[0]) if rev is not None else None
+        key = (link_id, rev[0], rev[1]) if rev is not None else None
+
+        def record():
+            with revisions_lock:
+                revisions[key] = max(rev[2], revisions.get(key, -math.inf))
+                revisions.move_to_end(key)
+                while len(revisions) > REVISIONS_KEPT:
+                    revisions.popitem(last=False)
+
         try:
             with link_lock(link_id):
                 # Under the lock, after the refresh: two saves of one field
-                # are ordered by their rev, not by when each got here.
+                # from one page are ordered by their rev, not by when each
+                # got here.
                 if key is not None:
                     with revisions_lock:
-                        if rev[1] <= revisions.get(key, -math.inf):
+                        if rev[2] <= revisions.get(key, -math.inf):
                             return Edited(STALE, False)
                 try:
                     value = change(live, live.language)
                 except IndexesStale:
                     if key is not None:          # written: only the indexes are behind
-                        with revisions_lock:
-                            revisions[key] = rev[1]
+                        record()
                     raise
                 if value is None:
                     return Edited(MISSING, False)
                 if key is not None:
-                    with revisions_lock:
-                        revisions[key] = max(rev[1], revisions.get(key, -math.inf))
+                    record()
         except Locked:
             return Edited("busy", False)
         except BadCategory:
@@ -1305,7 +1329,7 @@ def create_app(cfg: Config) -> FastAPI:
             return answer(request, item_url(link_id), extra={"stale": True})
         return answer(request, item_url(link_id), notice=result.notice)
 
-    def mine(request: Request, link_id: str, rev: tuple[str, float] | None = None, **change):
+    def mine(request: Request, link_id: str, rev: tuple[str, str, float] | None = None, **change):
         """One of your fields on one card or one idea, and nothing else.
 
         Not on a link: these fields exist on every Note, but a state and a
@@ -1369,11 +1393,11 @@ def create_app(cfg: Config) -> FastAPI:
     @app.post("/item/{link_id}/mine/note")
     def set_my_note(request: Request, link_id: str, my_note: str = Form(""),
                     title: str | None = Form(None),
-                    title_was: str | None = Form(None), rev: str | None = Form(None)):
+                    title_was: str | None = Form(None), rev: str | None = Form(None),
+                    page: str | None = Form(None)):
         # An idea's page sends its title with its text: one form, so a
         # renamed idea and its text land in one write. A card's never does.
-        number = revision(rev)
-        order = ("my_note", number) if number is not None else None
+        order = ordered("my_note", page, rev)
         shelves, which = held_by(link_id)
         if which.name != "ideas" or title is None:
             return mine(request, link_id, rev=order, my_note=my_note)
@@ -1394,7 +1418,7 @@ def create_app(cfg: Config) -> FastAPI:
 
     @app.post("/item/{link_id}/title")
     def retitle_route(request: Request, link_id: str, title: str = Form(""),
-                      rev: str | None = Form(None)):
+                      rev: str | None = Form(None), page: str | None = Form(None)):
         """An idea's name, from the box in its header (spec §2). An empty box
         is not a name: the one on disk stays and the screen keeps what you
         typed. The file moves onto the name the title earns, as before."""
@@ -1410,9 +1434,8 @@ def create_app(cfg: Config) -> FastAPI:
                 log.warning("%s", done[1])
             return done
 
-        number = revision(rev)
         result = edit(link_id, rename, "saved", "indexes-stale", shelves=ideas,
-                      rev=("title", number) if number is not None else None)
+                      rev=ordered("title", page, rev))
         if result.notice == MISSING:
             raise HTTPException(status_code=404, detail="no such idea")
         return stale_or(request, link_id, result)

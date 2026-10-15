@@ -236,7 +236,8 @@ global.CustomEvent = class { constructor(t) { this.type = t; } };
 const held = [];
 const sent = [];
 global.fetch = (url, opts) => new Promise((resolve, reject) => {
-  sent.push({ text: opts.body.v.my_note, keepalive: opts.keepalive, rev: opts.body.v.rev });
+  sent.push({ text: opts.body.v.my_note, keepalive: opts.keepalive, rev: opts.body.v.rev,
+             page: opts.body.v.page });
   held.push({ resolve, reject });
   if (opts.signal) opts.signal.addEventListener("abort", () => reject(new Error("aborted")));
 });
@@ -560,3 +561,57 @@ window.oknowledge.bind({ querySelectorAll: (sel) => (sel === "[data-nojs]" ? noj
 out.hidden = nojs.map((el) => el.hidden);
 """)
     assert out["hidden"] == [True, True]
+
+
+# --- final review I-1: revs are ordered within one page; stale is not "saved" ---------------
+
+def test_every_save_of_a_page_carries_the_same_page_id(clock):
+    """The server orders revs only among one page's saves: each page sends
+    its own random id with them, the leave() path too."""
+    out = clock("""
+field.value = "a"; handlers.blur(); await tick();
+field.value = "ab"; visibility("hidden"); await tick();
+out.pages = sent.map((s) => s.page);
+""")
+    assert len(out["pages"]) == 2 and out["pages"][0] and out["pages"][0] == out["pages"][1]
+    assert len(out["pages"][0]) >= 8
+
+
+def test_a_stale_answer_this_page_did_not_cause_is_a_failure(clock):
+    """Nothing newer went from this page: the text was not written, and the
+    panel must not be told it was."""
+    out = clock("""
+field.value = "A"; handlers.blur(); await tick();
+let told = "waiting";
+window.oknowledge.settle(root).then((e) => { told = e ? e.message : null; });
+answer(true, { stale: true }); await tick(); await tick(); await tick();
+out.told = told;
+out.toasts = toasts;
+""")
+    assert out["told"] == "No se pudo guardar" and out["toasts"] == ["No se pudo guardar"]
+
+
+def test_a_stale_answer_behind_this_page_s_newer_save_is_superseded(clock):
+    """A box swapped away and the new one of the same field: the old box's
+    late save is stale because the page's newer one landed. That is not an
+    error, and the old text is not sent again over the newer one."""
+    out = clock("""
+const field2 = Object.assign({}, field, { value: "", dataset: { autosave: "/item/x/mine/note" } });
+const h2 = {};
+field2.addEventListener = (t, f) => { h2[t] = f; };
+window.oknowledge.bind({ querySelectorAll: (sel) => sel === "[data-autosave]" ? [field2] : [] });
+field.value = "old"; handlers.blur(); await tick();
+field2.value = "new"; h2.blur(); await tick();
+out.revs = sent.map((s) => Number(s.rev));
+held.push(held.shift());                    // the second is answered first
+answer(true); await tick(); await tick();
+answer(true, { stale: true }); await tick(); await tick(); await tick();
+let told = "waiting";
+window.oknowledge.settle({ querySelectorAll: () => [], contains: (f) => f === field }).then((e) => { told = e ? e.message : null; });
+await tick(); await tick();
+out.told = told;
+out.toasts = toasts;
+out.sent = sent.map((s) => s.text);
+""")
+    assert out["revs"][1] > out["revs"][0]
+    assert out["told"] is None and out["toasts"] == [] and out["sent"] == ["old", "new"]

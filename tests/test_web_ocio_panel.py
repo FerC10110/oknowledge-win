@@ -383,3 +383,30 @@ def test_deleting_a_card_answers_json_with_its_undo(cfg, client):
     # The token brings it back.
     client.post(f"/undo/{body['undo']}", headers={"Accept": "application/json"})
     assert find_note(cfg, CARD, cfg.ocio)[1].title == "The Terminator"
+
+
+# --- final review I-1: revs are ordered within one page only ------------------------------
+
+def test_another_page_s_save_is_written_whatever_its_revision(cfg, client):
+    """A device whose clock is behind sends lower revs: its saves are not
+    refused because of another page's, they land (last writer wins)."""
+    put(cfg)
+    client.post(f"/item/{CARD}/mine/note", data={"my_note": "phone", "rev": "9000", "page": "p1"},
+                headers=JSON)
+    desk = client.post(f"/item/{CARD}/mine/note",
+                       data={"my_note": "desktop", "rev": "1000", "page": "p2"}, headers=JSON)
+    assert desk.json()["ok"] is True and "stale" not in desk.json()
+    assert note_on_disk(cfg) == "desktop"
+
+
+def test_one_page_s_late_older_save_is_still_refused_after_another_page_wrote(cfg, client):
+    """The page's own order holds: its save that timed out and lands late is
+    stale against its own newer one, even with another page's save between."""
+    put(cfg)
+    client.post(f"/item/{CARD}/mine/note", data={"my_note": "new", "rev": "2000", "page": "p1"},
+                headers=JSON)
+    client.post(f"/item/{CARD}/mine/note", data={"my_note": "other", "rev": "1", "page": "p2"},
+                headers=JSON)
+    late = client.post(f"/item/{CARD}/mine/note", data={"my_note": "old", "rev": "1500", "page": "p1"},
+                       headers=JSON)
+    assert late.json()["stale"] is True and note_on_disk(cfg) == "other"

@@ -15,6 +15,20 @@
   var KEEP_MAX = 60000;
   var texts = document.body.dataset;
 
+  // This page's own id, sent with every autosave's rev: the server orders
+  // revs only among one page's saves, so another device whose clock is
+  // ahead never makes this page's saves stale (final review I-1).
+  var PAGE = (function () {
+    try { if (window.crypto && crypto.randomUUID) return crypto.randomUUID(); } catch (e) { /* below */ }
+    return Date.now().toString(36) + Math.random().toString(36).slice(2) +
+           Math.random().toString(36).slice(2);
+  })();
+  // The page's revs rise across all its boxes (a box swapped away and the
+  // new one of the same field share the page's order), and the newest sent
+  // to each address says whether a stale answer was this page's doing.
+  var lastRev = 0;
+  var newest = {};
+
   // The one toast is app.js's (spec §2).
   function toast(text) {
     var ok = window.oknowledge;
@@ -83,15 +97,28 @@
     var again = false;
     var outgoing = null;            // the newest text sent, until it fails
     var failure = null;             // why the last save failed, until one lands
-    var last = 0;                   // the newest rev this field sent
 
-    // Every save of this field carries a rev above the last one (and the
-    // clock's, so another tab's compare too): the server writes a text only
-    // if no newer one landed first (review I-1).
+    // Every save carries a rev above the page's last one, and the page's id:
+    // the server writes a text only if no newer one of this page landed
+    // first (review I-1). Returns the rev.
     function stamp(data) {
-      last = Math.max(Date.now(), last + 1);
-      data.set("rev", String(last));
-      return data;
+      lastRev = Math.max(Date.now(), lastRev + 1);
+      data.set("rev", String(lastRev));
+      data.set("page", PAGE);
+      newest[field.dataset.autosave] = lastRev;
+      return lastRev;
+    }
+    // A stale answer: superseded when this page sent a newer save of the
+    // same field since -- that one holds the newer text, and this one must
+    // not be sent again over it. Otherwise the text was not written, and
+    // that is a failure, not a save (final review I-1).
+    function superseded(rev) {
+      return (newest[field.dataset.autosave] || 0) > rev;
+    }
+    function unwritten() {
+      var error = new Error(texts.saveFailed || "");
+      error.stale = true;
+      return error;
     }
     // A save that timed out may still land late: what the server holds is
     // unknown until one lands, so every text counts as unsaved (review M-1).
@@ -119,15 +146,20 @@
       outgoing = sending;
       var data = new FormData();
       data.set(field.name, sending);
-      stamp(data);
+      var rev = stamp(data);
       say("saving");
       var failed = false;
       send(field.dataset.autosave, data, keep, sending)
         .then(function (body) {
+          if (body.stale && !superseded(rev)) throw unwritten();
           failure = null;
-          // Stale: a newer text of this field landed first, and this one was
-          // not written. Not an error, and not this text saved either.
-          if (body.stale) { if (outgoing === sending) { outgoing = null; say(""); } return; }
+          // Stale: a newer text of this field from this page landed first,
+          // and this one was not written. Not an error, and nothing to send
+          // again: what follows it is the newer one's.
+          if (body.stale) {
+            if (outgoing === sending) { outgoing = null; saved = sending; say(""); }
+            return;
+          }
           if (outgoing === sending) saved = sending;   // not when leave() sent a newer one
           else return;
           say(field.value === saved ? "saved" : "saving");
@@ -183,11 +215,12 @@
       outgoing = value;
       var data = new FormData();
       data.set(field.name, value);
-      stamp(data);
+      var rev = stamp(data);
       send(field.dataset.autosave, data, true, value)
         .then(function (body) {
           if (outgoing !== value) return;
-          if (body.stale) { outgoing = null; return; }
+          if (body.stale && !superseded(rev)) throw unwritten();
+          if (body.stale) { outgoing = null; saved = value; return; }
           saved = value;
           say(field.value === saved ? "saved" : "saving");
         })
