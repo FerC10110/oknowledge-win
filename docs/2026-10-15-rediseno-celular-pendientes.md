@@ -14,10 +14,6 @@ comparación de capturas dio 0 píxeles con diferencia fuerte en todas.
 - Al tocar, Chromium dibuja un recuadro de color un instante
   (`-webkit-tap-highlight-color`). Sacarlo es una decisión de diseño.
 
-## Capa del detalle e historial
-
-- Volver de una búsqueda en catálogos de Ocio pierde `estado`/`orden`/`q`.
-
 ## Selección
 
 - Una selección hecha en el escritorio que sobrevive a achicar la ventana

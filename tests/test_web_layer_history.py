@@ -367,3 +367,19 @@ out.closed = page();
     assert out["wide"]["at"] == 0 and out["wide"]["url"] == "/"
     assert not out["closed"]["settings"] and out["closed"]["at"] == 0
 
+
+# --- 6. the catalogs' way back ----------------------------------------------------------
+
+def test_the_catalogs_way_back_keeps_the_list_s_filters(tmp_path):
+    out = run(tmp_path, """
+field.value = "dune";
+const submit = { type: "submit", submitter: { id: "catalog-search" }, defaultPrevented: false,
+                 preventDefault() { this.defaultPrevented = true; } };
+form.dispatchEvent(submit); await settle();
+out.searched = page();
+out.href = back.getAttribute("href");
+""", entries=[{"url": "/ocio?q=dune&estado=pending&orden=titulo", "state": None}],
+        mode="ocio", action="/ocio", source="/ocio/lista")
+    assert out["searched"]["url"] == "/ocio?q=dune&estado=pending&orden=titulo&buscar=dune&catalogo=movie"
+    assert out["searched"]["open"] and out["searched"]["panel"] == "CATALOG"
+    assert out["href"] == "/ocio?q=dune&estado=pending&orden=titulo"

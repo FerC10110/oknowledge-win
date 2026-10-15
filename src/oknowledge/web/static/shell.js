@@ -348,6 +348,14 @@
         panel.removeAttribute("aria-busy");
         if (dirty()) { loadCatalog(q, kind); return; }
         panel.innerHTML = html;
+        // The fragment's way back knows only the grid: it gets the list's
+        // whole URL (its estado, orden, q), as the layer's back() has.
+        var way = panel.querySelector("a[data-back]");
+        if (way) {
+          var to = new URL(url.href);
+          OWN.forEach(function (name) { to.searchParams.delete(name); });
+          way.setAttribute("href", to.pathname + to.search);
+        }
       })
       .catch(function () { if (mine === shownAsked) location.href = url.href; });
   }

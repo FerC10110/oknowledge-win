@@ -224,3 +224,35 @@ def test_a_scheme_less_imdb_link_is_saved(client, monkeypatch):
     answer = client.post("/add", data={"q": "www.imdb.com/title/tt0088247/", "en": "ocio"},
                          follow_redirects=False)
     assert answer.headers["location"].startswith("/ocio?sel=")
+
+
+# --- polish: the way back from a search keeps the list's filters ----------------------------
+
+def way_back(body):
+    return re.search(r'<a class="detail-back" href="([^"]*)" data-back', body).group(1)
+
+
+def test_the_way_back_from_a_search_keeps_estado_orden_and_q(client, asked):
+    body = client.get("/ocio?q=dune&estado=pending&orden=titulo&buscar=dune&catalogo=movie").text
+    assert way_back(body) == "/ocio?estado=pending&amp;q=dune&amp;orden=titulo"
+
+
+def test_the_way_back_from_a_search_keeps_the_grid(client, asked):
+    assert way_back(client.get("/ocio?tipo=book&buscar=dune").text) == "/ocio?tipo=book"
+
+
+def test_the_button_without_javascript_keeps_estado_and_orden(client):
+    answer = client.get("/ocio/buscar?q=Terminator&tipo=movie&estado=pending&orden=titulo",
+                        follow_redirects=False)
+    assert answer.headers["location"] == ("/ocio?buscar=Terminator&catalogo=movie&tipo=movie"
+                                          "&estado=pending&orden=titulo")
+
+
+@pytest.mark.parametrize("text, location", [
+    ("terminator", "/ocio?buscar=terminator&catalogo=movie&estado=pending&orden=titulo"),
+    ("película:Terminator", "/ocio?buscar=Terminator&catalogo=movie&estado=pending&orden=titulo"),
+])
+def test_a_search_from_ocio_s_field_keeps_estado_and_orden(client, text, location):
+    answer = client.post("/add", data={"q": text, "en": "ocio", "estado": "pending",
+                                       "orden": "titulo"}, follow_redirects=False)
+    assert answer.headers["location"] == location

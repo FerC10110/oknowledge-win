@@ -2189,6 +2189,9 @@ def create_app(cfg: Config) -> FastAPI:
         found = candidates_context(params.get("buscar", ""),
                                    params.get("catalogo", "") or view.tipo,
                                    params.get("year", ""), grid=view.tipo)
+        if found is not None:
+            # The way back is to this list, with its estado, orden and q.
+            found["list_url"] = view.url(sel="")
         card = None
         if found is None and shown["current"]:
             card = card_context(shown["current"], view)
@@ -2307,17 +2310,25 @@ def create_app(cfg: Config) -> FastAPI:
             raise HTTPException(status_code=404, detail="no such search")
         return page(request, "catalog-panel.html", **found)
 
+    def list_kept(estado: str, orden: str) -> dict:
+        """The list's estado and orden, valid ones only, for a redirect to a
+        catalog search: its way back is to that same list."""
+        view = CardView.from_query({"estado": estado, "orden": orden})
+        return {"estado": view.estado, "orden": "" if view.orden == "recientes" else view.orden}
+
     @app.get("/ocio/buscar")
-    def card_candidates(q: str = "", tipo: str = "", year: str = ""):
+    def card_candidates(q: str = "", tipo: str = "", year: str = "", estado: str = "",
+                        orden: str = ""):
         """The old search page, and the field's button without JavaScript:
         the candidates live in Ocio's panel now."""
         query = " ".join(q.split())
         grid = tipo if tipo in cards.KINDS else ""
         if not query:
-            return see_other("/ocio", tipo=grid)
+            return see_other("/ocio", tipo=grid, **list_kept(estado, orden))
         # `tipo` is the poster grid's filter and stays what it was;
         # `catalogo` is the kind the candidates are searched as.
-        return see_other("/ocio", buscar=query, catalogo=grid or "movie", tipo=grid, year=year)
+        return see_other("/ocio", buscar=query, catalogo=grid or "movie", tipo=grid, year=year,
+                         **list_kept(estado, orden))
 
     @app.post("/ocio/guardar")
     def save_the_card(background: BackgroundTasks, tipo: str = Form(""),
@@ -2465,7 +2476,8 @@ def create_app(cfg: Config) -> FastAPI:
     @app.post("/add")
     def add_pasted(background: BackgroundTasks, url: str = Form(""),
                    content: str = Form(""), q: str = Form(""),
-                   en: str = Form(""), tipo: str = Form("")):
+                   en: str = Form(""), tipo: str = Form(""), estado: str = Form(""),
+                   orden: str = Form("")):
         """Take a pasted link, answer at once, read the page afterwards.
 
         What this route decides is only what the page says back. The pipeline
@@ -2496,7 +2508,8 @@ def create_app(cfg: Config) -> FastAPI:
             # query: the catalog searches by title, and the year is what
             # picks among the answers.
             return see_other("/ocio", buscar=asked.query, catalogo=asked.kind,
-                             tipo=tipo if tipo in cards.KINDS else "", year=asked.year)
+                             tipo=tipo if tipo in cards.KINDS else "", year=asked.year,
+                             **list_kept(estado, orden))
         if en == "ocio":
             # Ocio's field: a page that is no catalog's is not a card, and
             # plain words are a search of the catalogs (spec §3).
@@ -2506,7 +2519,8 @@ def create_app(cfg: Config) -> FastAPI:
             if not words:
                 return see_other("/ocio")
             grid = tipo if tipo in cards.KINDS else ""
-            return see_other("/ocio", buscar=words, catalogo=grid or "movie", tipo=grid)
+            return see_other("/ocio", buscar=words, catalogo=grid or "movie", tipo=grid,
+                             **list_kept(estado, orden))
         if cards.prefixed(url):
             return see_other("/", notice="no-title")
         clean = pasted_link(url)
