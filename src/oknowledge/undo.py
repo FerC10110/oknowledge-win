@@ -76,9 +76,16 @@ def _at(lot: dict) -> dt.datetime | None:
     return at if at.tzinfo is not None else None
 
 
+def _young(at: dt.datetime, now: dt.datetime) -> bool:
+    """Within LIFETIME of `now`, and not after it. A date in the future
+    means the clock went back since: no age can be told, and a lot that
+    counted as fresh would never expire, so it counts as expired."""
+    return dt.timedelta(0) <= now - at <= LIFETIME
+
+
 def _fresh(lot: dict | None, now: dt.datetime) -> bool:
     at = _at(lot) if lot else None
-    return at is not None and now - at <= LIFETIME
+    return at is not None and _young(at, now)
 
 
 def remember(cfg: Config, items: list[tuple[str, str, Trashed]],
@@ -142,6 +149,10 @@ def restore(cfg: Config, token, language: str,
                                         language, shelf, rebuild=False)
             except (Locked, OSError, ProtectedNote, ValueError) as error:
                 log.warning("could not restore %s: %s", link, error)
+            except Exception:
+                # One note's surprise must not strand the rest of the lot in
+                # trash/, nor keep the shelves already back from a rebuild.
+                log.exception("could not restore %s", link)
             if back:
                 touched[name] = shelf
         (restored if back else skipped).append(link)
@@ -151,6 +162,9 @@ def restore(cfg: Config, token, language: str,
             rebuild_indexes(cfg, language, shelf)
         except OSError as error:
             log.warning("the indexes could not be rebuilt after a restore: %s", error)
+            stale = True
+        except Exception:
+            log.exception("the indexes could not be rebuilt after a restore")
             stale = True
     first = str(items[0].get("shelf", "")) if items else ""
     return UndoResult(restored, skipped, first if first in SHELVES else "links", stale)
@@ -177,7 +191,7 @@ def purge(now: dt.datetime | None = None) -> int:
                 written = dt.datetime.fromtimestamp(path.stat().st_mtime, dt.timezone.utc)
             except OSError:
                 continue
-            if now - written <= LIFETIME:
+            if _young(written, now):
                 continue
         try:
             path.unlink()

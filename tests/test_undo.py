@@ -171,3 +171,147 @@ def test_a_lot_naming_an_unknown_shelf_skips_that_item(tmp_path):
     token = undo.remember(cfg, [("a1", "trash", moved)], now=NOW)
     assert undo.restore(cfg, token, "es", no_lock, now=NOW).skipped == ["a1"]
     assert moved.target.exists()
+
+
+def count_rebuilds(monkeypatch):
+    calls = []
+    monkeypatch.setattr("oknowledge.undo.rebuild_indexes",
+                        lambda cfg, language, shelf=None: calls.append(shelf.name))
+    return calls
+
+
+def test_a_trash_copy_that_stays_behind_is_still_restored_and_rebuilt(tmp_path, monkeypatch):
+    cfg = make(tmp_path)
+    moved = put(cfg, "a1")
+    token = undo.remember(cfg, [("a1", "links", moved)], now=NOW)
+    real = type(moved.target).unlink
+
+    def unlink(self, missing_ok=False):
+        if self.parent.name == "trash":
+            raise PermissionError(13, "Permission denied", str(self))
+        return real(self, missing_ok=missing_ok)
+    monkeypatch.setattr(type(moved.target), "unlink", unlink)
+    calls = count_rebuilds(monkeypatch)
+
+    result = undo.restore(cfg, token, "es", no_lock, now=NOW)
+
+    assert result.restored == ["a1"] and result.skipped == []
+    assert calls == ["links"]
+    assert find_note(cfg, "a1") is not None and moved.target.exists()
+    assert undo.restore(cfg, token, "es", no_lock, now=NOW) is None   # the lot is spent
+
+
+def test_an_unexpected_error_skips_that_note_and_the_rest_still_come_back(tmp_path,
+                                                                          monkeypatch):
+    cfg = make(tmp_path)
+    items = [("a1", "links", put(cfg, "a1")), ("a2", "links", put(cfg, "a2")),
+             ("i1", "ideas", put(cfg, "i1", shelf=cfg.ideas, type="idea"))]
+    token = undo.remember(cfg, items, now=NOW)
+    real = undo.restore_note
+
+    def flaky(cfg, link, *args, **kwargs):
+        if link == "a2":
+            raise RuntimeError("something nobody expected")
+        return real(cfg, link, *args, **kwargs)
+    monkeypatch.setattr("oknowledge.undo.restore_note", flaky)
+    calls = count_rebuilds(monkeypatch)
+
+    result = undo.restore(cfg, token, "es", no_lock, now=NOW)
+
+    assert result.restored == ["a1", "i1"] and result.skipped == ["a2"]
+    assert sorted(calls) == ["ideas", "links"]
+    assert find_note(cfg, "a1") and find_note(cfg, "i1", cfg.ideas)
+    assert items[1][2].target.exists()                     # a2 is still in trash/
+
+
+def test_an_unexpected_error_from_the_lock_skips_only_that_note(tmp_path, monkeypatch):
+    cfg = make(tmp_path)
+    token = undo.remember(cfg, [("a1", "links", put(cfg, "a1")),
+                                ("a2", "links", put(cfg, "a2"))], now=NOW)
+
+    @contextlib.contextmanager
+    def lock(link_id):
+        if link_id == "a1":
+            raise RuntimeError("the lock broke")
+        yield
+    calls = count_rebuilds(monkeypatch)
+
+    result = undo.restore(cfg, token, "es", lock, now=NOW)
+    assert result.restored == ["a2"] and result.skipped == ["a1"]
+    assert calls == ["links"]
+
+
+def test_an_unexpected_error_in_a_rebuild_is_stale_and_the_others_still_rebuild(
+        tmp_path, monkeypatch):
+    cfg = make(tmp_path)
+    token = undo.remember(cfg, [("a1", "links", put(cfg, "a1")),
+                                ("i1", "ideas", put(cfg, "i1", shelf=cfg.ideas, type="idea"))],
+                          now=NOW)
+    calls = []
+
+    def rebuild(cfg, language, shelf=None):
+        calls.append(shelf.name)
+        if shelf.name == "links":
+            raise RuntimeError("a template broke")
+    monkeypatch.setattr("oknowledge.undo.rebuild_indexes", rebuild)
+
+    result = undo.restore(cfg, token, "es", no_lock, now=NOW)
+    assert result.restored == ["a1", "i1"] and result.stale is True
+    assert sorted(calls) == ["ideas", "links"]
+
+
+def test_a_lot_dated_in_the_future_is_expired(tmp_path):
+    """The clock went back: a lot from 'later' would otherwise never expire."""
+    cfg = make(tmp_path)
+    moved = put(cfg, "a1")
+    token = undo.remember(cfg, [("a1", "links", moved)], now=NOW + dt.timedelta(hours=2))
+
+    assert not undo.alive(token, now=NOW)
+    assert undo.restore(cfg, token, "es", no_lock, now=NOW) is None
+    assert moved.target.exists()
+    assert undo.purge(now=NOW) == 1
+    assert not (undo.folder() / f"{token}.json").exists()
+
+
+def test_an_unreadable_lot_with_a_future_mtime_is_purged(tmp_path):
+    import os
+    undo.folder().mkdir(parents=True)
+    path = undo.folder() / ("x" * 22 + ".json")
+    path.write_text("not json", encoding="utf-8")
+    future = (NOW + dt.timedelta(hours=2)).timestamp()
+    os.utime(path, (future, future))
+
+    assert undo.purge(now=NOW) == 1 and not path.exists()
+
+
+def test_two_undos_of_one_lot_at_once_restore_it_once(tmp_path, monkeypatch):
+    """Both read the lot before either claims it: only the one whose unlink
+    wins restores; the other finds nothing, and nothing is doubled or lost."""
+    import threading
+
+    cfg = make(tmp_path)
+    one, two = put(cfg, "a1"), put(cfg, "a2")
+    token = undo.remember(cfg, [("a1", "links", one), ("a2", "links", two)], now=NOW)
+    both_read = threading.Barrier(2, timeout=5)
+    real = undo._read
+
+    def read(path):
+        lot = real(path)
+        both_read.wait()
+        return lot
+    monkeypatch.setattr(undo, "_read", read)
+    results = [None, None]
+
+    def run(i):
+        results[i] = undo.restore(cfg, token, "es", no_lock, now=NOW)
+    threads = [threading.Thread(target=run, args=(i,)) for i in range(2)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(10)
+
+    done = [r for r in results if r is not None]
+    assert len(done) == 1 and results.count(None) == 1
+    assert done[0].restored == ["a1", "a2"]
+    assert len(list(cfg.links.dir.glob("*.md"))) == 2
+    assert list((cfg.root / "trash").glob("*.md")) == []

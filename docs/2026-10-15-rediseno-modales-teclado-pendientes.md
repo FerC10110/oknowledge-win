@@ -9,9 +9,6 @@ entrega 3. Ninguno pierde datos: en el peor caso una nota queda en
 
 ## Deshacer y papelera
 
-- Un error inesperado a mitad de un Deshacer corta la vuelta: el resto del lote
-  queda en `trash/` y no se reconstruyen los estantes que ya volvieron.
-- Un lote con fecha futura (el reloj volvió atrás) nunca se purga.
 - Con los índices sin reconstruir, el aviso de Deshacer dice "índices
   desactualizados" y no menciona las notas que no volvieron (el JSON sí las
   lista).
