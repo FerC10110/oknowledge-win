@@ -141,3 +141,40 @@ out.unhandled = unhandled; out.focused = focused.length;
 """)
     assert out["unhandled"] == []
     assert out["focused"] == 1
+
+
+# --- batch G: what test_web_idea_scripts.py read in idea.js's source, run instead ----------
+
+def test_a_deleted_idea_stops_the_poll_and_goes_back_to_the_ideas(idea):
+    out = idea("""
+const real = global.fetch;
+global.fetch = (url, opts) => (url.indexOf("/actions/state") >= 0
+  ? Promise.resolve({ ok: false, status: 404, json: () => Promise.resolve({}) }) : real(url, opts));
+every(); await settle();
+out.href = location.href;
+out.polling = every !== null;
+""", running="improve")
+    assert out["href"] == "/ideas?notice=no-such-idea"
+    assert out["polling"] is False
+
+
+def test_the_tab_and_the_scope_live_in_the_url(idea):
+    out = idea("""
+const urls = [];
+history.replaceState = (state, title, url) => { urls.push(url); location.href = "http://t" + url; };
+const asked = [];
+const real = global.fetch;
+global.fetch = (url, opts) => { asked.push(url); return real(url, opts); };
+const click = (attr, value) => {
+  const a = { dataset: { [attr]: value }, closest: (sel) => (sel === "a[data-" + attr + "]" ? a : null) };
+  (docOn.click || []).forEach((fn) => fn({ button: 0, target: a, preventDefault() {} }));
+};
+click("tab", "mejoras"); click("scope", "todos"); click("tab", "resumen");
+await settle();
+out.urls = urls;
+out.refreshed = asked.filter((u) => u.indexOf("/actions/state") < 0);
+""")
+    assert out["urls"] == ["/ideas/i1?pestana=mejoras", "/ideas/i1?pestana=mejoras&alcance=todos",
+                           "/ideas/i1?alcance=todos"]       # Resumen is the screen's own: no pestana
+    # A new scope asks for the screen again, as the URL says it now.
+    assert out["refreshed"] == ["http://t/ideas/i1?pestana=mejoras&alcance=todos"]

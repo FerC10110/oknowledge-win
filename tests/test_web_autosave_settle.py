@@ -478,3 +478,85 @@ out.after = settled;
 out.toasts = toasts;
 """)
     assert out["before"] == "waiting" and out["after"] == "ok" and out["toasts"] == []
+
+
+# --- batch G: what test_web_idea_scripts.py read in autosave.js's source, run instead -------
+
+def test_a_field_saves_a_second_after_the_last_key_and_at_once_on_blur(clock):
+    out = clock("""
+field.value = "a"; handlers.input(); await advance(600);
+field.value = "ab"; handlers.input(); await advance(999); await tick();
+out.waiting = sent.length;
+await advance(1); await tick();
+out.second = sent.map((s) => s.text);
+answer(true); await tick(); await tick(); await tick();
+field.value = "abc"; handlers.blur(); await tick();
+out.blur = sent.map((s) => s.text);
+""")
+    assert out["waiting"] == 0 and out["second"] == ["ab"]
+    assert out["blur"] == ["ab", "abc"]
+
+
+def test_a_save_asks_for_json(clock):
+    out = clock("""
+const real = global.fetch;
+global.fetch = (url, opts) => { out.accept = opts.headers && opts.headers.Accept; out.url = url; return real(url, opts); };
+field.value = "a"; handlers.blur(); await tick();
+""")
+    assert out["accept"] == "application/json" and out["url"] == "/item/x/mine/note"
+
+
+def test_one_save_out_at_a_time_and_then_the_newest_text_not_the_reply(clock):
+    out = clock("""
+field.value = "a"; handlers.blur(); await tick();
+field.value = "ab"; handlers.blur(); await tick();
+field.value = "abc"; handlers.blur(); await tick();
+out.whileOut = sent.map((s) => s.text);
+answer(true); await tick(); await tick(); await tick();
+out.after = sent.map((s) => s.text);
+out.field = field.value;                         // the answer to "a" does not write "a" back
+""")
+    assert out["whileOut"] == ["a"]
+    assert out["after"] == ["a", "abc"] and out["field"] == "abc"
+
+
+def test_an_empty_box_marked_skip_empty_is_not_sent(clock):
+    out = clock("""
+field.hasAttribute = (name) => name === "data-skip-empty";
+field.value = "   "; handlers.blur(); await tick();
+visibility("hidden"); await tick();
+out.empty = sent.length;
+field.value = "Título"; handlers.blur(); await tick();
+out.named = sent.map((s) => s.text);
+""")
+    assert out["empty"] == 0 and out["named"] == ["Título"]
+
+
+def test_a_landed_save_toasts_only_what_the_server_warns(clock):
+    out = clock("""
+field.value = "a"; handlers.blur(); await tick();
+answer(true); await tick(); await tick(); await tick();
+out.quiet = toasts.slice();
+field.value = "ab"; handlers.blur(); await tick();
+answer(true, { notice: "Saved, but the indexes are behind." }); await tick(); await tick(); await tick();
+out.warned = toasts.slice();
+""")
+    assert out["quiet"] == [] and out["warned"] == ["Saved, but the indexes are behind."]
+
+
+def test_leaving_does_not_send_again_what_is_already_on_its_way(clock):
+    out = clock("""
+field.value = "a"; handlers.blur(); await tick();
+visibility("hidden"); await tick();
+out.sent = sent.map((s) => s.text);
+""")
+    assert out["sent"] == ["a"]
+
+
+def test_what_needs_javascript_off_is_hidden_by_it(clock):
+    out = clock("""
+const nojs = [{ hidden: false }, { hidden: false }];
+window.oknowledge.bind({ querySelectorAll: (sel) => (sel === "[data-nojs]" ? nojs : []) });
+out.hidden = nojs.map((el) => el.hidden);
+""")
+    assert out["hidden"] == [True, True]
