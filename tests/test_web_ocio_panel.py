@@ -120,7 +120,9 @@ def test_open_in_its_site(cfg, client):
 
 def test_a_url_that_is_not_the_web_is_never_a_link(cfg, client):
     put(cfg, url="javascript:alert(1)")
-    assert "javascript:" not in panel(client)
+    body = panel(client)
+    assert "data-panel=" in body             # the card was drawn: not a vacuous pass
+    assert "javascript:" not in body
 
 
 def test_a_rewritten_card_has_no_notice(cfg, client):
@@ -168,6 +170,7 @@ def test_what_it_is_about_your_note_and_tags(cfg, client):
 def test_no_save_buttons_marks_or_disks(cfg, client):
     put(cfg)
     body = panel(client)
+    assert "data-panel=" in body             # the card was drawn: not a vacuous pass
     assert "💾" not in body and "Edit tags" not in body and "/mark" not in body
     saves = re.findall(r"<button[^>]*>Save</button>", body)
     assert all("data-nojs" in button for button in saves)

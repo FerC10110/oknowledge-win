@@ -43,7 +43,7 @@ from ..config import save as save_config
 from ..idea_actions import SCOPES, may_serve
 from ..ideas import IdeaFull, add_related, drop_related, new_idea
 from ..i18n import LANGUAGES, NATIVE_NAMES, translator
-from ..marks import clean_mark, rank_marks
+from ..marks import clean_mark
 from ..pipeline import add as add_link
 from ..pipeline import describe, download_cover, icon_path, import_links
 from ..pipeline import is_domain, owed
@@ -464,7 +464,7 @@ def answer(request: Request, where: str, notice: str = "", **params) -> Response
     """
     if not wants_json(request):
         return see_other(where, notice=notice, **params)
-    t = translator(ui_language())
+    t = translator(request.app.state.settings["cfg"].ui_language)
     text = None if notice in QUIET else NOTICES.get(notice)
     said = t(text, params.get("n", 0), params.get("m", 0)) if text else ""
     status = FAILURES.get(notice)
@@ -727,7 +727,7 @@ def create_app(cfg: Config) -> FastAPI:
         here = request.url.path + ("?" + request.url.query if request.url.query else "")
         section = context.pop("section", None) or section_of(request.url.path)
         base = {"t": t, "lang": language, "query": "", "here": here,
-                "marks": current["cfg"].marks, "used_marks": [], "active_mark": None,
+                "marks": current["cfg"].marks, "active_mark": None,
                 "unreadable": library.unreadable, "links_dir": cfg.links_dir,
                 "heading": None, "prev_url": None, "next_url": None,
                 "page": 1, "pages": 1, "notice": notice_for(request, t),
@@ -748,11 +748,9 @@ def create_app(cfg: Config) -> FastAPI:
         # already ran for this request anyway.
         for other in (shelf, ideas):
             other.refresh()
-        used = rank_marks([*library.notes, *shelf.notes, *ideas.notes],
-                          current["cfg"].marks)
         return templates.TemplateResponse(
             request=request, name=name, status_code=status_code,
-            context={**base, "used_marks": used,
+            context={**base,
                      "side": {"section": section,
                               "counts": {"links": len(library.entries),
                                          "ocio": len(shelf.entries),
@@ -766,7 +764,7 @@ def create_app(cfg: Config) -> FastAPI:
     async def not_found(request: Request, exc: StarletteHTTPException):
         path = request.url.path
         if exc.status_code == 404 and wants_json(request):
-            t = translator(ui_language())
+            t = translator(request.app.state.settings["cfg"].ui_language)
             return JSONResponse({"ok": False, "error": t(GONE)}, status_code=404)
         if exc.status_code == 404 and not path.startswith(("/cover/", "/static/")):
             return page(request, "notfound.html", status_code=404)
@@ -2187,7 +2185,7 @@ def create_app(cfg: Config) -> FastAPI:
             return see_other("/", notice="searched")
         library.refresh()
         if library.by_id(link_id(clean)) is not None:
-            return see_other("/", notice="already-saved")
+            return see_other("/", sel=link_id(clean), notice="already-saved")
         # Neither button pressed is not a mode: `default_content` decides,
         # which is what the CLI does with no --full and no --summary.
         mode = content if content in CONTENT_MODES else None

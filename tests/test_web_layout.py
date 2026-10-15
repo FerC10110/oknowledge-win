@@ -59,12 +59,6 @@ def test_the_layout_script_closes_and_unfocuses_on_a_phone():
     assert "details.filters" in js and "details.paste" not in js and "blur" in js
 
 
-# --- the cards -------------------------------------------------------------
-
-def test_the_phone_css_clamps_a_card_summary():
-    assert "-webkit-line-clamp: 4" in css()
-
-
 # --- the categories page ----------------------------------------------------
 
 def test_categories_are_a_grid_not_rows(client):
@@ -120,22 +114,3 @@ def test_the_filters_fold_before_the_first_paint():
     folds is already there: waiting for DOMContentLoaded showed them open."""
     js = WEB.joinpath("static", "layout.js").read_text(encoding="utf-8")
     assert 'addEventListener("DOMContentLoaded"' not in js
-
-
-# --- the new-idea form ---------------------------------------------------------
-
-def test_the_new_idea_fields_stack_one_under_the_other():
-    """The page-wide `form label` rule set each label beside its box."""
-    assert re.search(r"\.new-idea label\s*\{[^}]*display:\s*block", css())
-
-
-def test_the_new_idea_box_is_dressed_like_the_others():
-    """Left alone, the browser drew a white box in a dark page."""
-    rule = re.search(r"\.new-idea textarea[^{]*\{([^}]*)\}", css())
-    assert rule and re.search(r"background:\s*var\(--", rule.group(1))
-    assert "100%" in rule.group(1)
-
-
-def test_the_new_idea_summary_says_it_folds(client):
-    assert re.search(r"details\.new-idea > summary[^{]*\{[^}]*list-style:\s*none", css())
-    assert "details.new-idea[open] > summary" in css()

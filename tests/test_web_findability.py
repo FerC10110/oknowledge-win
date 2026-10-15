@@ -176,13 +176,13 @@ def test_a_vanished_vault_leaves_nothing_behind_to_offer(tmp_path):
     cfg, client = app_with(tmp_path, note("n1", "Uno", category="Redes", tags=["vpn"],
                                           collections=["Casa"], saved="2021-11-05"))
     library = client.app.state.library
-    assert library.collections() == {"Casa": 1} and library.years() == {"2021": 1}
+    assert library.collections() == {"Casa": 1}
 
     cfg.vault.rename(tmp_path / "elsewhere")
     library.refresh()
 
-    assert (library.categories(), library.tags(), library.collections(),
-            library.years(), library.months()) == ({}, {}, {}, {}, {})
+    assert (library.categories(), library.tags(),
+            library.collections()) == ({}, {}, {})
 
 
 def test_a_missing_vault_at_startup_is_an_error(tmp_path):
@@ -316,7 +316,7 @@ def test_long_titles_may_wrap_anywhere():
     css = (Path(oknowledge.web.__file__).parent / "static" / "style.css").read_text()
     assert css.count("overflow-wrap: anywhere") >= 1
     block = css.split("overflow-wrap: anywhere")[0].rsplit("}", 1)[-1]
-    for selector in (".card h2", ".hits", ".item h1", ".meta"):
+    for selector in (".hits", ".item h1", ".meta"):
         assert selector in block
 
 

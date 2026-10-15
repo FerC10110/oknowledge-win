@@ -461,6 +461,18 @@
     });
   }
 
+  // --- the pick in the URL -------------------------------------------------
+  // With no sel, a reload of the list would open whatever is first by then
+  // (a batch adds links on top): the pick shown is written down.
+  (function () {
+    var items = document.getElementById("items");
+    var url = here();
+    if (panel && items && items.dataset.current && !url.searchParams.get("sel")) {
+      url.searchParams.set("sel", items.dataset.current);
+      history.replaceState(null, "", url.pathname + url.search);
+    }
+  })();
+
   observe();
   watch();
 })();

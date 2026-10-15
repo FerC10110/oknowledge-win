@@ -95,43 +95,6 @@ def test_everything_that_is_read_rather_than_scanned_keeps_its_measure(client, p
     assert 'class="wide"' not in client.get(path).text
 
 
-# --- and the scrolling itself, which lives in the stylesheet ----------------
-
-
-def card_css() -> str:
-    from pathlib import Path
-
-    import oknowledge.web
-
-    css = (Path(oknowledge.web.__file__).parent / "static" / "style.css").read_text()
-    start = css.index(".card .sum {")
-    return css[start:css.index("}", start)]
-
-
-def test_the_summary_box_scrolls_rather_than_clamping():
-    block = card_css()
-
-    assert "overflow-y: auto" in block
-    assert "line-clamp" not in block
-
-
-def test_the_scrollbar_is_not_drawn():
-    """Minimal on purpose: the wheel works, the bar is not there."""
-    css = card_css()
-    from pathlib import Path
-
-    import oknowledge.web
-
-    whole = (Path(oknowledge.web.__file__).parent / "static" / "style.css").read_text()
-
-    assert "scrollbar-width: none" in css
-    assert ".card .sum::-webkit-scrollbar" in whole
-
-
-def test_scrolling_a_card_does_not_scroll_the_page_behind_it():
-    assert "overscroll-behavior: contain" in card_css()
-
-
 # --- the cover, where the note is read ---------------------------------------
 
 @pytest.fixture

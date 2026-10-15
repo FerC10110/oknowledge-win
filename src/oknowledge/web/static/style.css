@@ -55,33 +55,6 @@ body.wide main, body.wide .quiet, body.wide .notice { max-width: none; }
 .grid { list-style: none; padding: 0; margin: 0; display: grid; gap: 1rem;
         grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr)); }
 
-/* Every card is the same height, whatever it holds: a wall of cards that each
-   end somewhere different is the thing this replaces. The height is fixed
-   here and the text is clamped below, so neither a six-line summary nor a
-   missing cover can change it. */
-.card { background: var(--card); border: 1px solid var(--line); border-radius: 14px;
-        overflow: hidden; transition: border-color 0.15s; position: relative;
-        display: flex; flex-direction: column; height: 21rem; }
-.card:hover { border-color: var(--accent); }
-.card.partial { border-style: dashed; }
-.card .shot { display: block; flex: none; }
-.card img { width: 100%; height: 7.5rem; display: block; object-fit: cover; }
-.card .pad { display: flex; flex-direction: column; flex: 1; min-height: 0; padding: 1rem; }
-/* Everything but .body refuses to shrink, and .body is the only thing that
-   grows. So the summary is what gives when a cover leaves less room -- two
-   lines instead of three -- and the title, the tags and the site strip can
-   never be the part that falls off the bottom of a fixed-height card. */
-.card h2, .card .tags, .card .site { flex: none; }
-.card h2 { font-size: 1rem; margin: 0 0 0.3rem; line-height: 1.35;
-           display: -webkit-box; -webkit-box-orient: vertical;
-           -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
-.card h2 a { color: inherit; text-decoration: none; }
-.card h2 a:hover { color: var(--accent); }
-/* flex: 1 here is what pins the tags and the site strip to the bottom: this
-   box takes the slack, so a short summary leaves its gap above them. */
-.card .body { text-decoration: none; color: inherit; display: flex;
-              flex-direction: column; flex: 1; min-height: 0; overflow: hidden; }
-.card .meta { flex: none; }
 .meta { color: var(--dim); font-size: 0.8rem; margin: 0 0 0.5rem; }
 .cat { color: var(--accent); }
 .warn { color: var(--dim); border: 1px solid var(--line); border-radius: 999px;
@@ -106,30 +79,9 @@ body.wide main, body.wide .quiet, body.wide .notice { max-width: none; }
 }
 .mentions a:hover, .mentions a:focus-visible,
 .empty a:hover, .empty a:focus-visible { color: var(--accent); }
-.sum { margin: 0 0 0.6rem; font-size: 0.9rem; color: var(--fg); }
-/* The whole summary is here and the card never grows, so this box scrolls
-   instead of clamping: the wheel reads the rest. No scrollbar is drawn --
-   the gradient doing the fading is the only hint, and it shows itself only
-   when there is text under it, since on a short summary it falls on blank
-   space. overscroll-behavior keeps the page still while a card is read. */
-.card .sum { flex: 1; min-height: 0; margin: 0; white-space: pre-line;
-             overflow-y: auto; overscroll-behavior: contain;
-             scrollbar-width: none; -ms-overflow-style: none;
-             -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 1.5rem), transparent);
-             mask-image: linear-gradient(to bottom, #000 calc(100% - 1.5rem), transparent); }
-.card .sum::-webkit-scrollbar { width: 0; height: 0; }
 .tags span, .tags a { color: var(--dim); font-size: 0.78rem; margin-right: 0.4rem;
                       text-decoration: none; }
-.card .tags { margin: 0; max-height: 1.6rem; overflow: hidden; }
 
-/* Where the link came from, which is the question a favicon answers fastest. */
-.site { display: flex; align-items: center; gap: 0.4rem; min-width: 0;
-        margin: 0.5rem 0 0; font-size: 0.78rem; color: var(--dim); }
-.site img { width: 16px; height: 16px; border-radius: 4px; flex: none; }
-.site a, .site span { color: var(--dim); text-decoration: none;
-                      overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.site a:hover { color: var(--accent); }
-/* Wrapping is already its own rule below, and this element is .meta too. */
 .raw { margin: 0.4rem 0 0; font-size: 0.75rem; }
 
 .hits { list-style: none; padding: 0; }
@@ -158,7 +110,7 @@ details pre { white-space: pre-wrap; font: inherit; color: var(--dim); }
 .quiet { max-width: var(--measure); margin: 0 auto 1rem; padding: 0 1rem;
          color: var(--dim); font-size: 0.8rem; }
 
-.card h2, .hits h2, .hits, .item h1, .meta, .mention-url { overflow-wrap: anywhere; }
+.hits h2, .hits, .item h1, .meta, .mention-url { overflow-wrap: anywhere; }
 
 /* Writing: forms, rows and the one-line answer a redirect leaves behind. */
 .row { display: flex; align-items: center; gap: 0.6rem; padding: 0.9rem 0; }
@@ -188,27 +140,6 @@ button { cursor: pointer; }
           color: var(--fg); font-size: 0.9rem; border-left: 2px solid var(--accent); }
 .warn-block { color: var(--dim); font-size: 0.85rem; border: 1px solid var(--line);
               border-radius: 9px; padding: 0.6rem 0.9rem; }
-
-/* The card's dialog. popup.js builds it; without that file nothing here is
-   ever used, and the card's links go to the note page instead. */
-.popup {
-  max-width: min(42rem, 92vw); width: 100%; max-height: 85vh; overflow: auto;
-  border: 1px solid var(--line); border-radius: 14px; padding: 1.5rem 2rem 2rem;
-  background: var(--card); color: var(--fg); position: relative;
-}
-.popup::backdrop { background: rgb(0 0 0 / 0.55); }
-.popup .close {
-  position: absolute; top: 0.5rem; right: 0.7rem; border: 0; background: none;
-  color: var(--dim); font-size: 1.6rem; line-height: 1; padding: 0.1rem 0.4rem;
-}
-.popup .close:hover { color: var(--fg); }
-.popup .item { padding-top: 0; }
-.embed h1 { font-size: 1.5rem; margin-top: 0.3rem; }
-.embed .summary { font-size: 1.05rem; margin: 1rem 0; }
-.embed h2 { margin-top: 1.5rem; }
-/* .actions is hidden until hover on the note page; in here it is the way out. */
-.embed .actions { display: flex; flex-wrap: wrap; gap: 0.6rem; margin-top: 1.5rem;
-                  border: 0; opacity: 1; }
 
 /* The import page. A long URL and a two-thousand-character message both go in
    these lists, so they wrap instead of widening the page. The bullets stay:
@@ -311,20 +242,6 @@ form:has(input[name="chain"][value="api"]:not(:checked)) .api-only { display: no
        font-size: 0.7rem; color: var(--dim); white-space: nowrap; }
 .row select { max-width: 100%; }
 
-/* A card's own line of facts: the stars you gave it, the state it is in,
-   and the mark that says the catalog's English is still what it says. The
-   stars are one glyph each so they need no picture and no width. */
-/* Five stars, filled and outlined. Not two colours: the filled star comes
-   from a monochrome emoji font that ignores `color` entirely, so a coloured
-   span buys nothing and the shape is what counts. */
-.cards .stars { margin: 0.1rem 0 0; color: var(--dim); letter-spacing: 0.1em; }
-.cards .state { color: var(--fg); }
-.cards .unwritten { color: var(--dim); font-style: italic; }
-.cards .unwritten.failed { color: var(--danger, #b3261e); cursor: help; }
-.rewrite-all { margin: 0.4rem 0 0.9rem; }
-.rewrite-all button[disabled] { opacity: .6; cursor: default; }
-.cards .site { display: flex; gap: 0.6rem; align-items: center; }
-
 /* An idea's links: one per line, an x to take one off, and a link that is
    not in the library any more dimmed rather than hidden. */
 .related { list-style: none; padding: 0; }
@@ -335,59 +252,6 @@ form:has(input[name="chain"][value="api"]:not(:checked)) .api-only { display: no
 /* A title with something beside it (an idea's page). */
 .title-row { display: flex; align-items: flex-start; gap: 0.6rem; }
 .title-row h1 { flex: 1; }
-
-/* The new-idea drawer: a panel with its fields one under the other, each as
-   wide as the panel. The page-wide `form label` rule sets labels inline,
-   beside their box, which here put the question to the left of the text. */
-details.new-idea { margin: 0 0 1.2rem; border: 1px solid var(--line);
-                   border-radius: 10px; background: var(--card); }
-details.new-idea > summary { list-style: none; cursor: pointer; padding: 0.7rem 1rem;
-                             font-weight: 600; border-radius: 10px; }
-details.new-idea > summary::-webkit-details-marker { display: none; }
-details.new-idea > summary::before { content: "＋"; margin-right: 0.45rem; color: var(--accent); }
-details.new-idea[open] > summary { border-bottom: 1px solid var(--line);
-                                   border-radius: 10px 10px 0 0; }
-details.new-idea[open] > summary::before { content: "−"; }
-.new-idea form { display: flex; flex-direction: column; gap: 0.35rem; padding: 0.9rem 1rem 1rem; }
-.new-idea label { display: block; margin: 0.4rem 0 0; color: var(--dim); font-size: 0.85rem; }
-.new-idea textarea, .new-idea input { width: 100%; box-sizing: border-box;
-                                      padding: 0.6rem 0.9rem; font: inherit;
-                                      border: 1px solid var(--line); border-radius: 8px;
-                                      background: var(--bg); color: inherit; }
-.new-idea textarea { resize: vertical; min-height: 7rem; line-height: 1.45; }
-.new-idea .row { display: flex; justify-content: flex-end; margin-top: 0.5rem; }
-.new-idea button[type="submit"] { border-color: var(--accent); color: var(--accent);
-                                  padding: 0.5rem 1.4rem; }
-@media (max-width: 42rem) {
-  details.new-idea > summary { min-height: 2.75rem; display: flex; align-items: center; }
-  .new-idea button[type="submit"] { flex: 1; min-height: 2.75rem; }
-}
-
-/* The filters' drawer. On a wide screen it stays open and its summary only
-   carries Select, at the right; the words keep their place, hidden, so the
-   link does not jump. On a phone the summary is the one line you see. */
-details.filters { margin-bottom: 0.6rem; }
-details.filters > summary { display: flex; align-items: center; justify-content: space-between;
-                            gap: 1rem; cursor: pointer; list-style: none;
-                            color: var(--dim); font-size: 0.85rem; padding: 0.3rem 0; }
-details.filters > summary::-webkit-details-marker { display: none; }
-details.filters > summary > span::before { content: "▸ "; }
-details.filters[open] > summary > span::before { content: "▾ "; }
-@media (min-width: 42.01rem) {
-  details.filters > summary > span { visibility: hidden; }
-}
-@media (max-width: 42rem) {
-  details.filters > summary { min-height: 2.75rem; font-size: 0.95rem; }
-  .chips .chip { padding-top: 0.55rem; padding-bottom: 0.55rem; }
-}
-
-@media (max-width: 42rem) {
-  /* One column: a fixed height only buys empty space under short cards. */
-  .card { height: auto; }
-  .card .sum { flex: none; display: -webkit-box; -webkit-box-orient: vertical;
-               -webkit-line-clamp: 4; overflow: hidden; }
-  .card .body { flex: none; }
-}
 
 /* The categories page: small cards, as many to a row as fit, the number
    large and the rename behind a pencil. It was one row each, most of it
@@ -429,7 +293,6 @@ select:focus-visible, textarea:focus-visible, .chip:focus-visible {
 .engine-row .meta { grid-column: 1 / -1; }
 
 @media (max-width: 42rem) {
-  .mine .stars button { min-width: 2.75rem; min-height: 2.75rem; font-size: 1.4rem; }
   .engine-row { grid-template-columns: 1fr auto; }
   .engine-row > label, .engine-row .model-box { grid-column: 1 / -1; }
   .engine-row .add-model { grid-column: 1; }

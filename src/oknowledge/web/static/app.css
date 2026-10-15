@@ -156,13 +156,13 @@ a.more { display: block; text-align: center; margin: 16px 0; color: var(--t5); f
 .meta-row { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--t5); }
 .meta-row .chip-menu { margin-left: -6px; }
 .meta-row .where { font-family: inherit; }
-.chip { display: inline-flex; align-items: center; gap: 6px; background: var(--s4);
+:where(.app:not(.legacy)) .chip { display: inline-flex; align-items: center; gap: 6px; background: var(--s4);
   border-radius: 6px; padding: 3px 8px; font-size: 12px; color: var(--t2); cursor: pointer;
   list-style: none; }
-.chip::-webkit-details-marker { display: none; }
-.chip button { background: none; border: 0; color: var(--t6); cursor: pointer; padding: 0 0 0 2px; font-size: 11px; }
-.chip a { color: var(--t2); text-decoration: none; }
-.chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+:where(.app:not(.legacy)) .chip::-webkit-details-marker { display: none; }
+:where(.app:not(.legacy)) .chip button { background: none; border: 0; color: var(--t6); cursor: pointer; padding: 0 0 0 2px; font-size: 11px; }
+:where(.app:not(.legacy)) .chip a { color: var(--t2); text-decoration: none; }
+:where(.app:not(.legacy)) .chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .tag-new input { background: none; border: 0; color: var(--t2); font: inherit; font-size: 12px; width: 7rem; }
 .reading { font-size: 12px; color: var(--t6); }
 .detail .body { font-size: 15px; line-height: 1.65; color: var(--t2); }
@@ -175,7 +175,7 @@ a.more { display: block; text-align: center; margin: 16px 0; color: var(--t5); f
 .skeleton { display: flex; flex-direction: column; gap: 10px; }
 .skeleton i { display: block; height: 12px; background: var(--s4); border-radius: 6px; }
 .skeleton i:nth-child(2) { width: 85%; } .skeleton i:nth-child(3) { width: 60%; }
-.warn { color: var(--danger); }
+:where(.app:not(.legacy)) .warn { color: var(--danger); }
 
 .detail-bar { display: flex; align-items: center; gap: 8px; padding: 14px 20px;
   border-top: 1px solid var(--b-div); }
@@ -375,12 +375,8 @@ a.more { display: block; text-align: center; margin: 16px 0; color: var(--t5); f
 .submenu > summary:hover { background: var(--s5); }
 .submenu form { display: flex; flex-direction: column; padding-left: 10px; }
 .detail-scroll.card { padding: 22px 24px; gap: 18px; }
-/* style.css still styles the old library's .card tiles (a fixed 21rem box
-   with a border, its tags clipped to one line). This .card is a column. */
-.detail-scroll.card { height: auto; background: none; border: 0; border-radius: 0;
-  transition: none; overflow-x: hidden; }
-.detail-scroll.card .body { display: block; overflow: visible; }
-.detail-scroll.card .tags { max-height: none; overflow: visible; }
+/* style.css's `.tags span` (the library panel's tag text) is still live; the
+   card's chips are not that text. */
 .detail-scroll.card .tags span { color: inherit; font-size: inherit; margin: 0; }
 .card-head { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 16px; }
 .card-head .art { display: block; aspect-ratio: 2 / 3; border-radius: 8px; overflow: hidden; }

@@ -46,4 +46,10 @@
   phone.addEventListener("change", function (event) {
     if (!event.matches) fold(true);
   });
+  // A notice is said once. Left in the URL, a reload would say it again.
+  var said = new URL(location.href);
+  if (said.searchParams.has("notice")) {
+    ["notice", "n", "m"].forEach(function (name) { said.searchParams.delete(name); });
+    history.replaceState(null, "", said.pathname + said.search + said.hash);
+  }
 })();
