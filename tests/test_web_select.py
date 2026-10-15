@@ -531,3 +531,55 @@ def test_a_long_press_ignores_one_being_analysed(long_press):
 def test_the_desktop_has_no_long_press(long_press):
     assert long_press["desktop"] == [False, False, False]
     assert long_press["desktopTap"] is False
+
+
+# --- fix round 1: Android's menu comes before the 500 ms ------------------------------
+
+EARLY_SUFFIX = r"""
+const early = {};
+function send(type, target, extra) {
+  const event = Object.assign({ type, target, clientX: 100, clientY: 100, pointerId: 1, isPrimary: true,
+                                button: 0, pointerType: "touch", defaultPrevented: false,
+                                preventDefault() { this.defaultPrevented = true; },
+                                stopPropagation() {} }, extra || {});
+  (listeners["list:" + type] || []).forEach((fn) => fn(event));
+  return event;
+}
+send("pointerdown", a.hit); advance(400);
+const menu = send("contextmenu", a.hit);
+early.menu = [menu.defaultPrevented, classes.has("selecting"), a.box.checked];
+send("pointercancel", a.hit); advance(600);
+early.afterCancel = [classes.has("selecting"), a.box.checked];
+ok.keys.Escape();
+media.matches = false;
+send("pointerdown", a.hit); advance(100);
+early.desktop = [send("contextmenu", a.hit).defaultPrevented, classes.has("selecting")];
+send("pointerup", a.hit);
+console.log(JSON.stringify(early));
+"""
+
+
+@pytest.fixture(scope="module")
+def early_menu(tmp_path_factory):
+    import json
+    import shutil
+    import subprocess
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not installed")
+    harness = tmp_path_factory.mktemp("early") / "harness.js"
+    harness.write_text(MEDIA_PREFIX + TIMER_PREFIX + MODE_HARNESS + EARLY_SUFFIX, encoding="utf-8")
+    done = subprocess.run([node, str(harness), str(SELECT)], capture_output=True, text=True,
+                          timeout=30, check=False)
+    assert done.returncode == 0, done.stderr
+    return json.loads(done.stdout.strip().splitlines()[-1])
+
+
+def test_a_menu_before_the_500_ms_fires_the_press(early_menu):
+    """Android sends contextmenu about when our timer runs, then pointercancel."""
+    assert early_menu["menu"] == [True, True, True]
+    assert early_menu["afterCancel"] == [True, True]
+
+
+def test_the_desktop_menu_is_left_alone(early_menu):
+    assert early_menu["desktop"] == [False, False]

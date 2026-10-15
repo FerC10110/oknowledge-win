@@ -116,8 +116,17 @@
   list.addEventListener("pointercancel", letGo);
 
   // No browser menu (nor callout) for the press that went into the mode.
+  // Android's comes about when our 500 ms do, then a pointercancel: a menu on
+  // a pending press is that press, fired at once.
   list.addEventListener("contextmenu", function (event) {
-    if (press && press.fired) event.preventDefault();
+    if (!press) return;
+    if (!press.fired) {
+      if (!onPhone()) return;
+      clearTimeout(press.timer);
+      fire();
+      if (!press) return;     // the mode was already on: nothing fired
+    }
+    event.preventDefault();
   });
 
   // On #list, in the capture phase: before shell.js's click on the document,

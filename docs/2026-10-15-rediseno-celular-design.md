@@ -349,7 +349,9 @@ regla de "uno cierra al otro" y Esc de `app.js` siguen igual.
   no se mueve más de 10px, prende el modo (el mismo camino que "Seleccionar") y
   marca ese ítem. El `click` que trae el soltar se traga (ni abre el detalle ni
   desmarca), sólo ese; el siguiente `pointerdown` olvida la espera si el click
-  no llegó. `contextmenu` del apretón que entró se cancela, y en el bloque del
+  no llegó. `contextmenu` del apretón que entró se cancela; si llega antes de
+  los 500 ms (Android lo manda más o menos a la vez, y después un
+  `pointercancel`), dispara el apretón en ese momento y también se cancela. En el bloque del
   celular `#list .item` lleva `-webkit-touch-callout: none` y
   `user-select: none`. No hacen nada: moverse más de 10px (un scroll),
   `pointercancel`, soltar antes, el botón derecho del mouse, un ítem que se está
