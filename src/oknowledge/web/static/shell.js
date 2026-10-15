@@ -436,18 +436,27 @@
       loadList(shape.href, true, "refresh");
     } else if (link.hasAttribute("data-more")) {
       more(link);
+    } else if (phone() && isOpen() && panel.contains(link) && link.hasAttribute("data-nav") && ok.layers) {
+      // A filter inside the phone's layer (the detail's #tag): the layer goes
+      // first, so the filter lands on the list's own entry, in view.
+      ok.layers.close().then(function () { filter(link); });
     } else {
-      clearTimeout(timer);         // a search typed just before must not land after this
-      setActive(link);
-      field.value = "";
-      form.classList.remove("saving");
-      var target = new URL(link.href, location.href);
-      var vista = here().searchParams.get("vista");
-      if (vista) target.searchParams.set("vista", vista);
-      target.searchParams.delete("hasta");       // a new list starts at its first chunk
-      loadList(target.href);
+      filter(link);
     }
   });
+
+  // A filter link (a[data-nav]): the list it names, keeping the layout.
+  function filter(link) {
+    clearTimeout(timer);         // a search typed just before must not land after this
+    setActive(link);
+    field.value = "";
+    form.classList.remove("saving");
+    var target = new URL(link.href, location.href);
+    var vista = here().searchParams.get("vista");
+    if (vista) target.searchParams.set("vista", vista);
+    target.searchParams.delete("hasta");       // a new list starts at its first chunk
+    loadList(target.href);
+  }
 
   // --- remembered layout --------------------------------------------------
   // Per list (STORE), and only where the list offers the choice.

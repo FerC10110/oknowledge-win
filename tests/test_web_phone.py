@@ -629,3 +629,29 @@ def test_ocio_s_head_keeps_its_buttons_on_the_count_s_row():
     assert ".list-head > span:has(> .unrewritten) { display: contents; }" in phone
     assert re.search(r"\.list-head > span:has\(> \.unrewritten\) > b \{[^}]*margin-right: auto;", phone)
     assert re.search(r"\.list-head \.unrewritten \{[^}]*flex-basis: 100%;[^}]*order: 1;", phone)
+
+
+# --- Final review fixes ------------------------------------------------------------------
+
+def test_a_tag_in_the_open_layer_shuts_it_before_it_filters():
+    """Final review, Important 1: a `data-nav` link inside the phone's layer
+    (the detail's #tag) would filter the list hidden under it and write the
+    filter onto the layer's entry. The layer goes first, by its back(), and
+    the filter then lands on the list's own entry."""
+    click = between(static("shell.js"), 'document.addEventListener("click"', "// --- remembered layout")
+    guard = 'phone() && isOpen() && panel.contains(link) && link.hasAttribute("data-nav")'
+    assert guard in click
+    assert "ok.layers.close().then(function () { filter(link); });" in click
+    assert click.index(guard) < click.index("filter(link);")
+    # The desktop path is the same filter, called at once.
+    assert "function filter(link) {" in static("shell.js")
+    assert "loadList(target.href);" in between(static("shell.js"), "function filter(link) {", "\n  }\n")
+
+
+def test_the_detail_s_tag_is_touched_44px_tall():
+    """Spec §12: the detail's tag chips get a 44px zone by ::after; the #tag
+    link is 15px tall and its ✕ already has one."""
+    phone = block(static("app.css"), PHONE)
+    assert re.search(r"\.detail \.chips \.chip > a \{[^}]*position: relative;", phone)
+    # 15px tall: -15px above and below make it 45 (-14px, as the ✕ has, is 43).
+    assert re.search(r'\.detail \.chips \.chip > a::after \{ content: ""; position: absolute; inset: -15px 0; \}', phone)

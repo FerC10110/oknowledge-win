@@ -675,6 +675,8 @@ html:not(.js) .js-only { display: none !important; }
   .detail .btn.icon { width: 44px; }
   .detail .chips .chip button { position: relative; min-width: 32px; }
   .detail .chips .chip button::after { content: ""; position: absolute; inset: -14px 0; }
+  .detail .chips .chip > a { position: relative; }
+  .detail .chips .chip > a::after { content: ""; position: absolute; inset: -15px 0; }
   .detail .tag-new input { min-height: 44px; font-size: 16px; }
   /* Ocio's card: state and ⋯ on one row, the stars on the next. */
   .card-top { flex: none; flex-wrap: wrap; gap: 8px; padding: 10px 16px; }
