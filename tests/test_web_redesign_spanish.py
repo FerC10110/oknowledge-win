@@ -130,3 +130,22 @@ def test_deleting_and_undoing_say_it_as_the_spec_does(client):
     assert back["notice"] == "Restaurado"
     again = client.post(f"/undo/{deleted['undo']}", headers=json)
     assert again.json()["error"] == "Ya no se puede deshacer"
+
+
+# --- delivery 4 (docs/2026-10-15-rediseno-celular-design.md §15) --------------------------
+
+PHONE = ['<nav class="tabbar" aria-label="Secciones">', ">Biblioteca</a>", ">Ocio</a>",
+         ">Ideas</a>", ">Favoritos</a>",
+         'class="topbar-settings" data-modal="settings">Ajustes',
+         '<nav class="chip-row" aria-label="Filtros">', ">Todo</a>",
+         'data-on="Cancelar"', ">Seleccionar</button>"]
+
+
+@pytest.mark.parametrize("text", PHONE)
+def test_the_phone_says_it_as_the_spec_does(client, text):
+    assert text in client.get("/").text
+
+
+def test_the_way_back_says_where_it_goes(client):
+    assert 'aria-label="Volver a Biblioteca">← Biblioteca</a>' in client.get("/?sel=l00000000001").text
+    assert 'aria-label="Volver a Ocio">← Ocio</a>' in client.get("/ocio?sel=c00000000001").text

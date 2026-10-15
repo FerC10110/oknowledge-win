@@ -618,3 +618,14 @@ def test_a_finger_hides_shortcuts_even_in_the_sidebar():
     `[data-modal="keys"]`, so the coarse block names it inside the sidebar."""
     coarse = block(static("app.css"), "@media (pointer: coarse) {")
     assert '.sidebar [data-modal="keys"]' in coarse
+
+
+def test_ocio_s_head_keeps_its_buttons_on_the_count_s_row():
+    """Spec §4: in Ocio the "N fichas sin reescribir" notice takes a row of its
+    own *below*, and Seleccionar and "Recientes ▾" stay on the right of
+    "Ocio · N". The notice sits inside the count's span, so the span gives its
+    parts to the head and the notice is ordered last."""
+    phone = block(static("app.css"), PHONE)
+    assert ".list-head > span:has(> .unrewritten) { display: contents; }" in phone
+    assert re.search(r"\.list-head > span:has\(> \.unrewritten\) > b \{[^}]*margin-right: auto;", phone)
+    assert re.search(r"\.list-head \.unrewritten \{[^}]*flex-basis: 100%;[^}]*order: 1;", phone)

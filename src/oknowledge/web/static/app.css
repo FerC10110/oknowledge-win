@@ -621,7 +621,10 @@ html:not(.js) .js-only { display: none !important; }
   /* §4 the list head: "{filtro} · N", then Seleccionar and Lista | Tarjetas. */
   .list-head { flex: none; flex-wrap: wrap; gap: 8px; padding: 0 16px 8px; }
   .list-head > span { display: flex; flex-wrap: wrap; align-items: center; gap: 0 6px; min-width: 0; }
-  .list-head .unrewritten { flex-basis: 100%; margin: 6px 0 0; }
+  /* Ocio: the notice gets its own row below; the buttons stay by the count. */
+  .list-head > span:has(> .unrewritten) { display: contents; }
+  .list-head > span:has(> .unrewritten) > b { margin-left: -2px; margin-right: auto; }
+  .list-head .unrewritten { flex-basis: 100%; order: 1; margin: 0; }
   .list-head .seg a { position: relative; display: flex; align-items: center; min-height: 30px;
     padding: 0 14px; }
   .list-head .seg a::after { content: ""; position: absolute; inset: -7px 0; }
