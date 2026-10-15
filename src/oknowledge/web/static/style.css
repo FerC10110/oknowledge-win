@@ -79,8 +79,6 @@ body.wide main, body.wide .quiet, body.wide .notice { max-width: none; }
 }
 .mentions a:hover, .mentions a:focus-visible,
 .empty a:hover, .empty a:focus-visible { color: var(--accent); }
-.tags span, .tags a { color: var(--dim); font-size: 0.78rem; margin-right: 0.4rem;
-                      text-decoration: none; }
 
 .raw { margin: 0.4rem 0 0; font-size: 0.75rem; }
 

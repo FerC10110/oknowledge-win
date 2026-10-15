@@ -70,3 +70,18 @@ def test_no_page_ranks_marks_any_more():
     source = (Path(__file__).resolve().parent.parent / "src" / "oknowledge" / "web"
               / "app.py").read_text(encoding="utf-8")
     assert "used_marks" not in source and "rank_marks" not in source
+
+
+def test_the_pick_is_not_written_beside_the_catalog_panel():
+    """/ocio?buscar=X shows the catalog's panel while #items still holds the
+    first card: writing sel there would pair a card with a search."""
+    script = (STATIC / "shell.js").read_text(encoding="utf-8")
+    block = script.split("// --- the pick in the URL", 1)[1]
+    assert 'searchParams.get("buscar")' in block
+    assert '[data-panel=""]' in block
+
+
+def test_the_chip_text_needs_no_reset_in_the_card_panel():
+    css = (STATIC / "app.css").read_text(encoding="utf-8")
+    assert ".detail-scroll.card .tags span" not in css
+    assert ".tags span" not in (STATIC / "style.css").read_text(encoding="utf-8")

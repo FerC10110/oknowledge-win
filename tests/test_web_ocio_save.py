@@ -339,3 +339,11 @@ def test_a_card_that_was_saved_carries_no_warning(client, fake_catalog):
     fake_catalog(card=terminator_card())
     answer = client.post("/ocio/guardar", data=SAVE, follow_redirects=False)
     assert "notice" not in answer.headers["location"]
+
+
+def test_pasting_a_card_you_have_opens_it_in_ocio(client, fake_catalog):
+    fake_catalog(card=terminator_card())
+    first = client.post("/add", data={"url": "película:tt0088247"}, follow_redirects=False)
+    again = client.post("/add", data={"url": "película:tt0088247"}, follow_redirects=False)
+    sel = first.headers["location"].split("sel=")[1].split("&")[0]
+    assert again.headers["location"] == f"/ocio?sel={sel}&notice=already-saved"

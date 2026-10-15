@@ -467,7 +467,11 @@
   (function () {
     var items = document.getElementById("items");
     var url = here();
-    if (panel && items && items.dataset.current && !url.searchParams.get("sel")) {
+    // Not beside the catalog's panel (/ocio?buscar=X): #items still holds the
+    // first card, but the panel shows the search, and buscar wins on reload.
+    var catalog = panel && panel.querySelector('[data-panel=""]');
+    if (panel && items && items.dataset.current && !url.searchParams.get("sel") &&
+        !url.searchParams.get("buscar") && !catalog) {
       url.searchParams.set("sel", items.dataset.current);
       history.replaceState(null, "", url.pathname + url.search);
     }
