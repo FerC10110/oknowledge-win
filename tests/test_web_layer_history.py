@@ -475,3 +475,76 @@ def test_a_list_s_answer_swaps_the_sections_counts_and_the_groups_in_place(tmp_p
 def test_a_list_s_answer_without_sections_keeps_the_sidebar_s_own(tmp_path):
     out = run(tmp_path, 'const FRESH = ["group:new1"];' + SIDEBAR_SWAP)
     assert out["side"] == ["logo", "sections:old", "group:new1", "foot"]
+
+
+# --- a reload that leaves the panel to its caller (batch G) --------------------------------
+
+def test_a_reload_that_leaves_the_panel_asks_for_no_panel(tmp_path):
+    """select.js reloads with leavePanel after a change to the open note,
+    and picks the panel itself once the list is back: the list must not ask
+    for the server's pick on its own first. A plain reload still does."""
+    scenario = """
+panelHtml = "PANEL:a1";
+const before = asked.length;
+ok.list.reload("", LEAVE); await settle();
+out.panels = asked.slice(before).filter((u) => u.indexOf("/panel/") === 0);
+out.panel = panelHtml;
+"""
+    left = run(tmp_path, "const LEAVE = true;" + scenario, wide=True, current="b2")
+    assert left["panels"] == [] and left["panel"] == "PANEL:a1"
+    plain = run(tmp_path, "const LEAVE = false;" + scenario, wide=True, current="b2")
+    assert [u.split("?")[0] for u in plain["panels"]] == ["/panel/b2"]
+
+
+# --- the list's reloads, on the desktop (batch G: these read shell.js's source before) -----
+
+def test_a_search_carries_the_pick(tmp_path):
+    """The search asks with the sel it was typed under, so a search with no
+    matches leaves the note in the panel and clearing it comes back to it."""
+    out = run(tmp_path, """
+field.value = "vpn";
+field.dispatchEvent({ type: "input" }); await settle(320);
+out.lists = asked.filter((u) => u.indexOf("/lista") === 0);
+""", entries=[{"url": "/?sel=a1", "state": None}], wide=True, panel="PANEL:a1", current="a1")
+    assert len(out["lists"]) == 1
+    assert "q=vpn" in out["lists"][0] and "sel=a1" in out["lists"][0]
+
+
+def test_a_list_with_no_matches_does_not_empty_the_panel(tmp_path):
+    out = run(tmp_path, """
+ok.list.reload(); await settle();
+out.panels = asked.filter((u) => u.indexOf("/panel/") === 0);
+out.panel = panelHtml;
+""", entries=[{"url": "/?q=zz&sel=a1", "state": None}], wide=True, panel="PANEL:a1", current="")
+    assert out["panels"] == [] and out["panel"] == "PANEL:a1"
+
+
+def test_a_list_reload_leaves_an_open_catalog_search_alone(tmp_path):
+    out = run(tmp_path, """
+ok.list.reload(); await settle();
+out.panels = asked.filter((u) => u.indexOf("/panel/") === 0);
+out.panel = panelHtml;
+""", entries=[{"url": "/ocio?buscar=dune", "state": None}], wide=True, panel="CATALOG",
+        current="c1", source="/ocio/lista", mode="ocio", action="/ocio")
+    assert out["panels"] == [] and out["panel"] == "CATALOG"
+
+
+def test_a_list_that_lands_after_another_pick_keeps_the_pick(tmp_path):
+    """A list asked under sel=a1 that lands after the user picked b2 puts
+    neither a1 back in the URL nor its panel."""
+    out = run(tmp_path, """
+const real = global.fetch;
+let held = null;
+global.fetch = (url) => (url.indexOf("/lista") === 0 && !held
+  ? new Promise((r) => { held = () => r(real(url)); }) : real(url));
+field.value = "vpn";
+field.dispatchEvent({ type: "input" }); await settle(320);
+tap("b2"); await settle();
+held(); await settle();
+out.where = where().url;
+out.panel = panelHtml;
+out.panels = asked.filter((u) => u.indexOf("/panel/") === 0).map((u) => u.split("?")[0]);
+""", entries=[{"url": "/?sel=a1", "state": None}], wide=True, panel="PANEL:a1", current="a1")
+    assert "sel=b2" in out["where"] and "q=vpn" in out["where"]
+    assert out["panel"] == "PANEL:b2"
+    assert out["panels"] == ["/panel/b2"]

@@ -57,16 +57,6 @@ def between(text, start, end):
     return text[head:text.index(end, head)]
 
 
-def test_a_list_that_lands_after_another_pick_keeps_the_pick():
-    """Final review I3. A /lista asked with sel=X that lands after the user
-    picked Y must not put X back in the URL or the panel: loadList remembers
-    the selection counter it started under and, if it moved, keeps the
-    user's sel and skips its follow-up loadPanel. Checked in a browser too
-    (final-fix-report.md, I3)."""
-    body = between(SCRIPT.read_text(encoding="utf-8"), "function loadList", "function markCurrent")
-    assert "= shownAsked" in body
-    assert "!== shownAsked" in body or "=== shownAsked" in body
-
 
 def test_a_save_that_lands_after_another_pick_does_not_reload_the_old_panel():
     """The ★ on X, then a click on Y before Y's panel is back: the save must
@@ -156,10 +146,6 @@ def test_picking_a_card_ends_a_catalog_search():
     assert '["buscar", "catalogo", "year"]' in body and "searchParams.delete(name)" in body
 
 
-def test_a_list_reload_leaves_an_open_catalog_search_alone():
-    body = between(SCRIPT.read_text(encoding="utf-8"), "function loadList", "function markCurrent")
-    assert '!target.searchParams.get("buscar")' in body
-
 
 def test_enter_cancels_the_live_filter_before_searching_the_catalogs():
     text = SCRIPT.read_text(encoding="utf-8")
@@ -173,16 +159,12 @@ def test_only_the_start_of_a_run_is_kept_quiet():
 
 
 def test_a_list_that_brings_its_sidebar_groups_swaps_them_in():
-    """Final review I-1: Ocio's TIPO and ESTADO are redrawn by the server with
-    the list, inside the list's own sequence guard, and only when the answer
-    brings them (the library and the ideas do not)."""
+    """Final review I-1: the sidebar is redrawn by the server with the list,
+    inside the list's own sequence guard. What the swap does is run in node
+    (test_web_layer_history.py, batch G)."""
     text = SCRIPT.read_text(encoding="utf-8")
     body = between(text, "function loadList", "function markCurrent")
     assert body.index("if (mine !== asked) return;") < body.index("sideFilters()")
-    swap = between(text, "function sideFilters", "\n  }\n")
-    assert 'list.querySelector("template#side-filters")' in swap
-    assert "if (!fresh) return;" in swap
-    assert 'querySelectorAll("nav.group")' in swap and "fresh.content" in swap
 
 
 def test_a_filter_click_lights_its_row_only_in_its_own_group():
@@ -195,15 +177,8 @@ def test_a_filter_click_lights_its_row_only_in_its_own_group():
 
 
 # --- final fix pass ------------------------------------------------------------------
-
-def test_a_list_with_no_matches_does_not_empty_the_panel():
-    # 55466c5 renamed the local to serverPick: the guard must read it, not the
-    # always-truthy current() function, or a search with no matches loads
-    # panel "" and drops sel.
-    text = SCRIPT.read_text(encoding="utf-8")
-    landing = between(text, "function loadList", "function sideFilters")
-    assert "if (serverPick && !target.searchParams.get(\"buscar\")" in landing
-    assert "if (current &&" not in landing
+# (what the list does on a reload, a search and a late answer is run in node:
+# test_web_layer_history.py)
 
 
 def test_no_local_shadows_the_list_helpers():
@@ -214,20 +189,3 @@ def test_no_local_shadows_the_list_helpers():
     for name in ("current", "shown"):
         assert not re.search(rf"\bvar {name}\b", text), name
         assert not re.search(rf"(?<![.\w]){name}\s*(&&|\|\||\.|\?)", text), name
-
-
-def test_a_search_carries_the_pick():
-    # A search with no matches leaves the note in the panel; clearing it must
-    # come back to that note, not to the first one: the search asks with the
-    # sel it was typed under (the server falls back to the first visible).
-    text = SCRIPT.read_text(encoding="utf-8")
-    typed = between(text, 'field.addEventListener("input"', 'form.addEventListener("submit"')
-    assert 'var pick = panel && here().searchParams.get("sel");' in typed
-    assert 'if (pick) url.searchParams.set("sel", pick);' in typed
-
-
-def test_a_reload_can_leave_the_panel_to_its_caller():
-    text = SCRIPT.read_text(encoding="utf-8")
-    assert "function loadList(url, keepScroll, reason, leavePanel)" in text
-    assert "panel && !leavePanel" in text
-    assert "reload: function (id, leavePanel)" in text
