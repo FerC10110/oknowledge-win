@@ -88,7 +88,12 @@
         if (body.notice && !form.dataset.runs) ok.toast(body.notice);
         if (form.dataset.runs) started(form.dataset.runs);
         else if (form.hasAttribute("data-links")) { search(); refresh(["idea-ai"]); }
-        else refresh(["idea-controls", "idea-tags"]);
+        else refresh(["idea-controls", "idea-tags"]).then(function () {
+          // "+ tag" again, for the next one (spec §9).
+          if (!form.classList.contains("tag-new")) return;
+          var box = document.getElementById("tag-add");
+          if (box) box.focus();
+        });
       })
       .catch(function (error) {
         ok.toast(error.message);

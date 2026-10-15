@@ -133,7 +133,7 @@
         if (!panel && cursor && itemOf(cursor)) markCurrent(cursor);
         told(reason || "filter");
       })
-      .catch(function () { location.href = target.href; });
+      .catch(function () { if (mine === asked) location.href = target.href; });
   }
 
   // Ocio's column answer brings TIPO and ESTADO for its filter (final
@@ -300,10 +300,12 @@
   // The library's groups are one choice: a click clears them all. Ocio's
   // TIPO and ESTADO are apart: a click lights its row in its own group.
   function setActive(link) {
+    // A sort link in the list head is not a filter: the sidebar keeps its row.
+    if (!link.closest(".sidebar")) return;
     var apart = link.closest(".sidebar .group[data-apart]");
     (apart || document).querySelectorAll(apart ? ".filter.on" : ".sidebar .filter.on")
       .forEach(function (a) { a.classList.remove("on"); });
-    if (link.closest(".sidebar")) link.classList.add("on");
+    link.classList.add("on");
   }
 
   document.addEventListener("click", function (event) {
@@ -333,6 +335,7 @@
     } else if (link.hasAttribute("data-more")) {
       more(link);
     } else {
+      clearTimeout(timer);         // a search typed just before must not land after this
       setActive(link);
       field.value = "";
       form.classList.remove("saving");
@@ -415,10 +418,13 @@
   function more(link) {
     if (link.dataset.loading) return;
     link.dataset.loading = "1";
+    var mine = asked;
     if (observer) observer.unobserve(link);
     fetch(link.dataset.more)
       .then(function (r) { if (!r.ok) throw new Error(r.status); return r.text(); })
       .then(function (html) {
+        // The list was drawn again meanwhile: this chunk belongs to the old one.
+        if (mine !== asked) return;
         var box = document.createElement("div");
         box.innerHTML = html;
         var items = document.getElementById("items");
@@ -497,6 +503,14 @@
   // list or the panel: each says its own words when it ends, from the
   // nearest data-done-as / data-failed-as (the library's are the page's).
   var watched = {};
+
+  // Still in the list or the panel: an id that left both (filtered out,
+  // deleted) is not asked about any more.
+  function onScreen(id) {
+    var mark = '[data-working="' + CSS.escape(id) + '"]';
+    return !!(list.querySelector(mark) || (panel && panel.querySelector(mark)));
+  }
+
   function watch() {
     var busy = Array.prototype.slice.call(list.querySelectorAll("[data-working]"));
     if (panel) busy = busy.concat(Array.prototype.slice.call(panel.querySelectorAll("[data-working]")));
@@ -507,6 +521,7 @@
       var doneAs = words ? words.dataset.doneAs : texts.done;
       var failedAs = words ? words.dataset.failedAs : texts.failed;
       watched[id] = setInterval(function () {
+        if (!onScreen(id)) { clearInterval(watched[id]); delete watched[id]; return; }
         fetch("/item/" + encodeURIComponent(id) + "/state")
           .then(function (r) { return r.json(); })
           .then(function (state) {
@@ -516,8 +531,8 @@
             toast(state.status === "failed" ? failedAs : doneAs);
             // What the user picked, not what is on screen: that is still the
             // old panel while a newer pick is on its way.
-            var onScreen = panel && panel.querySelector("[data-panel]");
-            if (onScreen && onScreen.dataset.panel === id && stillPicked(id)) loadPanel(id, true);
+            var shown = panel && panel.querySelector("[data-panel]");
+            if (shown && shown.dataset.panel === id && stillPicked(id)) loadPanel(id, true);
             loadList(here().href, true, "refresh");
           })
           .catch(function () { /* try again in three seconds */ });
