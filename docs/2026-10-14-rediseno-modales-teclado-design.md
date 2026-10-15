@@ -334,8 +334,10 @@ Los checkboxes son parte del formulario por `form="bulk"`, así que
   (con Deshacer si trae `undo`), limpia la selección y recarga la lista
   (`oknowledge.list.reload()`) y el panel si el elegido cambió o se borró.
 - Sobrevive a las recargas de la lista: `shell.js` dispara en `#list` el evento
-  `oknowledge:list` con `detail.reason` = `"filter"` (filtro, búsqueda, orden,
-  vista), `"refresh"` (recarga de la misma lista) o `"more"`. Con `filter`
+  `oknowledge:list` con `detail.reason` = `"filter"` (filtro, búsqueda u
+  orden), `"refresh"` (recarga de la misma lista, o cambio de vista: siguen las
+  mismas notas en pantalla, así que la selección sobrevive a `v`; decidido en la
+  implementación, revisar) o `"more"`. Con `filter`
   limpia; con los otros vuelve a marcar los ids que siguen en pantalla y olvida
   los que ya no están. Cambiar de sección es otra página: arranca vacía.
 - Esc limpia (cuando no había menú ni foco en un campo, §4).
@@ -414,9 +416,11 @@ Módulo nuevo `src/oknowledge/undo.py`:
   `ocio` o `ideas`. El token es `secrets.token_urlsafe(16)` (22 caracteres
   `[A-Za-z0-9_-]`). Antes de escribir, purga los vencidos.
 - `restore(cfg, token, language, lock) -> UndoResult | None`: `None` si el token
-  no tiene esa forma, no existe o tiene más de 24 h. Para cada ítem, bajo
-  `lock(id)`, llama a `vault.restore_note()`. Al final corre un rebuild por
-  estante tocado y borra el JSON. Devuelve `restored` y `skipped` (ids).
+  no tiene esa forma, no existe o tiene más de 24 h. Primero borra el JSON
+  (así el lote se usa una sola vez: un segundo Deshacer no encuentra nada);
+  después, para cada ítem, bajo `lock(id)`, llama a `vault.restore_note()`, y
+  al final corre un rebuild por estante tocado (decidido en la implementación,
+  revisar). Devuelve `restored` y `skipped` (ids).
 - `purge(now=None)`: borra los JSON de más de 24 h. Sólo JSON, nunca una nota.
   Se llama al crear la app (`create_app`, envuelto en `try/except OSError` con
   log) y desde `remember()`.
