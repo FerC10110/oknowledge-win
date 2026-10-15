@@ -236,13 +236,14 @@ global.CustomEvent = class { constructor(t) { this.type = t; } };
 const held = [];
 const sent = [];
 global.fetch = (url, opts) => new Promise((resolve, reject) => {
-  sent.push({ text: opts.body.v.my_note, keepalive: opts.keepalive });
+  sent.push({ text: opts.body.v.my_note, keepalive: opts.keepalive, rev: opts.body.v.rev });
   held.push({ resolve, reject });
   if (opts.signal) opts.signal.addEventListener("abort", () => reject(new Error("aborted")));
 });
-function answer(ok) {
+function answer(ok, extra) {
   held.shift().resolve({ ok, status: ok ? 200 : 500,
-    json: () => Promise.resolve(ok ? { ok: true, notice: "" } : { ok: false, error: "boom" }) });
+    json: () => Promise.resolve(ok ? Object.assign({ ok: true, notice: "" }, extra || {})
+                                   : { ok: false, error: "boom" }) });
 }
 const toasts = [];
 window.oknowledge = { toast: (t) => toasts.push(t) };
@@ -416,3 +417,64 @@ out.kept = field.oknowledgeSettle("VPN familiar");
 out.value = field.value;
 """)
     assert out["kept"] is False and out["value"] == "Mío"
+
+
+# --- review I-1, M-1, M-2 ------------------------------------------------------------------------
+
+def test_every_save_of_a_field_carries_a_rising_revision(clock):
+    """The server writes a field's text only if its rev is newer than the last
+    one written, so a save that ran late cannot land over a newer one. The
+    leave() path (keepalive, in parallel with one in flight) carries it too."""
+    out = clock("""
+field.value = "a"; handlers.blur(); await tick();
+field.value = "ab"; visibility("hidden"); await tick();   // leave(): out beside "a"
+answer(true); answer(true); await tick(); await tick(); await tick();
+field.value = "abc"; handlers.blur(); await tick();
+out.revs = sent.map((s) => s.rev);
+out.texts = sent.map((s) => s.text);
+""")
+    revs = [float(r) for r in out["revs"]]
+    assert out["texts"] == ["a", "ab", "abc"]
+    assert revs == sorted(revs) and len(set(revs)) == 3 and revs[0] > 1e12   # the clock's ms
+
+
+def test_a_stale_answer_is_not_taken_as_this_text_saved(clock):
+    out = clock("""
+field.value = "A"; handlers.blur(); await tick();
+answer(true, { stale: true }); await tick(); await tick(); await tick();
+window.oknowledge.settle(root); await tick();
+out.texts = sent.map((s) => s.text);
+""")
+    assert out["texts"] == ["A", "A"]
+
+
+def test_after_a_timeout_going_back_to_the_old_text_still_sends_it(clock):
+    """Review M-1: the save that timed out may have landed late; what the
+    server holds is unknown, so the old text is not "already saved"."""
+    out = clock("""
+field.value = "x"; handlers.blur(); await tick();
+answer(true); await tick(); await tick(); await tick();
+field.value = "xy"; handlers.blur(); await tick();
+await advance(15000); await tick(); await tick();
+field.value = "x";
+window.oknowledge.settle(root); await tick();
+out.texts = sent.map((s) => s.text);
+""")
+    assert out["texts"] == ["x", "xy", "x"]
+
+
+def test_a_form_post_has_no_save_timeout(clock):
+    """Review M-2: idea.js's posts (an AI action's start, + Add, a tag) are
+    not autosaves: no 15 s limit and no "could not be saved"."""
+    out = clock("""
+let settled = "waiting";
+window.oknowledge.post({ action: "/item/x/actions/improve" }).then(() => { settled = "ok"; },
+                                                                (e) => { settled = e.message; });
+await tick();
+await advance(60000); await tick();
+out.before = settled;
+answer(true); await tick(); await tick();
+out.after = settled;
+out.toasts = toasts;
+""")
+    assert out["before"] == "waiting" and out["after"] == "ok" and out["toasts"] == []

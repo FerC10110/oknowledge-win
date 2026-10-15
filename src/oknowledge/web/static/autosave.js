@@ -38,14 +38,22 @@
 
   // `keep`: the request outlives the page, for what is sent while leaving it
   // -- when its text fits in keepalive's budget.
+  // An autosave (`text` given) gives up after LIMIT, with `timedOut` set: it
+  // may still land on the server later, which is what its `rev` is for.
   function send(url, data, keep, text) {
+    if (text === undefined) {
+      return fetch(url, { method: "POST", body: data,
+                          headers: { Accept: "application/json" } }).then(answer);
+    }
     var controller = typeof AbortController === "function" ? new AbortController() : null;
     return new Promise(function (resolve, reject) {
       var timer = setTimeout(function () {
         if (controller) controller.abort();
-        reject(new Error(texts.saveFailed || ""));
+        var error = new Error(texts.saveFailed || "");
+        error.timedOut = true;
+        reject(error);
       }, LIMIT);
-      var keepalive = keep === true && (text === undefined || bytes(text) <= KEEP_MAX);
+      var keepalive = keep === true && bytes(text) <= KEEP_MAX;
       fetch(url, { method: "POST", body: data, keepalive: keepalive,
                    signal: controller ? controller.signal : undefined,
                    headers: { Accept: "application/json" } })
@@ -55,6 +63,8 @@
     });
   }
 
+  // A form's post (idea.js: an AI action's start, + Add, a tag): not an
+  // autosave, so no save timeout and no revision.
   function post(form, submitter) {
     return send(form.action, new FormData(form, submitter || undefined));
   }
@@ -73,6 +83,19 @@
     var again = false;
     var outgoing = null;            // the newest text sent, until it fails
     var failure = null;             // why the last save failed, until one lands
+    var last = 0;                   // the newest rev this field sent
+
+    // Every save of this field carries a rev above the last one (and the
+    // clock's, so another tab's compare too): the server writes a text only
+    // if no newer one landed first (review I-1).
+    function stamp(data) {
+      last = Math.max(Date.now(), last + 1);
+      data.set("rev", String(last));
+      return data;
+    }
+    // A save that timed out may still land late: what the server holds is
+    // unknown until one lands, so every text counts as unsaved (review M-1).
+    var UNKNOWN = {};
     var waiting = [];               // settle()s waiting for nothing in flight
     var indicator = field.dataset.indicator ? document.querySelector(field.dataset.indicator) : null;
 
@@ -96,11 +119,15 @@
       outgoing = sending;
       var data = new FormData();
       data.set(field.name, sending);
+      stamp(data);
       say("saving");
       var failed = false;
       send(field.dataset.autosave, data, keep, sending)
         .then(function (body) {
           failure = null;
+          // Stale: a newer text of this field landed first, and this one was
+          // not written. Not an error, and not this text saved either.
+          if (body.stale) { if (outgoing === sending) { outgoing = null; say(""); } return; }
           if (outgoing === sending) saved = sending;   // not when leave() sent a newer one
           else return;
           say(field.value === saved ? "saved" : "saving");
@@ -110,6 +137,7 @@
         .catch(function (error) {
           failed = true;
           failure = error;
+          if (error.timedOut) saved = UNKNOWN;
           if (outgoing === sending) outgoing = null;
           say("");
           toast(error.message || texts.saveFailed);    // the text stays in the field
@@ -155,9 +183,11 @@
       outgoing = value;
       var data = new FormData();
       data.set(field.name, value);
+      stamp(data);
       send(field.dataset.autosave, data, true, value)
-        .then(function () {
+        .then(function (body) {
           if (outgoing !== value) return;
+          if (body.stale) { outgoing = null; return; }
           saved = value;
           say(field.value === saved ? "saved" : "saving");
         })

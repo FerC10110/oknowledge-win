@@ -291,3 +291,68 @@ def test_a_missing_cover_file_draws_no_broken_image(cfg, client):
     put(cfg, cover="../attachments/gone.jpg")
     head = panel(client).split("<h1", 1)[0]
     assert "<img" not in head
+
+
+# --- review I-1: an autosave carries a revision; an older one never lands over a newer -----
+
+JSON = {"Accept": "application/json"}
+
+
+def note_on_disk(cfg):
+    return find_note(cfg, CARD, shelf=cfg.ocio)[1].my_note
+
+
+def test_an_older_revision_is_answered_stale_and_not_written(cfg, client):
+    put(cfg)
+    newer = client.post(f"/item/{CARD}/mine/note", data={"my_note": "B", "rev": "2000"},
+                        headers=JSON)
+    assert newer.json()["ok"] is True and "stale" not in newer.json()
+    older = client.post(f"/item/{CARD}/mine/note", data={"my_note": "A", "rev": "1000"},
+                        headers=JSON)
+    assert older.status_code == 200
+    assert older.json()["ok"] is True and older.json()["stale"] is True
+    assert note_on_disk(cfg) == "B"
+
+
+def test_the_same_revision_twice_writes_once(cfg, client):
+    put(cfg)
+    client.post(f"/item/{CARD}/mine/note", data={"my_note": "B", "rev": "7"}, headers=JSON)
+    again = client.post(f"/item/{CARD}/mine/note", data={"my_note": "C", "rev": "7"},
+                        headers=JSON)
+    assert again.json()["stale"] is True and note_on_disk(cfg) == "B"
+
+
+def test_a_newer_revision_is_written(cfg, client):
+    put(cfg)
+    client.post(f"/item/{CARD}/mine/note", data={"my_note": "A", "rev": "1"}, headers=JSON)
+    client.post(f"/item/{CARD}/mine/note", data={"my_note": "B", "rev": "2"}, headers=JSON)
+    assert note_on_disk(cfg) == "B"
+
+
+def test_a_save_without_a_revision_is_written_as_before(cfg, client):
+    """The form without JavaScript sends no rev: it is always written."""
+    put(cfg)
+    client.post(f"/item/{CARD}/mine/note", data={"my_note": "B", "rev": "9"}, headers=JSON)
+    answer = client.post(f"/item/{CARD}/mine/note", data={"my_note": "plain form"},
+                         follow_redirects=False)
+    assert answer.status_code == 303 and note_on_disk(cfg) == "plain form"
+
+
+def test_a_revision_that_was_not_written_does_not_count(cfg, client):
+    """Checked and recorded under the link lock: a save refused as busy
+    leaves no mark, so an older text that comes after it still lands."""
+    from oknowledge.web.app import link_lock
+    put(cfg)
+    with link_lock(CARD):
+        busy = client.post(f"/item/{CARD}/mine/note", data={"my_note": "B", "rev": "5"},
+                           headers=JSON)
+    assert busy.json()["ok"] is False
+    client.post(f"/item/{CARD}/mine/note", data={"my_note": "A", "rev": "3"}, headers=JSON)
+    assert note_on_disk(cfg) == "A"
+
+
+def test_a_revision_that_is_not_a_number_is_ignored(cfg, client):
+    put(cfg)
+    client.post(f"/item/{CARD}/mine/note", data={"my_note": "B", "rev": "9"}, headers=JSON)
+    client.post(f"/item/{CARD}/mine/note", data={"my_note": "C", "rev": "x"}, headers=JSON)
+    assert note_on_disk(cfg) == "C"

@@ -174,3 +174,20 @@ def test_a_stale_page_does_not_put_back_an_old_title(cfg, client):
                 data={"title": "Mi gym", "title_was": "Mi gym", "my_note": "Más texto."})
     after = idea_now(cfg, note)
     assert (after.title, after.my_note) == ("Gimnasio con IA", "Más texto.")
+
+
+# --- review I-1: the title and the text each keep their own revision -------------------------
+
+def test_the_title_and_the_text_are_ordered_apart(cfg, client):
+    note = put(cfg)
+    json = {"Accept": "application/json"}
+    client.post(f"/item/{note.id}/mine/note", data={"my_note": "Texto nuevo", "rev": "50"},
+                headers=json)
+    title = client.post(f"/item/{note.id}/title", data={"title": "Nombre nuevo", "rev": "10"},
+                        headers=json)
+    assert "stale" not in title.json()
+    stale = client.post(f"/item/{note.id}/title", data={"title": "Viejo", "rev": "5"},
+                        headers=json)
+    assert stale.json()["stale"] is True
+    now = idea_now(cfg, note)
+    assert (now.title, now.my_note) == ("Nombre nuevo", "Texto nuevo")
