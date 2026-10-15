@@ -92,9 +92,17 @@
           ok.toast(body.notice);
         }
         if (bar.elements.new_category) bar.elements.new_category.value = "";
-        if (deleting || !mine) { ok.list.reload(after); return; }
+        if (deleting || !mine) {
+          var settled = ok.list.reload(after);
+          // Every listed one deleted: nothing to pick, the panel empties.
+          if (settled) settled.then(function () { if (mine && !after) ok.list.empty(); });
+          return;
+        }
         var back = ok.list.reload();
-        if (back) back.then(function () { ok.list.pick(listed(cur) ? cur : after); });
+        if (back) back.then(function () {
+          var next = listed(cur) ? cur : after;
+          if (next) ok.list.pick(next); else ok.list.empty();
+        });
       })
       .catch(function (error) {
         ok.toast(error.message);

@@ -149,9 +149,21 @@ def test_a_bulk_change_reloads_the_pick_when_it_was_ticked():
     sending = between(text, "function submit", "function pickAfter")
     assert "var mine = picked.indexOf(cur) >= 0;" in sending
     # Once the list is back: the same pick redrawn, or the next one if it left.
-    assert "ok.list.pick(listed(cur) ? cur : after)" in sending
+    assert "var next = listed(cur) ? cur : after;" in sending
 
 
 def test_the_list_leaves_room_for_the_bar_while_picking():
     css = (WEB / "static" / "app.css").read_text(encoding="utf-8")
     assert re.search(r"#list\.picking \.list-body \{ padding-bottom: \d+px; \}", css)
+
+
+# --- fix round 2 -------------------------------------------------------------------------
+
+def test_the_panel_empties_when_no_pick_is_left():
+    shell = (WEB / "static" / "shell.js").read_text(encoding="utf-8")
+    assert "empty: emptyPanel" in between(shell, "ok.list = {", "};")
+    text = SELECT.read_text(encoding="utf-8")
+    sending = between(text, "function submit", "function pickAfter")
+    # Moved out, or deleted, with nothing left to pick: the panel empties.
+    assert "if (next) ok.list.pick(next); else ok.list.empty();" in sending
+    assert "if (mine && !after) ok.list.empty();" in sending

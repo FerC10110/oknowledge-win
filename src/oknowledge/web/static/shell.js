@@ -610,6 +610,8 @@
     pick: pick,
     next: neighbour,
     shown: shown,
+    // No pick left (a bulk action took every one away): the empty panel.
+    empty: emptyPanel,
     // After an undo or a bulk action: the same list again, and `id` opened
     // (the first one restored, or the one after those deleted).
     reload: function (id) {
