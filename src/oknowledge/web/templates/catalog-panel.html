@@ -1,0 +1,36 @@
+{# The catalogs' answers in Ocio's panel (spec §3). Nothing here writes but
+   each row's Save, a POST. The posters are the catalog's, on its server:
+   nothing is saved yet, so there is no local file to show. #}
+<div class="card-top">
+  <nav class="seg" aria-label="{{ t('Type') }}">
+    {% for one in ('movie', 'series', 'anime', 'book') %}<a href="/ocio?buscar={{ query_text|urlencode }}&amp;tipo={{ one }}" data-kind="{{ one }}" class="{% if one == kind %}on{% endif %}">{{ t(KIND_ONE[one]) }}</a>{% endfor %}
+  </nav>
+</div>
+<div class="detail-scroll candidates" data-panel="" data-search="{{ query_text }}">
+  <p class="label">{{ t('Looking for “%1”', query_text) }}</p>
+  {% if candidates %}
+    <ul class="candidate-rows">
+      {% for c in candidates %}
+        <li class="candidate">
+          {% if c.poster %}<img src="{{ c.poster }}" alt="" loading="lazy" referrerpolicy="no-referrer">
+          {% else %}<span class="noposter" style="background: {{ kind|poster_fill }}" aria-hidden="true"></span>{% endif %}
+          <span class="who">
+            <b dir="auto">{{ c.title }}</b>
+            <span class="meta">{% if c.year %}<span class="mono">{{ c.year }}</span>{% endif %}{% if c.people %}<span>{{ c.people }}</span>{% endif %}</span>
+          </span>
+          <form action="/ocio/guardar" method="post">
+            <input type="hidden" name="tipo" value="{{ kind }}">
+            <input type="hidden" name="ref" value="{{ c.ref }}">
+            <input type="hidden" name="via" value="{{ c.via }}">
+            <button class="btn">{{ t('Save') }}</button>
+          </form>
+        </li>
+      {% endfor %}
+    </ul>
+  {% elif failed %}
+    <div class="empty-state"><p class="empty-title">{{ t('The catalogue could not be reached. Try again in a moment.') }}</p>
+      <p class="mono">{{ failed }}</p></div>
+  {% else %}
+    <div class="empty-state"><p class="empty-title">{{ t('I found nothing in the catalogs') }}</p></div>
+  {% endif %}
+</div>

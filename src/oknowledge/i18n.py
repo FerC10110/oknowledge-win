@@ -186,9 +186,12 @@ STRINGS = {
         "That is not there any more.": "Eso ya no está.",
         "%1 cards could not be read and are not shown":
             "%1 fichas no se pudieron leer y no se muestran",
-        "Which one?": "¿Cuál?",
+        "Search the catalogs": "Buscar en catálogos",
+        "I found nothing in the catalogs": "No encontré nada en los catálogos",
+        "Type": "Tipo",
+        "Only an IMDb or Open Library page makes a card. Paste it in the Library to save it as a link.":
+            "Sólo una página de IMDb u Open Library arma una ficha. Pegala en la Biblioteca para guardarla como link.",
         "Looking for “%1”": "Buscando “%1”",
-        "Nothing found for “%1”.": "No se encontró nada para “%1”.",
         "The catalogue could not be reached. Try again in a moment.":
             "No se pudo consultar el catálogo. Reintentá en un momento.",
         "Full": "Completo",

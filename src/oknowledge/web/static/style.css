@@ -325,20 +325,6 @@ form:has(input[name="chain"][value="api"]:not(:checked)) .api-only { display: no
 .rewrite-all button[disabled] { opacity: .6; cursor: default; }
 .cards .site { display: flex; gap: 0.6rem; align-items: center; }
 
-/* The candidates of a search. A row is a poster, a name and a button, and
-   the poster is the fastest way to recognise the one you meant -- these are
-   six films with the same name. The box keeps its size whether the catalog
-   sent a picture or not, so the names stay in one column. */
-.candidates { list-style: none; padding: 0; margin: 1.2rem 0 0; }
-.candidates li { display: flex; align-items: center; gap: 1rem;
-                 padding: 0.7rem 0; border-bottom: 1px solid var(--line); }
-.candidates img, .candidates .noposter {
-  width: 3.4rem; height: 5rem; flex: none; border-radius: 6px;
-  object-fit: cover; background: var(--card); }
-.candidates .who { flex: 1; min-width: 0; display: flex; flex-direction: column;
-                   gap: 0.2rem; overflow-wrap: anywhere; }
-.candidates form { margin: 0; }
-
 /* An idea's links: one per line, an x to take one off, and a link that is
    not in the library any more dimmed rather than hidden. */
 .related { list-style: none; padding: 0; }

@@ -3,16 +3,20 @@
 {% block app_class %}ocio{% endblock %}
 {% block layout %}
 <section class="center" aria-label="{{ t('Leisure') }}">
-  <form class="unified" id="unified" action="/ocio" method="get" role="search"
+  <form class="unified{% if field_saves %} saving{% elif view.q %} finding{% endif %}" id="unified" action="/ocio" method="get" role="search"
         data-mode="ocio" data-save-prefixes="{{ save_prefixes }}">
     <button type="submit" class="default-submit" tabindex="-1" aria-hidden="true"></button>
     <input type="text" name="q" id="field-q" value="{{ view.q }}" autocomplete="off"
            aria-label="{{ t('Search Leisure or paste a link from IMDb or Open Library') }}"
            placeholder="{{ t('Search Leisure or paste a link from IMDb or Open Library') }}">
+    <input type="hidden" name="en" value="ocio">
     {% for name in ('tipo', 'estado') %}{% if view[name] %}<input type="hidden" name="{{ name }}" value="{{ view[name] }}">{% endif %}{% endfor %}
     {% if view.orden != 'recientes' %}<input type="hidden" name="orden" value="{{ view.orden }}">{% endif %}
     <span class="save">
       <button type="submit" class="btn primary" formmethod="post" formaction="/add" id="save-link">{{ t('Save') }} ↵</button>
+    </span>
+    <span class="find">
+      <button type="submit" class="btn primary" formmethod="get" formaction="/ocio/buscar" id="catalog-search">{{ t('Search the catalogs') }} ↵</button>
     </span>
     <kbd class="hint mono">/</kbd>
   </form>
@@ -23,6 +27,6 @@
 </section>
 <section class="detail" id="panel" aria-label="{{ t('Detail') }}"
          data-empty="{{ t('Choose a card to see it here.') }}">
-  {% if panel %}{% include "card-panel.html" %}{% else %}<p class="detail-empty">{{ t('Choose a card to see it here.') }}</p>{% endif %}
+  {% if catalog %}{% include "catalog-panel.html" %}{% elif panel %}{% include "card-panel.html" %}{% else %}<p class="detail-empty">{{ t('Choose a card to see it here.') }}</p>{% endif %}
 </section>
 {% endblock %}

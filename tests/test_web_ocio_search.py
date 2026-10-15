@@ -92,7 +92,7 @@ def test_a_prefix_in_the_paste_box_goes_to_the_candidates(client):
     answer = client.post("/add", data={"url": "película:Terminator"},
                          follow_redirects=False)
     assert answer.status_code == 303
-    assert answer.headers["location"] == "/ocio/buscar?tipo=movie&q=Terminator"
+    assert answer.headers["location"] == "/ocio?buscar=Terminator&tipo=movie"
 
 
 def test_a_prefix_in_the_unified_field_goes_to_the_candidates(client):
@@ -100,7 +100,7 @@ def test_a_prefix_in_the_unified_field_goes_to_the_candidates(client):
     answer = client.post("/add", data={"q": "película:Terminator"},
                          follow_redirects=False)
     assert answer.status_code == 303
-    assert answer.headers["location"] == "/ocio/buscar?tipo=movie&q=Terminator"
+    assert answer.headers["location"] == "/ocio?buscar=Terminator&tipo=movie"
 
 
 def test_a_link_still_goes_where_it_always_went(client, taken):
@@ -118,14 +118,14 @@ def test_a_prefix_with_no_title_says_what_is_missing(client, taken):
 
 def test_the_candidates_are_drawn_with_what_matters(client, fake_catalog):
     fake_catalog(search=[candidate("The Terminator", "1984", "8.1")])
-    body = client.get("/ocio/buscar?tipo=movie&q=Terminator").text
-    assert "The Terminator" in body and "1984" in body and "8.1" in body
+    body = client.get("/ocio/candidatos?tipo=movie&q=Terminator").text
+    assert "The Terminator" in body and "1984" in body
     assert 'action="/ocio/guardar"' in body
 
 
 def test_the_form_carries_what_saving_needs(client, fake_catalog):
     fake_catalog(search=[candidate("The Terminator", ref="tt0088247")])
-    body = client.get("/ocio/buscar?tipo=movie&q=Terminator").text
+    body = client.get("/ocio/candidatos?tipo=movie&q=Terminator").text
     assert 'name="ref" value="tt0088247"' in body
     assert 'name="via" value="movie"' in body
     assert 'name="tipo" value="movie"' in body
@@ -133,14 +133,14 @@ def test_the_form_carries_what_saving_needs(client, fake_catalog):
 
 def test_nothing_found_says_so_and_keeps_what_you_typed(client, fake_catalog):
     fake_catalog(search=[])
-    body = client.get("/ocio/buscar?tipo=movie&q=Zzz").text
+    body = client.get("/ocio/candidatos?tipo=movie&q=Zzz").text
     assert "Zzz" in body               # la caja no se vacía
     assert "no encontr" in body.lower() or "nothing" in body.lower()
 
 
 def test_a_catalogue_that_is_down_is_a_page_and_not_a_500(client, fake_catalog):
     fake_catalog(error="connection refused")
-    answer = client.get("/ocio/buscar?tipo=movie&q=x")
+    answer = client.get("/ocio/candidatos?tipo=movie&q=x")
     assert answer.status_code == 200
     body = answer.text.lower()
     # The sentence itself, not just the words "try again": the base template
@@ -153,39 +153,40 @@ def test_a_catalogue_that_is_down_is_a_page_and_not_a_500(client, fake_catalog):
 def test_nothing_found_is_not_dressed_up_as_a_failure(client, fake_catalog):
     """Zzz no existe: eso no es un catálogo caído."""
     fake_catalog(search=[])
-    body = client.get("/ocio/buscar?tipo=movie&q=Zzz").text.lower()
+    body = client.get("/ocio/candidatos?tipo=movie&q=Zzz").text.lower()
     assert "could not be reached" not in body
     assert "no se pudo consultar" not in body
 
 
-def test_an_unknown_kind_is_not_a_search(client):
-    assert client.get("/ocio/buscar?tipo=ovni&q=x").status_code == 404
+def test_an_unknown_kind_searches_films(client, fake_catalog):
+    client.get("/ocio/candidatos?tipo=ovni&q=x")
+    assert fake_catalog.asked == [("movie", "x")]
 
 
 def test_a_search_with_no_words_is_not_a_search(client):
-    assert client.get("/ocio/buscar?tipo=movie&q=").status_code == 404
+    assert client.get("/ocio/candidatos?tipo=movie&q=").status_code == 404
 
 
 def test_the_anime_asks_the_two_catalogues(client, fake_catalog):
-    client.get("/ocio/buscar?tipo=anime&q=bebop")
+    client.get("/ocio/candidatos?tipo=anime&q=bebop")
     assert fake_catalog.asked == [("series", "bebop"), ("movie", "bebop")]
 
 
 def test_a_book_asks_open_library_and_nobody_else(client, fake_catalog):
-    client.get("/ocio/buscar?tipo=book&q=dune")
+    client.get("/ocio/candidatos?tipo=book&q=dune")
     assert fake_catalog.asked == [("book", "dune")]
 
 
 def test_if_one_of_the_two_fails_the_other_still_shows(client, fake_catalog):
     fake_catalog(search=[candidate("Cowboy Bebop", via="series")])
     fake_catalog.fail_on("movie")
-    body = client.get("/ocio/buscar?tipo=anime&q=bebop").text
+    body = client.get("/ocio/candidatos?tipo=anime&q=bebop").text
     assert "Cowboy Bebop" in body
 
 
 def test_a_title_from_a_catalogue_cannot_inject_markup(client, fake_catalog):
     """El título es texto de internet y la página lo dibuja."""
     fake_catalog(search=[candidate("<script>alert(1)</script>")])
-    body = client.get("/ocio/buscar?tipo=movie&q=x").text
+    body = client.get("/ocio/candidatos?tipo=movie&q=x").text
     assert "<script>alert(1)</script>" not in body
     assert "&lt;script&gt;" in body

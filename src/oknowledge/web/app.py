@@ -64,7 +64,7 @@ from .batch import Batch
 from .batch import run as run_batch
 from .import_file import BadUpload, drop, stage, staged, text_of
 from .library_view import (
-    CHUNK, View, choose, dot, paragraphs, reading_minutes, saves, short_date,
+    CHUNK, View, choose, dot, is_url, paragraphs, reading_minutes, saves, short_date,
     side_groups, tint,
 )
 from .index import Library, read_full, terms
@@ -154,6 +154,8 @@ NOTICES = {
     "thinking": "Thinking it over. Reload in a moment to read it.",
     "cannot-search": "No engine in your chain searches the web: "
                      "opencode or the Anthropic API do.",
+    "not-a-catalog-link": "Only an IMDb or Open Library page makes a card. Paste it in the "
+                          "Library to save it as a link.",
     "not-a-link": "That is not a link: it has to be an address, like "
                   "https://example.com/page.",
     "searched": "That is a page of search results, not a page. Open the result "
@@ -1850,14 +1852,23 @@ def create_app(cfg: Config) -> FastAPI:
         than nothing: these arrive from a URL somebody can type."""
         view = CardView.from_query(request.query_params)
         shown = card_listing(view)
-        card = card_context(shown["current"], view) if shown["current"] else None
+        params = request.query_params
+        # The catalogs' answers take the panel's place (spec §3); without
+        # JavaScript this is how the field's button shows them.
+        found = candidates_context(params.get("buscar", ""),
+                                   view.tipo or params.get("tipo", ""),
+                                   params.get("year", ""))
+        card = None
+        if found is None and shown["current"]:
+            card = card_context(shown["current"], view)
         # One dict: both carry the kind tables, and a call cannot take a
         # keyword twice.
         return page(request, "ocio-shelf.html", section="ocio", toast=True,
                     filters=card_filters(shelf.notes, view),
                     save_prefixes=" ".join(sorted(cards.PREFIXES)),
                     unreadable_cards=shelf.unreadable, panel=card is not None,
-                    **{**shown, **(card or {})})
+                    catalog=found is not None, field_saves=saves(view.q),
+                    **{**shown, **(card or {}), **(found or {})})
 
     @app.get("/ocio/lista", response_class=HTMLResponse)
     def card_column(request: Request, desde: str = ""):
@@ -1921,38 +1932,51 @@ def create_app(cfg: Config) -> FastAPI:
         found, _ = ask_catalogs(tipo, query, year)
         return found[0] if len(found) == 1 and found[0].year == year else None
 
-    @app.get("/ocio/buscar", response_class=HTMLResponse)
-    def card_candidates(request: Request, tipo: str = "", q: str = "",
-                        year: str = ""):
-        """Which one you meant. A page and nothing else: it writes nothing.
-
-        Cinemeta answers "terminator" with Judgment Day first and the 1984
-        one second, so picking is usually the feature and not a step in the
-        way. A GET that wrote a note would be a note anybody could make the
-        browser write with an <img>, so the shortcuts live on the POST and
-        what an id names is offered here as one row with its button.
-        """
+    def candidates_context(q: str, tipo: str, year: str = "") -> dict | None:
+        """What the catalogs answer, for the panel (spec §3). All kinds is
+        films; no words is no search."""
         query = " ".join(q.split())[:cards.LONGEST]
-        if tipo not in cards.KINDS or not query:
-            raise HTTPException(status_code=404, detail="no such search")
+        if not query:
+            return None
+        kind = tipo if tipo in cards.KINDS else "movie"
         ref = cards.reference(query)
         if ref:
-            one = Candidate(ref=ref, kind=tipo, via=catalog_type_for(tipo),
-                            title=query)
+            one = Candidate(ref=ref, kind=kind, via=catalog_type_for(kind), title=query)
             full = catalog_of(one.via).card(one)
-            # An id the catalog does not know says so here rather than as a
-            # notice on the library: this page is where it was asked.
+            # An id the catalog does not know says so in the panel, where
+            # it was asked.
             named = [] if full is None else [
                 dataclasses.replace(one, title=full.title, year=full.year,
-                                    rating=full.rating, poster=full.poster)]
-            return page(request, "candidates.html", kind=tipo, query_text=query,
-                        candidates=named, failed="")
-        found, failed = ask_catalogs(tipo, query, year)
-        # The reason travels even when there are rows; the page shows it
+                                    rating=full.rating, poster=full.poster,
+                                    people=full.people)]
+            return {"query_text": query, "kind": kind, "candidates": named, "failed": "",
+                    "KIND_ONE": KIND_ONE}
+        found, failed = ask_catalogs(kind, query, year)
+        # The reason travels even when there are rows; the panel shows it
         # only when there are none, because one of the two catalogs being
         # down while the other answers is not a failure anybody reads about.
-        return page(request, "candidates.html", kind=tipo, query_text=query,
-                    candidates=found[:cards.MOST], failed=failed)
+        return {"query_text": query, "kind": kind, "candidates": found[:cards.MOST],
+                "failed": failed, "KIND_ONE": KIND_ONE}
+
+    @app.get("/ocio/candidatos", response_class=HTMLResponse)
+    def catalog_candidates(request: Request, q: str = "", tipo: str = "", year: str = ""):
+        """The catalogs' answers as the panel draws them. Writes nothing:
+        saving is the POST of each row (a GET that wrote a card could be
+        made by any <img>)."""
+        found = candidates_context(q, tipo, year)
+        if found is None:
+            raise HTTPException(status_code=404, detail="no such search")
+        return page(request, "catalog-panel.html", **found)
+
+    @app.get("/ocio/buscar")
+    def card_candidates(q: str = "", tipo: str = "", year: str = ""):
+        """The old search page, and the field's button without JavaScript:
+        the candidates live in Ocio's panel now."""
+        query = " ".join(q.split())
+        if not query:
+            return see_other("/ocio", tipo=tipo if tipo in cards.KINDS else "")
+        return see_other("/ocio", buscar=query, tipo=tipo if tipo in cards.KINDS else "movie",
+                         year=year)
 
     @app.post("/ocio/guardar")
     def save_the_card(background: BackgroundTasks, tipo: str = Form(""),
@@ -1971,7 +1995,7 @@ def create_app(cfg: Config) -> FastAPI:
         saved, notice = save_card(tipo, candidate, background)
         if not saved:
             return see_other("/ocio", notice=notice)
-        return see_other(item_url(saved), notice=notice)
+        return see_other("/ocio", sel=saved, notice=notice)
 
     def idea_listing(view: IdeaView) -> dict:
         ideas.refresh()
@@ -2099,7 +2123,8 @@ def create_app(cfg: Config) -> FastAPI:
 
     @app.post("/add")
     def add_pasted(background: BackgroundTasks, url: str = Form(""),
-                   content: str = Form(""), q: str = Form("")):
+                   content: str = Form(""), q: str = Form(""),
+                   en: str = Form(""), tipo: str = Form("")):
         """Take a pasted link, answer at once, read the page afterwards.
 
         What this route decides is only what the page says back. The pipeline
@@ -2114,6 +2139,8 @@ def create_app(cfg: Config) -> FastAPI:
         # and never will be: asked afterwards, every card request would come
         # back as "that is not a link".
         asked = cards.wanted(url)
+        if asked is None and en == "ocio":
+            asked = cards.from_link(url, tipo)
         if asked is not None:
             # An id, or a year that leaves one answer, is not a question:
             # it is saved here, where the origin of the request was
@@ -2122,12 +2149,21 @@ def create_app(cfg: Config) -> FastAPI:
             if only is not None:
                 saved, notice = save_card(asked.kind, only, background)
                 if saved:
-                    return see_other(item_url(saved), notice=notice)
+                    return see_other("/ocio", sel=saved, notice=notice)
             # The year travels as its own parameter and not as part of the
             # query: the catalog searches by title, and the year is what
             # picks among the answers.
-            return see_other("/ocio/buscar", tipo=asked.kind, q=asked.query,
-                             year=asked.year)
+            return see_other("/ocio", buscar=asked.query, tipo=asked.kind, year=asked.year)
+        if en == "ocio":
+            # Ocio's field: a page that is no catalog's is not a card, and
+            # plain words are a search of the catalogs (spec §3).
+            if is_url(url):
+                return see_other("/ocio", notice="not-a-catalog-link")
+            words = " ".join(url.split())
+            if not words:
+                return see_other("/ocio")
+            return see_other("/ocio", buscar=words,
+                             tipo=tipo if tipo in cards.KINDS else "movie")
         if cards.prefixed(url):
             return see_other("/", notice="no-title")
         clean = pasted_link(url)

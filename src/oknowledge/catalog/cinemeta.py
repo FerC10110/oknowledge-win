@@ -99,6 +99,7 @@ def search(kind: str, query: str, via: str = "") -> tuple[list[Candidate], str]:
             year=_text(meta.get("releaseInfo") or meta.get("year")),
             rating=_text(meta.get("imdbRating")),
             poster=_text(meta.get("poster")),
+            people=_first(meta.get("director")),
         ))
         if len(found) == MOST:
             break

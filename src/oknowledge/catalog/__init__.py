@@ -24,6 +24,7 @@ class Candidate:
     year: str = ""      # "" when the catalog does not say
     rating: str = ""    # "8.1", "4.3", or ""
     poster: str = ""    # URL, or ""
+    people: str = ""    # a book's author, a film's director, or ""
 
 
 @dataclass(frozen=True)

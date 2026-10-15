@@ -77,6 +77,7 @@ def _candidate(doc: dict, kind: str) -> Candidate | None:
         year=_text(doc.get("first_publish_year")),
         rating=_rating(doc.get("ratings_average")),
         poster=f"{COVERS}/{cover}-L.jpg" if isinstance(cover, int) else "",
+        people=_first(doc.get("author_name")),
     )
 
 

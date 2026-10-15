@@ -88,3 +88,27 @@ def test_a_prefix_with_no_title_is_still_about_a_card(raw):
 @pytest.mark.parametrize("raw", ["https://example.com/x", "nota:algo", "", ":"])
 def test_a_line_that_is_not_about_a_card_says_so(raw):
     assert prefixed(raw) is False
+
+
+from oknowledge.cards import from_link
+
+
+def test_an_imdb_link_is_a_film_by_its_id():
+    asked = from_link("https://www.imdb.com/title/tt0088247/?ref_=x")
+    assert (asked.kind, asked.query) == ("movie", "tt0088247")
+
+
+def test_an_imdb_link_takes_the_kind_it_was_pasted_under():
+    assert from_link("https://m.imdb.com/title/tt0213338/", "anime").kind == "anime"
+    assert from_link("https://imdb.com/title/tt0213338/", "book").kind == "movie"
+
+
+def test_an_open_library_work_is_a_book():
+    asked = from_link("https://openlibrary.org/works/OL893414W/Dune")
+    assert (asked.kind, asked.query) == ("book", "OL893414W")
+
+
+def test_any_other_link_or_text_is_not_a_catalog_link():
+    for text in ("https://myanimelist.net/anime/1", "https://www.goodreads.com/book/show/1",
+                 "https://imdb.com/name/nm0000116", "Terminator", ""):
+        assert from_link(text) is None

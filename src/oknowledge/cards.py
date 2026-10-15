@@ -50,6 +50,12 @@ _IMDB = re.compile(r"^tt\d{7,8}$")
 _OPENLIBRARY = re.compile(r"^OL\d+W$", re.IGNORECASE)
 
 
+_IMDB_LINK = re.compile(r"https?://(?:www\.|m\.)?imdb\.com/title/(tt\d{7,})(?:[/?#].*)?",
+                        re.IGNORECASE)
+_OPENLIBRARY_LINK = re.compile(r"https?://(?:www\.)?openlibrary\.org/works/(OL\d+W)(?:[/?#].*)?",
+                               re.IGNORECASE)
+
+
 @dataclass(frozen=True)
 class Wanted:
     """A card somebody asked for, before any catalog has been asked."""
@@ -68,6 +74,20 @@ def reference(query: str) -> str:
         # The catalog knows a book by its whole key, never by the id alone.
         return f"/works/{query.upper()}"
     return ""
+
+
+def from_link(text: str, kind: str = "") -> Wanted | None:
+    """A catalog's own page, pasted in Ocio: the card it names. Only the two
+    catalogs a card is made from; any other page is a link, not a card."""
+    text = text.strip()
+    found = _IMDB_LINK.fullmatch(text)
+    if found:
+        return Wanted(kind=kind if kind in KINDS and kind != "book" else "movie",
+                      query=found.group(1))
+    found = _OPENLIBRARY_LINK.fullmatch(text)
+    if found:
+        return Wanted(kind="book", query=found.group(1).upper())
+    return None
 
 
 def prefixed(raw: str) -> bool:

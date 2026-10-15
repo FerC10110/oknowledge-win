@@ -115,7 +115,7 @@ def test_the_card_lands_in_the_ocio_shelf(client, fake_catalog, cfg):
     fake_catalog(card=terminator_card())
     answer = client.post("/ocio/guardar", data=SAVE, follow_redirects=False)
     assert answer.status_code == 303
-    assert "/item/" in answer.headers["location"]
+    assert "sel=" in answer.headers["location"]
     saved = all_notes(cfg, shelf=cfg.ocio)
     assert [n.title for n in saved] == ["The Terminator"]
     assert all_notes(cfg) == []                       # no entre los links
@@ -217,7 +217,7 @@ def test_a_year_that_names_one_candidate_skips_the_list(client, fake_catalog):
     answer = client.post("/add", data={"url": "película:Terminator 1984"},
                          follow_redirects=False)
     # Un año que deja una sola no es una pregunta: se guarda y se abre.
-    assert answer.status_code == 303 and "/item/" in answer.headers["location"]
+    assert answer.status_code == 303 and "sel=" in answer.headers["location"]
     assert fake_catalog.asked_for == ["tt0088247"]
 
 
@@ -241,18 +241,18 @@ def test_an_id_goes_straight_to_the_card(client, fake_catalog):
     fake_catalog(card=terminator_card())
     answer = client.post("/add", data={"url": "película:tt0088247"},
                          follow_redirects=False)
-    assert answer.status_code == 303 and "/item/" in answer.headers["location"]
+    assert answer.status_code == 303 and "sel=" in answer.headers["location"]
     assert fake_catalog.asked_for == ["tt0088247"]
 
 
 def test_a_cross_site_get_cannot_write_a_card(client, fake_catalog, cfg):
-    """Cualquier página con <img src="…/ocio/buscar?tipo=movie&q=tt0088247">
+    """Cualquier página con <img src="…/ocio/candidatos?tipo=movie&q=tt0088247">
     escribiría una ficha en el vault y gastaría una llamada al modelo. La
     lista es un GET y un GET no escribe: el atajo guarda desde el POST de la
     caja de pegar, que es donde se mira el origen.
     """
     fake_catalog(card=terminator_card())
-    answer = client.get("/ocio/buscar?tipo=movie&q=tt0088247",
+    answer = client.get("/ocio/candidatos?tipo=movie&q=tt0088247",
                         headers={"sec-fetch-site": "cross-site"},
                         follow_redirects=False)
     assert answer.status_code == 200                 # una página, no una nota
@@ -262,14 +262,14 @@ def test_a_cross_site_get_cannot_write_a_card(client, fake_catalog, cfg):
 def test_an_id_in_the_url_offers_the_card_it_names(client, fake_catalog, cfg):
     """Y lo que sí hace ese GET es ofrecerla: la fila con su botón."""
     fake_catalog(card=terminator_card())
-    body = client.get("/ocio/buscar?tipo=movie&q=tt0088247").text
+    body = client.get("/ocio/candidatos?tipo=movie&q=tt0088247").text
     assert "The Terminator" in body and "tt0088247" in body
     assert all_notes(cfg, shelf=cfg.ocio) == []
 
 
 def test_an_id_the_catalogue_does_not_know_is_a_page_and_not_a_crash(client, fake_catalog):
     fake_catalog(card=None)
-    answer = client.get("/ocio/buscar?tipo=movie&q=tt0000000")
+    answer = client.get("/ocio/candidatos?tipo=movie&q=tt0000000")
     assert answer.status_code == 200
 
 
@@ -328,7 +328,7 @@ def test_an_index_that_could_not_be_written_is_still_a_card_that_was_saved(
     monkeypatch.setattr("oknowledge.web.app.rebuild_indexes", no_indexes)
     answer = client.post("/ocio/guardar", data=SAVE, follow_redirects=False)
     assert answer.status_code == 303
-    assert "/item/" in answer.headers["location"]
+    assert "sel=" in answer.headers["location"]
     assert "indexes-stale" in answer.headers["location"]
     assert [n.title for n in all_notes(cfg, shelf=cfg.ocio)] == ["The Terminator"]
     assert asked == [link_id(IMDB_URL)]
