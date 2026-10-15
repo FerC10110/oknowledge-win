@@ -140,3 +140,24 @@ def test_adding_by_script_answers_json(cfg):
         "/item/l00000000001/ideas", data={"idea": idea.id, "back": "idea"},
         headers={"Accept": "application/json"})
     assert reply.json()["ok"] is True
+
+
+# --- polish (docs/2026-10-14-rediseno-ocio-ideas-pendientes.md, Ideas) ------------------
+
+def row_of(aside, title):
+    head = aside.rindex('<li class="row', 0, aside.index(title))
+    return aside[head:aside.index("</li>", head)]
+
+
+def test_a_row_that_may_help_has_its_category_dot(cfg):
+    from oknowledge.web.app import dot
+    a_link(cfg, 1, "Montar una vpn casera", tags=("vpn",))
+    row = row_of(column(cfg, an_idea(cfg)), "Montar una vpn casera")
+    assert f'<span class="dot" style="background: {dot("Redes")}"></span>' in row
+
+
+def test_a_result_row_has_its_category_dot(cfg):
+    from oknowledge.web.app import dot
+    a_link(cfg, 1, "Recetas de pan", summary="Harina.", tags=("cocina",), category="Cocina")
+    row = row_of(column(cfg, an_idea(cfg), "?q=pan"), "Recetas de pan")
+    assert f'<span class="dot" style="background: {dot("Cocina")}"></span>' in row

@@ -29,8 +29,6 @@ en `2026-10-14-rediseno-biblioteca-pendientes.md`.
 
 ## Ideas
 
-- Las filas de PUEDEN SERVIR y de RESULTADOS no tienen el punto que muestran
-  la spec y el diseño.
 - Las ideas que llegan con "más" vuelven a `/ideas` sin `hasta`: al volver se
   pierde la profundidad del scroll.
 - Los campos ocultos `estado`/`vista` de `/ideas` quedan viejos después de

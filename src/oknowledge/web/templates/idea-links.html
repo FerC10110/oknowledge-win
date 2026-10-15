@@ -33,6 +33,7 @@
     <ul class="rows">
       {% for link in offered %}
         <li class="row add">
+          <span class="dot" style="background: {{ link.category|dot }}"></span>
           <span class="row-text">
             <span class="row-title" dir="auto">{{ link.title or link.url }}</span>
             <span class="domain mono">{{ link.source }}</span>
