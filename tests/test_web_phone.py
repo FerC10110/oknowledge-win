@@ -585,3 +585,9 @@ def test_the_checkboxes_wait_for_seleccionar_on_the_phone():
     for part in ("position: fixed;", "left: 8px;", "right: 8px;",
                  "bottom: max(8px, env(safe-area-inset-bottom));", "transform: none;"):
         assert part in bar, part
+
+
+def test_the_bulk_star_is_named_once(client):
+    """Spec §9: on the phone the words hide behind a ★ ::before; the name stays one word."""
+    bar = re.search(r'<form id="bulk".*?</form>', client.get("/").text, re.S).group(0)
+    assert re.search(r'<button[^>]*class="bulk-star" aria-label="Favorite">', bar)

@@ -364,3 +364,47 @@ def test_every_way_out_leaves_the_mode_and_clears(mode):
 
 def test_a_refresh_keeps_the_mode_and_redraws_the_new_button(mode):
     assert mode["refreshKeeps"] == [True, "Cancelar"]
+
+
+# --- fix round 1: the mode does not outlive the phone ----------------------------
+
+MEDIA_PREFIX = r"""
+const media = { matches: true, fns: [], addEventListener(type, fn) { if (type === "change") this.fns.push(fn); } };
+global.matchMedia = (query) => { media.query = query; return media; };
+"""
+
+MEDIA_SUFFIX = r"""
+const wide = {};
+tap(button); tap(a.hit);
+media.matches = false;
+media.fns.forEach((fn) => fn({ matches: false }));
+wide.left = [media.query, classes.has("selecting"), a.box.checked, bar.hidden, button.textContent];
+wide.tapOpens = tap(b.hit).defaultPrevented;
+media.matches = true;
+media.fns.forEach((fn) => fn({ matches: true }));
+wide.backNarrow = classes.has("selecting");
+console.log(JSON.stringify(wide));
+"""
+
+
+@pytest.fixture(scope="module")
+def widened(tmp_path_factory):
+    import json
+    import shutil
+    import subprocess
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not installed")
+    harness = tmp_path_factory.mktemp("media") / "harness.js"
+    harness.write_text(MEDIA_PREFIX + MODE_HARNESS + MEDIA_SUFFIX, encoding="utf-8")
+    done = subprocess.run([node, str(harness), str(SELECT)], capture_output=True, text=True,
+                          timeout=30, check=False)
+    assert done.returncode == 0, done.stderr
+    return json.loads(done.stdout.strip().splitlines()[-1])
+
+
+def test_growing_past_the_phone_leaves_the_mode(widened):
+    """A tablet turned past 60rem: Cancelar is not drawn there, so the mode goes."""
+    assert widened["left"] == ["(max-width: 60rem)", False, False, True, "Seleccionar"]
+    assert widened["tapOpens"] is False
+    assert widened["backNarrow"] is False

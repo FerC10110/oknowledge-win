@@ -27,7 +27,7 @@
       {% endif %}
     </div>
   </details>
-  {% if bulk_section == 'links' %}<button formaction="/bulk/mark" name="mark" value="⭐" class="bulk-star">★ {{ t('Favorite') }}</button>{% endif %}
+  {% if bulk_section == 'links' %}<button formaction="/bulk/mark" name="mark" value="⭐" class="bulk-star" aria-label="{{ t('Favorite') }}">★ {{ t('Favorite') }}</button>{% endif %}
   <button formaction="/bulk/delete" class="bulk-delete">{{ t('Delete') }}</button>
   <button type="button" class="bulk-clear" data-clear aria-label="{{ t('Clear the selection') }}" title="{{ t('Clear the selection') }}">✕</button>
 </form>

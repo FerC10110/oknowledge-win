@@ -86,6 +86,13 @@
     if (box) toggle(box.value, !box.checked);      // one being analysed has none
   }, true);
 
+  // A tablet turned past 60rem: Cancelar is not drawn there, so the mode
+  // (and what it ticked) goes, and a tap opens again (app.js's breakpoint).
+  var narrow = window.matchMedia ? window.matchMedia("(max-width: 60rem)") : null;
+  function widened(event) { if (!event.matches && selecting()) clear(); }
+  if (narrow && narrow.addEventListener) narrow.addEventListener("change", widened);
+  else if (narrow && narrow.addListener) narrow.addListener(widened);
+
   list.addEventListener("change", function (event) {
     var box = event.target;
     if (box.matches && box.matches('input[type="checkbox"][name="ids"]')) toggle(box.value, box.checked);
