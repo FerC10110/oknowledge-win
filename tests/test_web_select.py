@@ -187,7 +187,8 @@ const bar = {
   querySelectorAll: (sel) => [del, star, clr],
   classList: { toggle() {}, add() {}, remove() {} },
 };
-const list = { addEventListener: on("list"), querySelectorAll: () => boxes, classList: { toggle() {} } };
+const list = { addEventListener: on("list"), querySelectorAll: () => boxes, querySelector: () => null,
+               classList: { toggle() {}, contains: () => false } };
 global.window = global;
 global.location = { pathname: "/", search: "" };
 global.FormData = function () { this.delete = () => {}; this.append = () => {}; };
@@ -250,3 +251,116 @@ def test_a_bulk_send_is_one_at_a_time(sending):
 def test_the_bar_is_disabled_while_sending_and_back_after(sending):
     assert sending["disabled"] == [True, True, True]
     assert sending["enabled"] == [False, False, False]
+
+
+# --- delivery 4: the phone's selection mode, in node --------------------------------------
+
+MODE_HARNESS = r"""
+const source = require("fs").readFileSync(process.argv[2], "utf8");
+const out = {};
+const listeners = {};
+const on = (name) => (type, fn) => { (listeners[name + ":" + type] = listeners[name + ":" + type] || []).push(fn); };
+const classes = new Set();
+const classList = {
+  toggle(c, force) { const want = force === undefined ? !classes.has(c) : !!force; if (want) classes.add(c); else classes.delete(c); return want; },
+  contains: (c) => classes.has(c), add: (c) => classes.add(c), remove: (c) => classes.delete(c),
+};
+const button = { dataset: { on: "Cancelar" }, textContent: "Seleccionar", attrs: {},
+                 setAttribute(k, v) { this.attrs[k] = v; },
+                 closest: (sel) => (sel === "[data-select-mode]" ? button : null) };
+function item(id) {
+  const li = { classList: { toggle() {} }, querySelector: () => box };
+  const box = { value: id, checked: false, matches: () => true, closest: () => li };
+  const hit = { closest: (sel) => (sel === "a.hit" ? hit : sel === "li.item" ? li : null) };
+  return { box, li, hit };
+}
+const a = item("a1"), b = item("b2");
+const pending = { closest: (sel) => (sel === "a.hit" ? pending : sel === "li.item" ? { querySelector: () => null } : null) };
+const bar = { hidden: true, dataset: { one: "1", many: "%1" }, elements: { back: { value: "" } },
+              addEventListener: on("bar"), getAttribute: () => "/bulk/category",
+              querySelector: (sel) => (sel === "[data-count]" ? { textContent: "" } : null),
+              querySelectorAll: () => [], classList: { toggle() {} } };
+const list = { addEventListener: on("list"), querySelectorAll: () => [a.box, b.box],
+               querySelector: (sel) => (sel === "[data-select-mode]" ? button : null), classList };
+global.window = global;
+global.location = { pathname: "/", search: "" };
+global.document = { getElementById: (id) => ({ bulk: bar, list: list }[id] || null) };
+window.oknowledge = { keys: {}, closeMenus() {}, toast() {}, list: { current: () => "", shown: () => [] } };
+eval(source);
+const ok = window.oknowledge;
+function tap(target) {
+  const event = { target, defaultPrevented: false, stopped: false,
+                  preventDefault() { this.defaultPrevented = true; }, stopPropagation() { this.stopped = true; } };
+  (listeners["list:click"] || []).forEach((fn) => fn(event));
+  return event;
+}
+const told = (reason) => listeners["list:oknowledge:list"].forEach((fn) => fn({ detail: { reason } }));
+out.drawn = [button.textContent, button.attrs["aria-pressed"]];
+out.off = tap(a.hit).defaultPrevented;                       // not selecting: shell.js opens it
+tap(button);
+out.on = [classes.has("selecting"), button.textContent, button.attrs["aria-pressed"]];
+const ticked = tap(a.hit);
+out.tapTicks = [ticked.defaultPrevented, ticked.stopped, a.box.checked, bar.hidden];
+tap(a.hit);
+out.tapAgainUnticks = [a.box.checked, bar.hidden];
+const busy = tap(pending);
+out.pendingIgnored = [busy.defaultPrevented, a.box.checked, b.box.checked];
+tap(b.hit);
+ok.keys.Escape();
+out.escLeaves = [classes.has("selecting"), b.box.checked, button.textContent, bar.hidden];
+tap(button);
+out.escEmpty = [ok.keys.Escape() !== false, classes.has("selecting")];
+tap(button); tap(a.hit);
+told("filter");
+out.filterLeaves = [classes.has("selecting"), a.box.checked];
+tap(button);
+button.textContent = "Seleccionar";                          // the server drew the head again
+told("refresh");
+out.refreshKeeps = [classes.has("selecting"), button.textContent];
+tap(button);
+out.cancel = [classes.has("selecting"), button.textContent, button.attrs["aria-pressed"]];
+console.log(JSON.stringify(out));
+"""
+
+
+@pytest.fixture(scope="module")
+def mode(tmp_path_factory):
+    import json
+    import shutil
+    import subprocess
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not installed")
+    harness = tmp_path_factory.mktemp("mode") / "harness.js"
+    harness.write_text(MODE_HARNESS, encoding="utf-8")
+    done = subprocess.run([node, str(harness), str(SELECT)], capture_output=True, text=True,
+                          timeout=30, check=False)
+    assert done.returncode == 0, done.stderr
+    return json.loads(done.stdout.strip().splitlines()[-1])
+
+
+def test_the_button_is_drawn_off(mode):
+    assert mode["drawn"] == ["Seleccionar", "false"]
+
+
+def test_seleccionar_turns_the_mode_on(mode):
+    assert mode["off"] is False
+    assert mode["on"] == [True, "Cancelar", "true"]
+
+
+def test_a_tap_in_the_mode_ticks_and_never_opens(mode):
+    """Review Focus 4: prevented and stopped before shell.js sees it."""
+    assert mode["tapTicks"] == [True, True, True, False]
+    assert mode["tapAgainUnticks"] == [False, True]
+    assert mode["pendingIgnored"] == [True, False, False]
+
+
+def test_every_way_out_leaves_the_mode_and_clears(mode):
+    assert mode["escLeaves"] == [False, False, "Seleccionar", True]
+    assert mode["escEmpty"] == [True, False]
+    assert mode["filterLeaves"] == [False, False]
+    assert mode["cancel"] == [False, "Seleccionar", "false"]
+
+
+def test_a_refresh_keeps_the_mode_and_redraws_the_new_button(mode):
+    assert mode["refreshKeeps"] == [True, "Cancelar"]

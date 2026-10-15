@@ -23,6 +23,7 @@ STRINGS = {
         "Library": "Biblioteca",
         "Sections": "Secciones",
         "Filters": "Filtros",
+        "Cancel": "Cancelar",
         "CATEGORIES": "CATEGORÍAS",
         "MARKS": "MARCAS",
         "COLLECTIONS": "COLECCIONES",

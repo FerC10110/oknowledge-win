@@ -549,6 +549,7 @@ html:not(.js) .js-only { display: none !important; }
    display: none keeps them out of the grid. */
 .topbar, .tabbar { display: none; }
 .chip-row { display: none; }
+.select-mode { display: none; }
 
 .detail-back { display: none; }
 /* A ↵ hint is a span (spec §4): no gap may open between it and its words. */
@@ -760,6 +761,29 @@ html:not(.js) .js-only { display: none !important; }
   .legacy-main { overflow-wrap: anywhere; }
   .legacy-main table { display: block; max-width: 100%; overflow-x: auto; }
   .legacy-main pre { max-width: 100%; overflow-x: auto; }
+  /* §9 selection: no checkbox until "Seleccionar"; then each is a 44px zone
+     around a 22px box, and a tap ticks (select.js). */
+  .select-mode { display: inline-flex; position: relative; margin-left: auto; }
+  .select-mode::after { content: ""; position: absolute; inset: -6px 0; }
+  .check { display: none; }
+  #list.selecting .check { display: grid; opacity: 1; top: 0; left: 0; width: 44px; height: 44px; }
+  #list.selecting .check input { width: 22px; height: 22px; }
+  .js .rows .hit { padding-left: 10px; }
+  .js .rows .sub .dot { left: 10px; }
+  .js .idea-shelf .rows .hit { padding-left: 30px; }
+  #list.selecting .rows .check { top: 50%; margin-top: -22px; }
+  #list.selecting .rows .hit { padding-left: 44px; }
+  #list.selecting .rows .sub .dot { left: 44px; }
+  .idea-shelf #list.selecting .rows .hit { padding-left: 58px; }
+  #list.selecting .poster .chip.kind { left: 48px; }
+  /* The bar takes the tabs' place, the whole width (§9). */
+  .bulk { position: fixed; left: 8px; right: 8px; bottom: max(8px, env(safe-area-inset-bottom));
+    transform: none; width: auto; justify-content: space-between; z-index: 35; }
+  .bulk > button:not(.default-submit), .bulk summary { display: inline-flex; align-items: center; min-height: 44px; }
+  .bulk .bulk-clear, .bulk .bulk-star { min-width: 44px; justify-content: center; }
+  .bulk > .bulk-star { font-size: 0; }
+  .bulk > .bulk-star::before { content: "★"; font-size: 15px; }
+  body:has(#list.selecting, #bulk:not([hidden])) .tabbar { display: none; }
 } /* end of the phone */
 
 /* A phone on its side, a tablet: the same column, wider grids (§1, §5). */

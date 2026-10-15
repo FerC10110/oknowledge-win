@@ -9,6 +9,7 @@
     </span>
   {% endif %}
   </span>
+  <button type="button" class="btn select-mode js-only" data-select-mode data-on="{{ t('Cancel') }}" aria-pressed="false">{{ t('Select') }}</button>
   <details class="menu sort">
     {% for key, label in SORTS if key == view.orden %}<summary class="btn">{{ t(label) }} ▾</summary>{% endfor %}
     <div class="menu-list">

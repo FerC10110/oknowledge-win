@@ -557,3 +557,31 @@ def test_a_list_reload_under_the_open_layer_keeps_its_note():
     guard = body.index("} else if (panel && phone() && isOpen()) {")
     assert guard < body.index("loadPanel(serverPick, true)")
     assert "markCurrent(open.dataset.panel)" in body[guard:body.index("loadPanel(serverPick, true)")]
+
+
+# --- Task 10: selection without hover (spec §9) -----------------------------------------
+
+BUTTON = ('<button type="button" class="btn select-mode js-only" data-select-mode data-on="Cancel" '
+          'aria-pressed="false">Select</button>')
+
+
+@pytest.mark.parametrize("path", ["/", "/lista", "/?vista=lista", "/ocio", "/ocio/lista", "/ideas",
+                                  "/ideas/lista"])
+def test_every_list_head_offers_seleccionar(client, path):
+    head = re.search(r'<div class="list-head">.*?<div class="list-body"', client.get(path).text, re.S).group(0)
+    assert BUTTON in head
+    # Left of the layout switch or the sort.
+    assert head.index(BUTTON) < max(head.find('<nav class="seg"'), head.find('<details class="menu sort"'))
+
+
+def test_the_checkboxes_wait_for_seleccionar_on_the_phone():
+    css = static("app.css")
+    assert ".select-mode { display: none; }" in css
+    phone = block(css, PHONE)
+    assert ".check { display: none; }" in phone
+    assert re.search(r"#list\.selecting \.check \{[^}]*display: grid;[^}]*width: 44px; height: 44px;", phone)
+    assert "body:has(#list.selecting, #bulk:not([hidden])) .tabbar { display: none; }" in phone
+    bar = re.search(r"\n  \.bulk \{[^}]*\}", phone).group(0)
+    for part in ("position: fixed;", "left: 8px;", "right: 8px;",
+                 "bottom: max(8px, env(safe-area-inset-bottom));", "transform: none;"):
+        assert part in bar, part

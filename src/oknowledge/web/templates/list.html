@@ -1,6 +1,7 @@
 {% import "shelf-items.html" as shelf with context %}
 <div class="list-head">
   <span>{{ view.label(t) }} · <b class="mono">{{ total }}</b></span>
+  <button type="button" class="btn select-mode js-only" data-select-mode data-on="{{ t('Cancel') }}" aria-pressed="false">{{ t('Select') }}</button>
   <nav class="seg" aria-label="{{ t('Layout') }}">
     <a href="{{ view.url(vista='lista') }}" data-view="lista"
        class="{% if view.vista == 'lista' %}on{% endif %}">{{ t('List') }}</a>

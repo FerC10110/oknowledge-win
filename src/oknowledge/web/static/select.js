@@ -38,10 +38,53 @@
     draw();
   }
 
+  // Every way out of a selection (✕, Esc, a new filter, a bulk action that
+  // went through, Cancelar) is this one: the phone's mode goes with it.
   function clear() {
     picked = [];
+    mode(false);
     draw();
   }
+
+  // --- the phone's mode (docs/2026-10-15-rediseno-celular-design.md §9) ------------
+  // No hover, so no checkbox to find: "Seleccionar" turns each tap on an
+  // item into a tick until one of clear()'s ways out.
+  function selecting() { return list.classList.contains("selecting"); }
+
+  // The button lives in the list head, which every list reload draws again.
+  function drawMode() {
+    var button = list.querySelector("[data-select-mode]");
+    if (!button) return;
+    var on = selecting();
+    if (!button.dataset.off) button.dataset.off = button.textContent;
+    button.textContent = on ? button.dataset.on : button.dataset.off;
+    button.setAttribute("aria-pressed", on ? "true" : "false");
+  }
+
+  function mode(on) {
+    list.classList.toggle("selecting", on);
+    drawMode();
+  }
+
+  // On #list, in the capture phase: before shell.js's click on the document,
+  // so a tap in the mode ticks and never opens the item.
+  list.addEventListener("click", function (event) {
+    var target = event.target;
+    if (!target || !target.closest) return;
+    if (target.closest("[data-select-mode]")) {
+      event.preventDefault();
+      if (selecting()) clear(); else mode(true);
+      return;
+    }
+    if (!selecting()) return;
+    var hit = target.closest("a.hit");
+    if (!hit) return;
+    event.preventDefault();
+    event.stopPropagation();
+    var li = hit.closest("li.item");
+    var box = li && li.querySelector('input[type="checkbox"][name="ids"]');
+    if (box) toggle(box.value, !box.checked);      // one being analysed has none
+  }, true);
 
   list.addEventListener("change", function (event) {
     var box = event.target;
@@ -59,6 +102,7 @@
     var there = boxes().map(function (box) { return box.value; });
     picked = picked.filter(function (id) { return there.indexOf(id) >= 0; });
     draw();
+    drawMode();
   });
 
   // --- sending -------------------------------------------------------------------
@@ -157,9 +201,10 @@
 
   // Last in Esc's chain (app.js): no modal, no menu, no field.
   ok.keys.Escape = function () {
-    if (!picked.length) return false;
+    if (!picked.length && !selecting()) return false;
     clear();
   };
 
   draw();
+  drawMode();
 })();
