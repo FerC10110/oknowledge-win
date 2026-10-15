@@ -440,3 +440,69 @@ sends[0].answer({ moved: 1 }); await settle();
 """, page=page, tab="categorias", categories=["Redes"])
     assert out["waiting"] == [True, None]
     assert out["navigated"] == "/?category=Redes"
+
+
+# --- batch G: what test_web_settings_modal.py read in the source, run instead ---------
+
+def test_a_modal_that_cannot_load_says_so_and_offers_its_close(tmp_path):
+    out = run(tmp_path, """
+const shown = [];
+const empty = modal.replaceChildren;
+modal.replaceChildren = function (...kids) { shown.push(kids.map((k) => k.textContent)); return empty.call(this); };
+ok.openSettings("motores");
+fetches[0].fail(); await settle();
+out.shown = shown[shown.length - 1];
+out.loading = modal.classList.contains("loading");
+const focused = document.activeElement;
+out.focus = [focused.tagName, focused.hasAttribute("data-close"), focused.textContent];
+""")
+    assert out["shown"][0] == "FAILED" and len(out["shown"]) == 2   # the words, the button's row
+    assert out["loading"] is False
+    assert out["focus"] == ["BUTTON", True, "CLOSE"]
+
+
+def test_a_pane_sends_one_save_at_a_time_and_the_newest_after_it(tmp_path):
+    out = run(tmp_path, OPEN + """
+const form = root.parts.form;
+form.fire("change");
+form.payload = { tab: "motores", opencode_model: "m2" }; form.fire("change");
+form.payload = { tab: "motores", opencode_model: "m3" }; form.fire("change");
+out.whileOut = sends.length;
+sends[0].answer({}); await settle();
+out.after = sends.map((s) => s.data.opencode_model);
+sends[1].answer({}); await settle();
+form.fire("change");                         // the same again: nothing to send
+out.same = sends.length;
+form.payload = { tab: "motores", opencode_model: "m4" }; form.fire("change");
+sends[2].answer({ reload: true }); await settle();
+""")
+    assert out["whileOut"] == 1
+    assert out["after"] == ["m1", "m3"]          # m2 was never the newest when it could go
+    assert out["same"] == 2
+    assert out["reloads"] == 1
+
+
+def test_a_rename_onto_a_category_that_exists_asks_first(tmp_path):
+    out = run(tmp_path, OPEN + """
+const asked = [];
+global.confirm = (text) => { asked.push(text); return false; };
+rename(root, "Redes", "Cocina");
+out.asked = asked;
+out.sent = sends.length;
+out.box = root.parts.renames.find((f) => f.elements.old.value === "Redes").elements.new.value;
+""", categories=["Redes", "Cocina"])
+    assert out["asked"] == ["Merge Redes into Cocina?"]
+    assert out["sent"] == 0 and out["box"] == "Redes"
+
+
+def test_a_rename_that_landed_can_be_sent_again(tmp_path):
+    out = run(tmp_path, OPEN + """
+rename(root, "Redes", "Redes2");
+rename(root, "Redes", "Redes3");             // while the first is out: nothing
+out.whileOut = sends.length;
+sends[0].answer({ moved: 1 }); await settle();
+rename(root, "Redes2", "Redes4");
+out.after = sends.length;
+""", categories=["Redes"])
+    assert out["whileOut"] == 1
+    assert out["after"] == 2
