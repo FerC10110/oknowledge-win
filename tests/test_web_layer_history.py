@@ -400,3 +400,19 @@ out.back = page();
     assert out["narrow"]["settings"] and out["narrow"]["top"] == "settings"
     assert out["narrow"]["at"] == 1 and out["narrow"]["layer"] == "settings"
     assert not out["back"]["settings"] and out["back"]["at"] == 0 and out["back"]["top"] == ""
+
+
+# --- polish D7: only a click that started on the backdrop closes the modal ------------------
+
+def test_a_drag_released_on_the_backdrop_leaves_the_modal_open(tmp_path):
+    out = run(tmp_path, """
+dialog.matches = (sel) => sel === "dialog.modal[open]" && dialog.open;
+ok.openSettings(); await settle();
+fireDoc("pointerdown", { target: field });          // a text drag starts in a box...
+click(dialog);                                       // ...and ends on the backdrop
+out.dragged = dialog.open;
+fireDoc("pointerdown", { target: dialog });          // a click on the backdrop itself
+click(dialog);
+out.clicked = dialog.open;
+""", wide=True)
+    assert out["dragged"] is True and out["clicked"] is False
