@@ -27,7 +27,7 @@
   {%- endif %}
 {%- else %}
   {%- for group in filters|default([]) if group.rows %}
-  <div class="chip-group" data-apart role="group" aria-label="{{ t(group.title) }}">
+  <div class="chip-group" data-apart{% if group.param %} data-param="{{ group.param }}"{% endif %} role="group" aria-label="{{ t(group.title) }}">
     {%- for row in group.rows %}
     <a href="{{ row.href }}" data-nav title="{{ row.count }}" class="fchip{% if row.on %} on{% endif %}"><i class="dot" style="background: {{ row.dot }}"></i>{{ t(row.label) }}</a>
     {%- endfor %}

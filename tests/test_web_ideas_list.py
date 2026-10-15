@@ -153,3 +153,8 @@ def test_new_idea_takes_the_field_and_opens_the_screen(cfg, client, monkeypatch)
 
 def test_the_screen_route_is_not_shadowed(cfg, client):
     assert client.get("/ideas/lista").status_code == 200
+
+
+def test_the_state_group_names_the_parameter_it_changes(client):
+    body = client.get("/ideas").text
+    assert '<nav class="group" data-apart data-param="estado"' in body

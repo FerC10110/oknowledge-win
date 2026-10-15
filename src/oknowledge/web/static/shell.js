@@ -139,6 +139,9 @@
 
   // --- the list column ---------------------------------------------------
   var asked = 0;
+  // The newest list asked for, until it lands: a filter clicked before it
+  // does starts from it, not from the URL it is about to replace.
+  var wanted = "";
   function loadList(url, keepScroll, reason, leavePanel) {
     var mine = ++asked;
     // The pick this list was asked under. If the user picks another link
@@ -149,10 +152,12 @@
     var body = document.getElementById("list-body");
     var top = body ? body.scrollTop : 0;
     var cursor = panel ? "" : current();   // the ideas list's
+    wanted = target.href;
     return fetch(source + target.search)
       .then(function (r) { if (!r.ok) throw new Error(r.status); return r.text(); })
       .then(function (html) {
         if (mine !== asked) return;
+        wanted = "";
         list.innerHTML = html;
         sideFilters();
         var moved = picked !== shownAsked;
@@ -161,6 +166,7 @@
           if (sel) target.searchParams.set("sel", sel); else target.searchParams.delete("sel");
         }
         rewrite(target.pathname + target.search);
+        keepHidden();
         litTab(target.href);
         if (keepScroll) document.getElementById("list-body").scrollTop = top;
         var items = document.getElementById("items");
@@ -190,6 +196,25 @@
       .catch(function () { if (mine === asked) location.href = target.href; });
   }
 
+  // The field's hidden inputs carry the list's filter to what the form
+  // sends without this script (Ocio's Save, the search on Enter): they
+  // follow the URL each list leaves, not the one the page was drawn for.
+  function keepHidden() {
+    var url = here();
+    KEEP.forEach(function (name) {
+      var input = form.querySelector('input[type="hidden"][name="' + name + '"]');
+      var value = url.searchParams.get(name);
+      if (!value) { if (input) input.remove(); return; }
+      if (!input) {
+        input = document.createElement("input");
+        input.type = "hidden";
+        input.name = name;
+        form.appendChild(input);
+      }
+      input.value = value;
+    });
+  }
+
   // Ocio's column answer brings TIPO and ESTADO for its filter (final
   // review I-1): their words (a book is read), counts, links (each keeps
   // the other's choice) and lit rows, as a full page load draws them.
@@ -216,6 +241,11 @@
     list.querySelectorAll("li.item.on").forEach(function (li) { li.classList.remove("on"); });
     var li = itemOf(id);
     if (li) li.classList.add("on");
+    setPick(id);
+  }
+
+  // The pick alone, not drawn yet.
+  function setPick(id) {
     var items = document.getElementById("items");
     if (items) items.dataset.current = id;
   }
@@ -274,12 +304,17 @@
     // (keys, the poller, a list reload) loads the panel and leaves it shut.
     if (opts && opts.push && phone() && !isOpen() && openLayer(url)) panel.setAttribute("aria-busy", "true");
     else writePick(url);
-    markCurrent(id);
+    // Behind a save still on its way the pick is taken now (keys and the
+    // poller follow it) but lit when that save lands: the highlight moves
+    // with the panel, and a failed save leaves both where they were.
+    var waiting = dirty();
+    if (waiting) setPick(id); else markCurrent(id);
     var STOP = {};
     return settled()
       .then(function (failed) {
         if (mine !== shownAsked) return STOP;   // a newer panel was asked for since
         if (failed) { keepShown(failed); return STOP; }
+        if (waiting) markCurrent(id);
         return fetch("/panel/" + encodeURIComponent(id) + url.search)
           .then(function (r) {
             if (gone && r.status === 404) return null;
@@ -295,13 +330,21 @@
         if (html === null) { emptyPanel(); return; }
         var active = document.activeElement;
         var refocus = active && active.id && panel.contains(active) ? active.id : "";
+        var caret = refocus ? { value: active.value, start: active.selectionStart,
+                                end: active.selectionEnd } : null;
         panel.innerHTML = html;
         if (window.oknowledge && window.oknowledge.bind) window.oknowledge.bind(panel);   // the note saves itself
-        // The same card again (a rewrite ended): the box being typed in keeps the caret.
+        // The same card again (a rewrite ended): the box being typed in keeps
+        // its caret and selection. If its text changed under it (another tab
+        // saved), an old offset would land anywhere in the new text: the
+        // start is the one place that means the same in both.
         var again = refocus && document.getElementById(refocus);
         if (again && panel.contains(again) && again.focus) {
           again.focus();
-          if (again.setSelectionRange) again.setSelectionRange(again.value.length, again.value.length);
+          if (again.setSelectionRange && typeof caret.start === "number") {
+            if (again.value === caret.value) again.setSelectionRange(caret.start, caret.end);
+            else again.setSelectionRange(0, 0);
+          }
         }
         watch();
       })
@@ -473,17 +516,59 @@
   });
 
   // A filter link (a[data-nav]): the list it names, keeping the layout.
+  // A sort (Ocio's "Recientes ▾") keeps the search: the words in the field,
+  // typed since or not. A row of a group of its own (Ocio's TIPO, ESTADO:
+  // data-param) changes only its parameter, over the newest list asked
+  // for -- its href was drawn with the other group's old choice.
   function filter(link) {
     clearTimeout(timer);         // a search typed just before must not land after this
     setActive(link);
-    field.value = "";
-    form.classList.remove("saving");
-    var target = new URL(link.href, location.href);
+    var href = new URL(link.href, location.href);
+    var group = link.closest("[data-apart]");
+    var param = group && group.dataset.param;
+    var sorting = !!link.closest(".sort");
+    var target = sorting || param ? new URL(wanted || location.href) : href;
+    if (sorting) {
+      var orden = href.searchParams.get("orden");
+      if (orden) target.searchParams.set("orden", orden); else target.searchParams.delete("orden");
+      var q = field.value.trim().split(/\s+/).join(" ");
+      if (!q) target.searchParams.delete("q");
+      else if (!saves(field.value)) target.searchParams.set("q", q);
+    } else {
+      field.value = "";
+      form.classList.remove("saving");
+      if (param) {
+        var chosen = href.searchParams.get(param);
+        if (chosen) target.searchParams.set(param, chosen); else target.searchParams.delete(param);
+        target.searchParams.delete("q");           // as its href: a filter ends the search
+      }
+    }
+    target.searchParams.delete("sel");
     var vista = here().searchParams.get("vista");
     if (vista) target.searchParams.set("vista", vista);
     target.searchParams.delete("hasta");       // a new list starts at its first chunk
     loadList(target.href);
   }
+
+  // --- an idea opened from /ideas ------------------------------------------
+  // Its "← Ideas" comes back to the list as it is now: the filter chosen in
+  // place and the depth "more" reached, which the href drawn by the server
+  // (with its chunk) does not know. Rewritten as it is pressed, so a middle
+  // click and a new tab carry it too.
+  function backHere(hit) {
+    if (mode !== "ideas" || !hit) return;
+    var to = new URL(hit.getAttribute("href"), location.href);
+    var now = here();
+    var back = now.pathname + now.search;
+    if (back === "/ideas") to.searchParams.delete("back"); else to.searchParams.set("back", back);
+    hit.setAttribute("href", to.pathname + to.search);
+  }
+  ["mousedown", "auxclick", "click"].forEach(function (type) {
+    document.addEventListener(type, function (event) {
+      var target = event.target;
+      backHere(target && target.closest ? target.closest("a.hit") : null);
+    }, true);
+  });
 
   // --- remembered layout --------------------------------------------------
   // Per list (STORE), and only where the list offers the choice.
@@ -742,6 +827,7 @@
       var li = itemOf(current());
       var hit = li && li.querySelector("a.hit");
       if (!hit) return false;
+      backHere(hit);
       location.href = hit.href;
       return;
     }

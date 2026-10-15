@@ -135,7 +135,7 @@ def idea_filters(notes, view: IdeaView) -> list[dict]:
     rows += [{"href": view.url(estado=state, q="", hasta=CHUNK), "label": IDEA_WORDS[state],
               "dot": IDEA_DOTS[state], "count": counts[state], "on": view.estado == state}
              for state in IDEA_STATES]
-    return [{"title": "STATE", "rows": rows}]
+    return [{"title": "STATE", "param": "estado", "rows": rows}]
 
 
 KIND_HUES = {"movie": 300, "series": 200, "anime": 20, "book": 60}
@@ -277,4 +277,5 @@ def card_filters(notes, view: CardView) -> list[dict]:
     states += [{"href": view.url(estado=state, **fresh), "label": words[state],
                 "dot": CARD_DOTS[state], "count": sum(1 for n in within if n.state == state),
                 "on": view.estado == state} for state in CARD_STATES]
-    return [{"title": "TYPE", "rows": kinds}, {"title": "STATE", "rows": states}]
+    return [{"title": "TYPE", "param": "tipo", "rows": kinds},
+            {"title": "STATE", "param": "estado", "rows": states}]

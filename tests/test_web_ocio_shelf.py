@@ -310,3 +310,16 @@ def test_a_cover_whose_file_is_there_is_drawn(cfg, client):
     note = put(cfg, 1, "Alien", cover="../attachments/a.jpg")
     item = grid(client.get("/ocio").text)
     assert f'<img src="/cover/{note.id}"' in item and "fill-title" not in item
+
+
+def test_each_group_names_the_parameter_it_changes(cfg, client):
+    """shell.js changes only that parameter over the newest list, so a click
+    on ESTADO right after one on TIPO keeps the TIPO (polish)."""
+    put(cfg, 1, "Alien")
+    body = client.get("/ocio").text
+    assert body.count('<nav class="group" data-apart data-param="tipo"') == 1
+    assert body.count('<nav class="group" data-apart data-param="estado"') == 1
+    assert body.count('class="chip-group" data-apart data-param="tipo"') == 1
+    assert body.count('class="chip-group" data-apart data-param="estado"') == 1
+    column = client.get("/ocio/lista").text
+    assert 'data-apart data-param="tipo"' in column and 'data-apart data-param="estado"' in column

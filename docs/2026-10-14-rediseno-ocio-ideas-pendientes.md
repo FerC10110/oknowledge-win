@@ -8,19 +8,11 @@ en `2026-10-14-rediseno-biblioteca-pendientes.md`.
 
 ## Ocio
 
-- Cambiar el orden mientras se busca vacía el campo pero deja `q` en la URL.
-- Un click en ESTADO menos de ~100 ms después de uno en TIPO usa los links
-  viejos y pierde el `tipo` (gana la última lista, y la barra la acompaña).
-- La barra lateral mide 216 px (la spec) y en el diseño ~200 px.
 
 ## Panel y autoguardado
 
 - Un guardado de la nota que nunca contesta bloquea los cambios de panel: no
   hay timeout.
-- Cuando termina una reescritura, el panel se recarga y el cursor de la nota
-  queda al final.
-- Con un guardado lento, el resaltado se mueve antes que el panel. Después de
-  un guardado fallido, cada click reintenta y vuelve a avisar.
 - Un cambio de pestaña con más de 64 KB pendientes muestra un error falso
   (límite de `keepalive`). Un `leave()` fallido se reintenta sólo con la
   próxima tecla.
@@ -29,10 +21,6 @@ en `2026-10-14-rediseno-biblioteca-pendientes.md`.
 
 ## Ideas
 
-- Las ideas que llegan con "más" vuelven a `/ideas` sin `hasta`: al volver se
-  pierde la profundidad del scroll.
-- Los campos ocultos `estado`/`vista` de `/ideas` quedan viejos después de
-  navegar con JS.
 - "+ etiqueta" pierde el foco después de Enter. El título que propone la IA
   espera mientras el campo de título vacío tiene el foco.
 
