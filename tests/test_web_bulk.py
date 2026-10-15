@@ -111,7 +111,7 @@ def test_a_refused_value_writes_nothing(s, action, data, error):
 def test_nothing_ticked_is_refused(s):
     answer = post(s, "delete")
     assert answer.status_code == 400
-    assert answer.json()["error"] == "No cards were selected, so nothing changed."
+    assert answer.json()["error"] == "No notes were selected, so nothing changed."
 
 
 def test_an_action_nobody_knows_is_a_404(s):
@@ -244,3 +244,76 @@ def test_a_bulk_delete_without_a_script_offers_undo(s):
     answer = s.client.post("/bulk/delete", data={"ids": [CARD1]}, follow_redirects=False)
     assert re.fullmatch(r"/ocio\?notice=trashed&undo=[A-Za-z0-9_-]{22}",
                         answer.headers["location"])
+
+
+# --- polish: delivery 6, batch C ----------------------------------------------------
+
+def count_library_refreshes(monkeypatch):
+    """How often the Biblioteca's index is read: held_by() reads it first, every time."""
+    from oknowledge.web.index import Library
+    calls = []
+    real = Library.refresh
+
+    def counting(self, *a, **k):
+        if self.shelf.name == "links":
+            calls.append(1)
+        return real(self, *a, **k)
+    monkeypatch.setattr(Library, "refresh", counting)
+    return calls
+
+
+def test_a_bulk_state_looks_up_the_shelf_once_per_note(s, monkeypatch):
+    calls = count_library_refreshes(monkeypatch)
+    post(s, "state", ids=s.ideas, state="doing")
+    assert len(calls) == len(s.ideas)
+
+
+def test_a_bulk_delete_looks_up_the_shelf_once_per_note(s, monkeypatch):
+    calls = count_library_refreshes(monkeypatch)
+    post(s, "delete", ids=s.ideas)
+    assert len(calls) == len(s.ideas) + 1       # the one after the rebuilds is not a lookup
+
+
+def test_a_mixed_state_batch_does_not_speak_in_the_words_of_ideas(s):
+    body = post(s, "state", ids=[s.ideas[0], CARD1, "a1"], state="doing").json()
+    assert body["done"] == [s.ideas[0], CARD1] and body["failed"] == ["a1"]
+    assert "under way" not in body["notice"]
+    assert body["notice"] == "2 changed · 1 could not be changed"
+
+
+def test_a_card_that_cannot_follow_is_counted_not_hidden(s):
+    body = post(s, "state", ids=[s.ideas[0], CARD1], state="dropped").json()
+    assert body["done"] == [s.ideas[0]] and body["failed"] == [CARD1]
+    # Only the idea changed, so the idea's word is true; the card is counted.
+    assert body["notice"] == "1 moved to dropped · 1 could not be changed"
+
+
+def test_a_batch_of_ideas_alone_keeps_the_state_words(s):
+    assert post(s, "state", ids=s.ideas, state="doing").json()["notice"] == \
+        "2 moved to under way"
+
+
+def test_nothing_ticked_in_a_bulk_speaks_of_notes_not_cards(s):
+    answer = post(s, "delete")
+    assert answer.json()["error"] == "No notes were selected, so nothing changed."
+
+
+def test_a_bulk_state_and_a_bulk_mark_rebuild_no_index(s, monkeypatch):
+    monkeypatch.setattr("oknowledge.web.app.rebuild_indexes",
+                        lambda *a, **k: pytest.fail("rebuilt"))
+    monkeypatch.setattr("oknowledge.vault.rebuild_indexes",
+                        lambda *a, **k: pytest.fail("rebuilt"))
+    assert post(s, "state", ids=s.ideas, state="done").json()["ok"] is True
+    assert post(s, "mark", ids=["a1", "b2"], mark="⭐").json()["ok"] is True
+
+
+def test_a_busy_note_is_skipped_in_bulk_kind_state_and_mark(s):
+    with Queue().lock(CARD1):
+        body = post(s, "kind", ids=[CARD1, CARD2], kind="series").json()
+    assert body["done"] == [CARD2] and body["failed"] == [CARD1]
+    with Queue().lock(s.ideas[0]):
+        body = post(s, "state", ids=s.ideas, state="doing").json()
+    assert body["done"] == [s.ideas[1]] and body["failed"] == [s.ideas[0]]
+    with Queue().lock("a1"):
+        body = post(s, "mark", ids=["a1", "b2"], mark="⭐").json()
+    assert body["done"] == ["b2"] and body["failed"] == ["a1"]

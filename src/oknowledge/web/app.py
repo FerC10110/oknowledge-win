@@ -213,6 +213,7 @@ NOTICES = {
     "env-failed": "The file could not be created. Check that its folder can "
                   "be written.",
     "nothing-picked": "No cards were selected, so nothing changed.",
+    "nothing-selected": "No notes were selected, so nothing changed.",
     "collected-one": "The note was added to the collection.",
     "collected": "%1 notes added to the collection.",
     "collect-partial": "%1 of %2 notes added to the collection. The rest could "
@@ -291,7 +292,7 @@ def settings_url(tab: str) -> str:
 
 
 def bulk_words(t, action: str, done: int, failed: int, label: str = "",
-               unstar: bool = False) -> str:
+               unstar: bool = False, mixed: bool = False) -> str:
     """What a bulk action says (spec §5.1), in words: it names a category,
     a kind or a state, which a NOTICES key cannot carry in its numbers."""
     if action == "delete":
@@ -301,6 +302,9 @@ def bulk_words(t, action: str, done: int, failed: int, label: str = "",
             said = t("Favorite removed from %1", done)
         else:
             said = t("1 marked as favorite") if done == 1 else t("%1 marked as favorites", done)
+    elif mixed:
+        # Ideas and cards in one batch: no state word fits both, so none is said.
+        said = t("1 changed") if done == 1 else t("%1 changed", done)
     else:
         said = t("1 moved to %2", done, label) if done == 1 else t("%1 moved to %2", done, label)
     if failed:
@@ -515,8 +519,8 @@ GONE = "That is not there any more."
 """What a script is told when the note it was editing has gone."""
 
 FAILURES = {"undo-gone": 404, "undo-blocked": 409, "bad-category": 400, "bad-mark": 400,
-            "bad-kind": 400, "bad-state": 400, "nothing-picked": 400, "bad-collection": 400,
-            "title-empty": 400, "busy": 409, "idea-full": 409,
+            "bad-kind": 400, "bad-state": 400, "nothing-picked": 400, "nothing-selected": 400,
+            "bad-collection": 400, "title-empty": 400, "busy": 409, "idea-full": 409,
             "cannot-search": 409, "no-such-idea": 404, "write-failed": 500,
             "settings-failed": 500, "env-failed": 500, "env-there": 409, "batch-running": 409}
 """The notices that mean nothing was written, and the status each is
@@ -1264,11 +1268,12 @@ def create_app(cfg: Config) -> FastAPI:
             background.add_task(rewrite, current["cfg"], link_id)
         return answer(request, item_url(link_id), "rewriting")
 
-    def restate_one(link_id: str, state: str) -> Edited:
+    def restate_one(link_id: str, state: str, held=None) -> Edited:
         """A card's or an idea's state: the route's body, and each id of a
         bulk change. A link has no state: it is MISSING here, as its route
-        has always said with a 404."""
-        shelves, which = held_by(link_id)
+        has always said with a 404. `held` is the (Library, Shelf) the caller
+        already looked up."""
+        shelves, which = held or held_by(link_id)
         if which.name == "links":
             return Edited(MISSING, False)
         return edit(link_id, lambda cfg, language: update_note(
@@ -1481,17 +1486,17 @@ def create_app(cfg: Config) -> FastAPI:
         home = local_path(back) or BULK_HOMES[action]
         picked = list(dict.fromkeys(one for one in ids if one))
         if not picked:
-            return answer(request, home, "nothing-picked")
+            return answer(request, home, "nothing-selected")
         label, unstar = "", False
 
-        def restate_checked(link: str) -> Edited:
+        def restate_checked(link: str) -> tuple[Edited, str]:
             shelves, which = held_by(link)
             note = shelves.by_id(link)
             if note is None or which.name == "links":
-                return Edited(MISSING, False)
+                return Edited(MISSING, False), ""
             if state not in states_for(note.type):
-                return Edited("bad-state", False)
-            return restate_one(link, state)
+                return Edited("bad-state", False), ""
+            return restate_one(link, state, (shelves, which)), which.name
 
         if action == "category":
             label = clean_category(category.strip() or new_category.strip())
@@ -1507,7 +1512,7 @@ def create_app(cfg: Config) -> FastAPI:
             if state not in IDEA_STATES:
                 return answer(request, home, "bad-state")
             label = t(IDEA_WORDS[state])
-            one = lambda link: (restate_checked(link), "")
+            one = restate_checked
         elif action == "mark":
             if mark != "⭐":
                 return answer(request, home, "bad-mark")
@@ -1551,7 +1556,9 @@ def create_app(cfg: Config) -> FastAPI:
                 where = local_path(back) or SECTION_HOMES.get(lot[0][1], "/")
                 return see_other(where, notice="trashed", undo=token)
             return see_other(home, notice="saved")
-        said = bulk_words(t, action, len(done), len(failed), label, unstar)
+        # A state is said in the ideas' words only when only ideas took it.
+        mixed = action == "state" and touched != {"ideas"}
+        said = bulk_words(t, action, len(done), len(failed), label, unstar, mixed)
         if stale:
             said += " · " + t(NOTICES["indexes-stale"])
         body = {"ok": True, "notice": said, "done": done, "failed": failed}

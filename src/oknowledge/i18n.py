@@ -327,6 +327,8 @@ STRINGS = {
         "something other than spaces, dots and slashes.":
             "Ese nombre no sirve como colecci\u00f3n: tiene que ser algo m\u00e1s "
             "que espacios, puntos y barras.",
+        "No notes were selected, so nothing changed.":
+            "No hab\u00eda ninguna nota elegida, as\u00ed que no cambi\u00f3 nada.",
         "No cards were selected, so nothing changed.":
             "No hab\u00eda ninguna tarjeta elegida, as\u00ed que no cambi\u00f3 nada.",
         "The note was added to the collection.":
@@ -587,6 +589,8 @@ STRINGS = {
         "1 marked as favorite": "1 marcado como favorito",
         "%1 marked as favorites": "%1 marcados como favoritos",
         "Favorite removed from %1": "Se quitó favorito a %1",
+        "1 changed": "1 cambiado",
+        "%1 changed": "%1 cambiados",
         "1 could not be changed": "1 no se pudo cambiar",
         "%1 could not be changed": "%1 no se pudieron cambiar",
         "Undo": "Deshacer",
