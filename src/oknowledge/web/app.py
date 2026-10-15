@@ -1466,7 +1466,7 @@ def create_app(cfg: Config) -> FastAPI:
         if action not in BULK_ACTIONS:
             raise HTTPException(status_code=404, detail="no such action")
         live = current["cfg"]
-        t = translator(ui_language())
+        t = translator(live.ui_language)
         home = local_path(back) or BULK_HOMES[action]
         picked = list(dict.fromkeys(one for one in ids if one))
         if not picked:

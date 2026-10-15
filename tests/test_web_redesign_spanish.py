@@ -88,7 +88,7 @@ SETTINGS = ["Ajustes", "Los cambios se guardan solos", "Motores", "Idioma y guar
             "Categorías", "Buscar modelos",
             "Se usan en orden, de arriba hacia abajo. Podés poner varios modelos separados por coma.",
             "¿Dónde se guarda esto?", "Idioma de los resúmenes", "Idioma de la interfaz",
-            "Compartido con tus otros plugins de Omarchy", "Cambiarlo recarga la página",
+            "Cambiarlo recarga la página",
             "Guardar por defecto", "Lo que se marca al pegar un link", "Menciones de un video",
             "Qué nombres se extraen",
             "Links a analizar por vez", "Cuántos procesa cada tanda",

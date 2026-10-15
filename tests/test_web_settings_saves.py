@@ -100,13 +100,10 @@ def test_a_config_that_cannot_be_written_is_a_500_to_a_script(client, monkeypatc
     assert "could not be saved" in answer.json()["error"]
 
 
-def test_a_shared_language_that_cannot_be_written_is_said(client, monkeypatch):
-    def boom(language):
-        raise PermissionError(13, "read-only")
-    monkeypatch.setattr("oknowledge.web.app.set_ui_language", boom)
-    body = client.post("/settings", data={"ui_language": "es", "tab": "idioma"},
-                       headers=JSON).json()
-    assert body["ok"] is True and "interface language" in body["notice"]
+def test_the_interface_language_goes_to_the_config(client, tmp_path):
+    # The fork keeps it in config.toml: there is no shared file to half-fail.
+    client.post("/settings", data={"ui_language": "es", "tab": "idioma"}, headers=JSON)
+    assert saved(tmp_path).ui_language == "es"
 
 
 # --- the action buttons -----------------------------------------------------------
