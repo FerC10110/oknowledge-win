@@ -97,12 +97,26 @@
 
   function isOpen() { return !!panel && panel.hasAttribute("data-open"); }
 
+  // What a layer's entry adds to the list's URL.
+  var OWN = ["sel", "buscar", "catalogo", "year"];
+  function onLayer() { return !!(history.state && history.state.layer); }
+
+  // The list's own entry as last written (its filters, its search): forward
+  // onto a layer's entry takes them from here, not from when it was pushed.
+  var under = onLayer() ? "" : location.href;
+
+  // Every change to the URL in place: the entry keeps its state.
+  function rewrite(url) {
+    history.replaceState(history.state, "", url);
+    if (!onLayer()) under = location.href;
+  }
+
   // Where a pick goes in the URL. On the phone a pick that is not open
   // stays out of it (Ruling 10): a reload, or a back to this entry, would
   // open a layer nobody asked for.
   function writePick(url) {
     if (phone() && !isOpen()) return;
-    history.replaceState(history.state, "", url.pathname + url.search);
+    rewrite(url.pathname + url.search);
   }
 
   // The detail over the list, with an entry of its own at `url`.
@@ -120,7 +134,7 @@
     if (how !== "close") return;
     var url = here();
     ["sel", "buscar", "catalogo", "year"].forEach(function (name) { url.searchParams.delete(name); });
-    history.replaceState(history.state, "", url.pathname + url.search);
+    rewrite(url.pathname + url.search);
   }
 
   // --- the list column ---------------------------------------------------
@@ -146,7 +160,7 @@
           var sel = here().searchParams.get("sel");
           if (sel) target.searchParams.set("sel", sel); else target.searchParams.delete("sel");
         }
-        history.replaceState(history.state, "", target.pathname + target.search);
+        rewrite(target.pathname + target.search);
         litTab(target.href);
         if (keepScroll) document.getElementById("list-body").scrollTop = top;
         var items = document.getElementById("items");
@@ -340,11 +354,16 @@
 
   function emptyPanel() {
     if (!panel) return;
-    // Nothing left to read: the phone's layer goes too (Ruling 25).
-    if (phone() && isOpen() && ok.layers) ok.layers.close();
-    var url = here();
-    url.searchParams.delete("sel");
-    history.replaceState(history.state, "", url.pathname + url.search);
+    // Nothing left to read: the phone's layer goes too (Ruling 25). Its
+    // entry keeps its sel, so forward onto it opens that note again: the
+    // pick leaves the URL once the back has landed on the list's entry.
+    var shutting = phone() && isOpen() && ok.layers ? ok.layers.close() : null;
+    var unpick = function () {
+      var url = here();
+      url.searchParams.delete("sel");
+      rewrite(url.pathname + url.search);
+    };
+    if (shutting) shutting.then(unpick); else unpick();
     list.querySelectorAll("li.item.on").forEach(function (li) { li.classList.remove("on"); });
     var items = document.getElementById("items");
     if (items) items.dataset.current = "";
@@ -554,7 +573,7 @@
         var url = here();
         url.searchParams.set("hasta", String((parseInt(from, 10) || 0) +
                                              added.length));
-        history.replaceState(history.state, "", url.pathname + url.search);
+        rewrite(url.pathname + url.search);
         observe();
         watch();
         told("more");
@@ -775,7 +794,7 @@
     if (panel && items && items.dataset.current && !url.searchParams.get("sel") &&
         !url.searchParams.get("buscar") && !catalog) {
       url.searchParams.set("sel", items.dataset.current);
-      history.replaceState(history.state, "", url.pathname + url.search);
+      rewrite(url.pathname + url.search);
     }
   })();
 
@@ -788,7 +807,11 @@
 
   // Forward again into the layer's entry: open it with what the URL names.
   // app.js's popstate runs first and has shut whatever was on top.
+  // Its URL is the list's as it is now (a filter changed since, a tag in
+  // the layer) with the layer's own sel or search: a reload there draws
+  // the same. A note gone since (a 404) shuts the layer again, by back.
   window.addEventListener("popstate", function (event) {
+    if (!onLayer()) under = location.href;
     if (!panel || !phone() || isOpen() || !ok.layers) return;
     if (!event.state || event.state.layer !== "panel") return;
     var url = here();
@@ -796,8 +819,16 @@
     var buscar = url.searchParams.get("buscar");
     if (!sel && !buscar) return;
     if (!ok.layers.adopt("panel", closedLayer)) return;
+    if (under) {
+      var now = new URL(under);
+      OWN.forEach(function (name) {
+        now.searchParams.delete(name);
+        if (url.searchParams.get(name)) now.searchParams.set(name, url.searchParams.get(name));
+      });
+      history.replaceState(Object.assign({}, history.state, { base: under }), "", now.pathname + now.search);
+    }
     panel.setAttribute("data-open", "");
-    if (sel) loadPanel(sel); else loadCatalog(buscar, url.searchParams.get("catalogo"));
+    if (sel) loadPanel(sel, true); else loadCatalog(buscar, url.searchParams.get("catalogo"));
   });
 
   litChipInView();

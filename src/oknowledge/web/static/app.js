@@ -147,9 +147,14 @@
   function openModal(dialog) {
     if (!dialog || dialog.open) return false;
     // On the phone Ajustes is a layer: back closes it (delivery 4, §8). Not
-    // over another layer -- the detail covers the top bar anyway.
-    if (dialog.id === "settings-modal" && phone() &&
-        !openLayer("settings", function () { if (dialog.open) dialog.close(); })) return false;
+    // over another layer -- the detail covers the top bar anyway. Forward
+    // onto its entry opens it again on that entry, with no new one. Outgrown
+    // (past 60rem) it stays open: the desktop's modal.
+    if (dialog.id === "settings-modal" && phone()) {
+      var shut = function (how) { if (how !== "wide" && dialog.open) dialog.close(); };
+      var ours = history.state && history.state.layer === "settings";
+      if (!(ours ? adoptLayer("settings", shut) : openLayer("settings", shut))) return false;
+    }
     closeMenus();
     dialog.showModal();
     raise();
@@ -269,7 +274,31 @@
     layer = null;
     if (top) top.onClose("back");
     if (landed) { var done = landed; landed = null; leaving = null; done(); }
+    // Forward onto Ajustes' entry (after a back, even after a reload): it
+    // opens again, or the entry would be a step that shows nothing.
+    var state = history.state;
+    if (!top && state && state.layer === "settings" && phone() && ok.openSettings) ok.openSettings();
   });
+
+  // A tablet turned past 60rem: the desktop has no layers. The one on top
+  // stays drawn (the detail is the panel there, Ajustes the modal) and its
+  // entry stops being one, so Esc or ✕ there do not go back. An entry
+  // pushed from this same URL (Ajustes) goes by a back() that changes
+  // nothing on screen; another (the detail's, with sel) stays, as a plain
+  // entry of the page.
+  function outgrown(event) {
+    if (event.matches || !layer) return;
+    var top = layer;
+    layer = null;
+    var state = history.state;
+    if (top.pushed && state && state.layer === top.name) {
+      if (state.base === location.href) history.back();
+      else history.replaceState(null, "", location.href);
+    }
+    top.onClose("wide");
+  }
+  if (narrow && narrow.addEventListener) narrow.addEventListener("change", outgrown);
+  else if (narrow && narrow.addListener) narrow.addListener(outgrown);
 
   // ✕, Esc and a tap on the backdrop close the dialog; on the phone its
   // entry goes with it. Bound now, before settings.js binds its own "close"

@@ -532,7 +532,8 @@ def test_a_delete_from_the_layer_goes_back_to_the_list_and_opens_nothing():
 
 
 def test_an_empty_panel_does_not_stay_open():
-    assert 'if (phone() && isOpen() && ok.layers) ok.layers.close();' in between(
+    # The behaviour, and the forward it leaves: test_web_layer_history.py.
+    assert 'phone() && isOpen() && ok.layers ? ok.layers.close() : null' in between(
         static("shell.js"), "function emptyPanel", "\n  }\n")
 
 

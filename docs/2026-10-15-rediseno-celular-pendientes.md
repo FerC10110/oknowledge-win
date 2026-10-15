@@ -16,16 +16,6 @@ comparación de capturas dio 0 píxeles con diferencia fuerte en todas.
 
 ## Capa del detalle e historial
 
-- Después de "atrás" + recargar, "adelante" hacia una entrada de Ajustes
-  deja una entrada muerta.
-- `emptyPanel` con la capa abierta (un 404, un lote que vacía la lista)
-  deja una entrada "adelante" que no hace nada.
-- "Adelante" hacia una capa después de cambiar un filtro vuelve a poner
-  los filtros viejos en la URL.
-- Tocar una etiqueta dentro de la capa la cierra y filtra; la entrada de la
-  capa queda como "adelante" (no se puede borrar del historial).
-- Una capa abierta en el celular que pasa a más de 60rem (girar la tablet)
-  conserva su entrada: Esc en el escritorio cambia la URL.
 - Volver de una búsqueda en catálogos de Ocio pierde `estado`/`orden`/`q`.
 
 ## Selección
