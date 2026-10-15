@@ -50,7 +50,15 @@ body { background: #141519; }
 .toast { position: fixed; top: 16px; left: 50%; transform: translateX(-50%);
   z-index: 50; margin: 0; background: var(--t1); color: #141519; border-radius: 10px;
   padding: 9px 14px; font-size: 13.5px; box-shadow: var(--shadow);
-  animation: toast-out .3s ease 2.2s forwards; }
+  display: flex; align-items: center; gap: 14px; white-space: nowrap; }
+.toast[hidden] { display: none; }
+/* The server's toast hides itself; one app.js owns (.live) it times itself. */
+.toast:not(.live) { animation: toast-out .3s ease 2.2s forwards; }
+.toast.undo:not(.live) { animation-delay: 5s; }
+.toast form { display: contents; }
+.toast button { background: none; border: 0; padding: 0; font: inherit; font-weight: 600;
+  color: #141519; cursor: pointer; }
+.toast button:hover { text-decoration: underline; }
 @keyframes toast-out { to { opacity: 0; visibility: hidden; } }
 
 @media (max-width: 60rem) {

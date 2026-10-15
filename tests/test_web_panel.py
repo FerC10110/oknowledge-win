@@ -140,7 +140,7 @@ def test_the_item_page_of_a_link_is_the_home_with_it_selected(client):
 
 def test_a_write_lands_on_the_panel_with_a_toast(client):
     body = client.post("/item/b2/category", data={"category": "Cocina"}).text
-    assert '<p class="notice toast" role="status">' in body
+    assert '<div id="toast" class="toast" role="status" aria-live="polite"><span class="toast-text">Saved.</span>' in body
     assert re.search(r'<li class="item on" id="card-b2"', body)
 
 

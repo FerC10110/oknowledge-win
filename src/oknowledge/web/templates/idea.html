@@ -32,8 +32,8 @@
             <form method="post" action="/item/{{ note.id|slug }}/describe" data-json data-runs="complete">
               <button>{{ t('Regenerate everything with the AI') }}</button>
             </form>
-            <form method="post" action="/item/{{ note.id|slug }}/delete" data-ask="{{ t('Move this idea to the trash folder?') }}">
-              <button class="danger" onclick="return confirm(this.form.dataset.ask)">{{ t('Delete idea') }}</button>
+            <form method="post" action="/item/{{ note.id|slug }}/delete">
+              <button class="danger">{{ t('Delete idea') }}</button>
             </form>
           </div>
         </details>

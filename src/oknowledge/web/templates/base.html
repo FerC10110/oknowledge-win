@@ -24,7 +24,13 @@
     </div>
     {% endblock %}
   </div>
-  {% if notice and toast %}<p class="notice toast" role="status">{{ notice }}</p>{% endif %}
+  {# The one toast (spec §2). The server fills it after a redirect, with a
+     Deshacer form when the URL carries a live token; app.js takes it over
+     and draws every other toast in it. #}
+  <div id="toast" class="toast{% if undo %} undo{% endif %}" role="status" aria-live="polite"{% if not (notice and toast) %} hidden{% endif %}>
+    {%- if notice and toast %}<span class="toast-text">{{ notice }}</span>
+      {%- if undo %}<form method="post" action="/undo/{{ undo }}" class="toast-undo"><input type="hidden" name="back" value="{{ undo_back }}"><button>{{ t('Undo') }}</button></form>{% endif %}
+    {%- endif %}</div>
   {# Not deferred: it has to fold the page before the first paint. #}
   <script src="/static/layout.js"></script>
   {% block scripts %}{% endblock %}

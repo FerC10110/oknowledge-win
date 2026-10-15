@@ -27,6 +27,9 @@ from oknowledge.vault import (
 from oknowledge.web.app import create_app
 
 WRITE_ROUTES = [
+    # Taking a delete back. A cross-site POST here would put notes back into
+    # this vault.
+    ("/undo/" + "A" * 22, {}),
     # Saving an idea. A cross-site POST here would write a note into this
     # vault and spend a model call completing it.
     ("/ideas/guardar", {"text": "x"}),
@@ -1492,7 +1495,7 @@ def test_a_provider_nobody_knows_does_not_replace_the_one_that_is_saved(setup,
 VAULT_WRITERS = ("write_note", "write_index", "rebuild_indexes", "update_note",
                  "delete_note", "download_cover", "save_card", "add_task",
                  "save_idea", "complete_idea", "retitle_idea",
-                 "add_related", "drop_related", "run_idea_action")
+                 "add_related", "drop_related", "run_idea_action", "restore_note")
 
 
 def reachable_source(fn, seen=None):

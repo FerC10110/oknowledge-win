@@ -138,7 +138,7 @@ def test_tags_are_edited_on_an_idea(cfg, client):
 def test_a_deleted_idea_goes_back_to_the_ideas(cfg, client):
     note = put(cfg)
     answer = client.post(f"/item/{note.id}/delete", follow_redirects=False)
-    assert answer.headers["location"] == "/ideas?notice=trashed"
+    assert answer.headers["location"].startswith("/ideas?notice=trashed&undo=")
     assert find_note(cfg, note.id, shelf=cfg.ideas) is None
 
 

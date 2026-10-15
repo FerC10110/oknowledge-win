@@ -295,4 +295,4 @@ def test_regenerating_comes_back_to_the_screen(cfg, monkeypatch):
 
 
 def test_the_notice_is_a_toast(cfg):
-    assert 'class="notice toast"' in screen(cfg, put(cfg), "?notice=thinking")
+    assert '<span class="toast-text">' in screen(cfg, put(cfg), "?notice=thinking")

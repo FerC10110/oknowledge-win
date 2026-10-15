@@ -21,9 +21,8 @@
           {% for kind, name in KIND_NAMES.items() %}<button name="kind" value="{{ kind }}" class="{% if note.type == kind %}on{% endif %}">{{ t(KIND_ONE[kind]) }}</button>{% endfor %}
         </form>
       </details>
-      <form method="post" action="/item/{{ note.id|slug }}/delete" data-inline
-            data-ask="{{ t('Move this card to the trash folder?') }}">
-        <button class="danger" onclick="return confirm(this.form.dataset.ask)">{{ t('Delete') }}</button>
+      <form method="post" action="/item/{{ note.id|slug }}/delete" data-inline>
+        <button class="danger">{{ t('Delete') }}</button>
       </form>
     </div>
   </details>

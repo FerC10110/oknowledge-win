@@ -240,7 +240,7 @@ def test_a_card_s_old_address_opens_it_in_ocio(cfg, client):
 def test_a_deleted_card_goes_back_to_ocio(cfg, client):
     put(cfg)
     answer = client.post(f"/item/{CARD}/delete", follow_redirects=False)
-    assert answer.headers["location"] == "/ocio?notice=trashed"
+    assert answer.headers["location"].startswith("/ocio?notice=trashed&undo=")
 
 
 def test_the_old_pages_and_scripts_are_gone(client):

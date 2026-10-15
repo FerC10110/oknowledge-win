@@ -118,8 +118,8 @@
             data-ask="{{ t('Re-run the analysis? The title, summary, points, category, tags and mentions are replaced by the new answer.') }}">
         <button onclick="return confirm(this.form.dataset.ask)">{{ t('Reprocess with AI') }}</button>
       </form>
-      <form method="post" action="/item/{{ note.id|slug }}/delete" data-ask="{{ t('Move this note to the trash folder?') }}">
-        <button class="danger" onclick="return confirm(this.form.dataset.ask)">{{ t('Delete') }}</button>
+      <form method="post" action="/item/{{ note.id|slug }}/delete">
+        <button class="danger">{{ t('Delete') }}</button>
       </form>
     </div>
   </details>

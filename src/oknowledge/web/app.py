@@ -123,6 +123,22 @@ NOTICES = {
     "trashed-indexes-stale": "The note was moved to the trash folder inside your "
                              "vault, but the indexes could not be rebuilt. Run "
                              "`oknowledge reindex` once the folder is writable again.",
+    # A delete asked by a script: the toast is one word, and Deshacer is
+    # beside it (spec §6.3). A redirect keeps the long "trashed" sentence,
+    # which is also true after the 5 s are gone.
+    "deleted": "Deleted",
+    "undo-gone": "It can no longer be undone",
+    "undo-blocked": "It could not be restored: there is already another note "
+                    "with that link",
+    "restored-one": "Restored",
+    "restored": "%1 restored",
+    "restored-one-partial": "Restored · %2 not: there is already another note "
+                            "with that link",
+    "restored-partial": "%1 restored · %2 not: there is already another note "
+                        "with that link",
+    "restored-indexes-stale": "Restored, but the indexes could not be rebuilt. "
+                              "Run `oknowledge reindex` once the folder is "
+                              "writable again.",
     "settings-failed": "The settings could not be saved. Check that the config "
                        "folder exists and that you can write to it.",
     # Pasting a link in the header. There is no card to watch yet -- a card
@@ -225,14 +241,19 @@ SAFE_SITES = frozenset({"same-origin", "none"})
 # the route turns into a 404.
 MISSING = "missing"
 
+SECTION_HOMES = {"links": "/", "ocio": "/ocio", "ideas": "/ideas"}
+"""Where a shelf's notes are listed: where a delete and a Deshacer go."""
+
 
 class Edited(NamedTuple):
-    """What edit() answers: the notice to show, and whether the change really
+    """What edit() answers: the notice to show, whether the change really
     landed on disk -- which is what decides where a delete sends the user, and
-    must never be guessed from the notice."""
+    must never be guessed from the notice -- and what the change returned
+    (a delete's Trashed, which a Deshacer needs)."""
 
     notice: str
     landed: bool
+    value: object = None
 
 # Cover images are served only as one of these: a hand-edited cover pointing at
 # an .svg or .html inside attachments/ would otherwise be a same-origin document.
@@ -429,7 +450,7 @@ def see_other(path: str, **params) -> RedirectResponse:
 GONE = "That is not there any more."
 """What a script is told when the note it was editing has gone."""
 
-FAILURES = {"bad-category": 400, "bad-mark": 400, "bad-kind": 400, "bad-collection": 400,
+FAILURES = {"undo-gone": 404, "undo-blocked": 409, "bad-category": 400, "bad-mark": 400, "bad-kind": 400, "bad-collection": 400,
             "title-empty": 400, "busy": 409, "idea-full": 409,
             "cannot-search": 409, "no-such-idea": 404, "write-failed": 500}
 """The notices that mean nothing was written, and the status each is
@@ -456,23 +477,34 @@ def wants_json(request: Request) -> bool:
     return "application/json" in request.headers.get("accept", "")
 
 
-def answer(request: Request, where: str, notice: str = "", **params) -> Response:
+ONWARD = ("undo", "reload")
+"""What a script needs besides the words: the token Deshacer posts back
+(spec §6.3) and whether the page must reload (§3.1)."""
+
+
+def answer(request: Request, where: str, notice: str = "", extra: dict | None = None,
+           **params) -> Response:
     """The answer to a write: a 303 for a form, JSON for a script.
 
     The JSON carries the notice in words, so the toast says what the page
-    would have said after the redirect.
+    would have said after the redirect, plus `undo`/`reload` when given and
+    whatever `extra` a route adds (the ids a Deshacer restored).
     """
     if not wants_json(request):
+        params.pop("reload", None)            # never in a URL: the page is new anyway
         return see_other(where, notice=notice, **params)
     t = translator(request.app.state.settings["cfg"].ui_language)
     text = None if notice in QUIET else NOTICES.get(notice)
-    said = t(text, params.get("n", 0), params.get("m", 0)) if text else ""
+    said = t(text, params.get("n") or 0, params.get("m") or 0) if text else ""
     status = FAILURES.get(notice)
     if status is not None:
         return JSONResponse({"ok": False, "error": said}, status_code=status)
+    body = {"ok": True, "notice": said}
     if notice in RUNS:
-        return JSONResponse({"ok": True, "notice": said, "runs": True})
-    return JSONResponse({"ok": True, "notice": said})
+        body["runs"] = True
+    body.update({key: params[key] for key in ONWARD if params.get(key)})
+    body.update(extra or {})
+    return JSONResponse(body)
 
 
 IDEA_SEARCH_LIMIT = 12
@@ -503,7 +535,8 @@ def local_path(back: str) -> str | None:
 
     It arrives from a form, so it can arrive as anything: only a path on
     this server is taken, never another host (//x, \\x, a scheme), and a
-    notice it already carries is dropped so they do not pile up.
+    notice it already carries is dropped, with its numbers and its Deshacer
+    token, so they do not pile up.
     """
     text = (back or "").strip()
     if not text.startswith("/") or text.startswith("//") or "\\" in text:
@@ -513,7 +546,7 @@ def local_path(back: str) -> str | None:
     parts = urlsplit(text)
     if parts.scheme or parts.netloc:
         return None
-    query = urlencode([(k, v) for k, v in parse_qsl(parts.query) if k != "notice"])
+    query = urlencode([(k, v) for k, v in parse_qsl(parts.query) if k not in ("notice", "n", "m", "undo")])
     return parts.path + ("?" + query if query else "")
 
 
@@ -742,7 +775,15 @@ def create_app(cfg: Config) -> FastAPI:
                 # and it says there how far along a run is. It is a read of
                 # memory, not of the queue: no page pays for it.
                 "batch": progress.snapshot(),
-                "toast": False}
+                "toast": False,
+                # A Deshacer the redirect after a delete carries. Only for a
+                # lot that still exists and is fresh: an old URL reloaded, or
+                # an invented token, offers nothing (spec §2).
+                "undo": (request.query_params.get("undo")
+                         if "notice" in request.query_params
+                         and undo.alive(request.query_params.get("undo"))
+                         else None),
+                "undo_back": local_path(here) or "/"}
         if library.error is not None:
             return templates.TemplateResponse(
                 request=request, name="error.html", status_code=503,
@@ -1048,7 +1089,8 @@ def create_app(cfg: Config) -> FastAPI:
             return Edited(MISSING, False)
         try:
             with link_lock(link_id):
-                if change(live, live.language) is None:
+                value = change(live, live.language)
+                if value is None:
                     return Edited(MISSING, False)
         except Locked:
             return Edited("busy", False)
@@ -1057,7 +1099,7 @@ def create_app(cfg: Config) -> FastAPI:
         except IndexesStale as error:
             log.warning("the indexes could not be rebuilt: %s", error)
             shelves.refresh()
-            return Edited(stale, True)
+            return Edited(stale, True, error.done)
         except (OSError, ProtectedNote) as error:
             # A read-only vault, a trash/ that is a file, a full disk. Every
             # vault write is atomic and the rebuild has its own answer above,
@@ -1065,7 +1107,7 @@ def create_app(cfg: Config) -> FastAPI:
             log.warning("the vault could not be written: %s", error)
             return Edited("write-failed", False)
         shelves.refresh()
-        return Edited(done, True)
+        return Edited(done, True, value)
 
     @app.post("/item/{link_id}/category")
     def move(request: Request, link_id: str, category: str = Form("")):
@@ -1245,25 +1287,63 @@ def create_app(cfg: Config) -> FastAPI:
             raise HTTPException(status_code=404, detail="no such link")
         return answer(request, item_url(link_id), notice=result.notice)
 
-    @app.post("/item/{link_id}/delete")
-    def remove(request: Request, link_id: str):
-        # Moves the file to <vault>/<folder>/trash/. The notice says so,
-        # because "deleted" would be a lie and a worrying one. A card goes
-        # to the same trash/ by the same route: the page draws the button
-        # for both, so both have to work.
+    def delete_one(link_id: str, rebuild: bool = True) -> tuple[Edited, str]:
+        """One note to trash/, under its lock, on whichever shelf holds it:
+        the delete route's body and each id of a bulk delete. Returns the
+        shelf's name with the result, for the undo lot and the rebuilds."""
         shelves, which = held_by(link_id)
         result = edit(link_id, lambda cfg, language: delete_note(
-            cfg, link_id, language, shelf=which),
+            cfg, link_id, language, shelf=which, rebuild=rebuild),
             "trashed", "trashed-indexes-stale", shelves=shelves)
+        return result, which.name
+
+    def keep_lot(items) -> str | None:
+        """The token a Deshacer posts back, or None when the state dir cannot
+        be written: the notes are in trash/ either way and the delete stands."""
+        try:
+            return undo.remember(current["cfg"], items)
+        except OSError as error:
+            log.warning("the undo lot could not be written: %s", error)
+            return None
+
+    @app.post("/item/{link_id}/delete")
+    def remove(request: Request, link_id: str):
+        # Moves the file to <vault>/oknowledge/trash/, any shelf. A note that
+        # really went to trash/ sends the user back to its section, whatever
+        # the indexes did (the item page would 404 now), with a Deshacer; a
+        # refused delete leaves them on the note they still have.
+        result, name = delete_one(link_id)
         if result.notice == MISSING:
             raise HTTPException(status_code=404, detail="no such link")
-        # A note that really went to trash/ sends the user back to the library,
-        # whatever the indexes did: the item page would 404 on them now. A
-        # refused delete leaves them on the note they still have.
-        # An idea goes back to the ideas: the library would not show it.
-        home = {"ideas": "/ideas", "ocio": "/ocio"}.get(which.name, "/")
-        where = home if result.landed else item_url(link_id)
-        return answer(request, where, result.notice)
+        if not result.landed:
+            return answer(request, item_url(link_id), result.notice)
+        token = keep_lot([(link_id, name, result.value)])
+        notice = ("deleted" if result.notice == "trashed" and wants_json(request)
+                  else result.notice)
+        return answer(request, SECTION_HOMES[name], notice, undo=token)
+
+    @app.post("/undo/{token}")
+    def take_back(request: Request, token: str, back: str = Form("")):
+        """Deshacer (spec §6.3): a lot's notes back where they were, once."""
+        live = current["cfg"]
+        result = undo.restore(live, token, live.language, link_lock)
+        where = local_path(back)
+        if result is None:
+            return answer(request, where or "/", "undo-gone")
+        for each in (library, shelf, ideas):
+            each.refresh()
+        home = where or SECTION_HOMES.get(result.shelf, "/")
+        if not result.restored:
+            return answer(request, home, "undo-blocked")
+        n, m = len(result.restored), len(result.skipped)
+        if result.stale:
+            code = "restored-indexes-stale"
+        elif m:
+            code = "restored-one-partial" if n == 1 else "restored-partial"
+        else:
+            code = "restored-one" if n == 1 else "restored"
+        return answer(request, home, code, n=n, m=m or None,
+                      extra={"restored": result.restored, "skipped": result.skipped})
 
     @app.post("/item/{link_id}/reprocess")
     def reprocess(request: Request, background: BackgroundTasks, link_id: str,

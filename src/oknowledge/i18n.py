@@ -94,7 +94,6 @@ STRINGS = {
         "In progress": "En curso",
         "What you thought of it": "Qué te pareció",
         "Change type": "Cambiar tipo",
-        "Move this card to the trash folder?": "¿Mover esta ficha a la papelera?",
         "Open in %1": "Abrir en %1",
         "The card is as the source gave it (in English).":
             "La ficha está como vino de la fuente (en inglés).",
@@ -559,8 +558,6 @@ STRINGS = {
             "la carpeta vuelva a ser escribible.",
         "Renaming into a category that already exists merges the two.":
             "Si el nombre nuevo ya existe, las dos categorías se fusionan.",
-        "Move this note to the trash folder?":
-            "¿Mover esta nota a la carpeta trash?",
         "Saving rewrites %1 from scratch: your comments, your formatting and "
         "any key oknowledge does not read are not kept. The file it replaces "
         "is copied to config.toml.bak first.":
@@ -589,8 +586,23 @@ STRINGS = {
         "You have not asked yet.": "Todavía no se lo pediste.",
         "Regenerate everything with the AI": "Regenerar todo con la IA",
         "Delete idea": "Borrar idea",
-        "Move this idea to the trash folder?": "¿Mover esta idea a la papelera?",
         "Searching…": "Buscando…",
+        # Deleting with Deshacer (delivery 3, spec §6).
+        "Deleted": "Borrado",
+        "Undo": "Deshacer",
+        "Restored": "Restaurado",
+        "%1 restored": "%1 restaurados",
+        "It can no longer be undone": "Ya no se puede deshacer",
+        "It could not be restored: there is already another note with that link":
+            "No se pudo restaurar: ya hay otra nota con ese link",
+        "Restored · %2 not: there is already another note with that link":
+            "Restaurado · %2 no: ya hay otra nota con ese link",
+        "%1 restored · %2 not: there is already another note with that link":
+            "%1 restaurados · %2 no: ya hay otra nota con ese link",
+        "Restored, but the indexes could not be rebuilt. Run `oknowledge reindex` "
+        "once the folder is writable again.":
+            "Restaurado, pero no se pudieron rehacer los índices. Corré "
+            "`oknowledge reindex` cuando la carpeta vuelva a ser escribible.",
         "Improvements…": "Mejoras…",
         "Expansion…": "Ampliación…",
         "Regenerating…": "Regenerando…",
