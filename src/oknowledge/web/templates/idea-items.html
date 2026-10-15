@@ -4,6 +4,7 @@
 {% macro item(note, view) -%}
 {% set word = IDEA_WORDS.get(note.state, '') %}
 <li class="item idea" id="idea-{{ note.id }}">
+  <label class="check js-only"><input type="checkbox" name="ids" value="{{ note.id }}" form="bulk" aria-label="{{ t('Select %1', note.title or t('Untitled idea')) }}"></label>
   <a class="hit" href="{{ view.open(note.id) }}">
     <span class="title" dir="auto">{{ note.title or t('Untitled idea') }}</span>
     <span class="excerpt" dir="auto">{{ (note.my_note or note.summary)|plain }}</span>

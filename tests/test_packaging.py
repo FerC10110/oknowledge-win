@@ -114,7 +114,7 @@ _REAL = {name: getattr(subprocess, name) for name in ("run", "Popen")}
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="node is not installed")
-@pytest.mark.parametrize("name", ["app.js", "autosave.js", "idea.js", "settings.js", "shell.js"])
+@pytest.mark.parametrize("name", ["app.js", "autosave.js", "idea.js", "select.js", "settings.js", "shell.js"])
 def test_the_scripts_the_pages_load_are_valid_javascript(name, monkeypatch):
     """Nothing else in this suite runs these files. A typo in one of them is a
     button that silently does nothing in the browser and nothing at all here,

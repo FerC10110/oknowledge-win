@@ -504,3 +504,39 @@ html:not(.js) .js-only { display: none !important; }
 .modal.settings.loading { cursor: progress; }
 .modal-failed { margin: 0; padding: 26px 22px 12px; color: var(--t2); font-size: 14px; }
 .modal-failed-foot { margin: 0; padding: 0 22px 22px; text-align: right; }
+
+/* --- multi-selection (spec §5; handoff 03) ------------------------------------ */
+#items > .item { position: relative; }
+.check { position: absolute; top: 8px; left: 8px; z-index: 2; display: grid; place-items: center;
+  opacity: 0; transition: opacity .12s; }
+#items > .item:hover .check, #items > .item.picked .check, .picking .check, .check:focus-within { opacity: 1; }
+.check input { appearance: none; -webkit-appearance: none; width: 18px; height: 18px; margin: 0;
+  border: 1.5px solid #55575f; border-radius: 5px; background: #17181dcc; cursor: pointer; }
+.check input:checked { background: #e7e7ea url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 6.4l2.3 2.3 4.7-5' fill='none' stroke='%23141519' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / 12px no-repeat;
+  border-color: #e7e7ea; }
+.check input:focus-visible { outline: 2px solid var(--acc); outline-offset: 1px; }
+/* A row: the box takes the first column of "18px 8px 1fr auto" (Ruling 21). */
+.rows .check { top: 50%; left: 10px; margin-top: -9px; }
+.js .rows .hit { padding-left: 36px; }
+.js .rows .sub .dot { left: 36px; }
+.js .idea-shelf .rows .hit { padding-left: 54px; }
+/* A poster: its kind chip moves right of the box while the box shows. */
+.poster:hover .chip.kind, .poster.picked .chip.kind, .picking .poster .chip.kind { left: 34px; }
+
+.center { position: relative; }
+.bulk { position: absolute; left: 50%; bottom: 20px; transform: translateX(-50%); z-index: 20;
+  display: flex; align-items: center; gap: 2px; padding: 6px; background: #24252c;
+  border: 1px solid var(--b-menu); border-radius: 12px; box-shadow: var(--shadow);
+  font-size: 13px; white-space: nowrap; }
+.bulk[hidden] { display: none; }
+.bulk-count { padding: 6px 10px; color: var(--t1); font-weight: 600; }
+.bulk-sep { width: 1px; align-self: stretch; margin: 4px 4px; background: var(--b-menu); }
+.bulk > button, .bulk summary { padding: 6px 10px; border: 0; border-radius: 7px; background: none;
+  color: var(--t2); font: inherit; cursor: pointer; list-style: none; }
+.bulk summary::-webkit-details-marker { display: none; }
+.bulk > button:hover, .bulk summary:hover, .bulk details[open] summary { background: var(--s7); color: var(--t1); }
+.bulk .bulk-star { color: var(--fav); }
+.bulk .bulk-delete { color: var(--danger); }
+.bulk .bulk-clear { color: var(--t5); }
+.bulk .menu-list { bottom: calc(100% + 8px); left: 0; min-width: 200px; }
+.bulk .menu-new { margin: 4px 6px 6px; }

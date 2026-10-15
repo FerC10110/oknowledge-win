@@ -4,6 +4,7 @@
 {% macro item(note, view, current, busy) -%}
 <li class="item{% if note.id == current %} on{% endif %}" id="card-{{ note.id }}"
     {%- if note.id in busy %} data-working="{{ note.id }}"{% endif %}>
+  <label class="check js-only"><input type="checkbox" name="ids" value="{{ note.id }}" form="bulk" aria-label="{{ t('Select %1', note.title) }}"></label>
   <a class="hit" href="{{ view.url(sel=note.id) }}" data-sel="{{ note.id }}">
     <span class="thumb" style="background: {{ note.category|tint }}">
       {% if note.cover %}<img src="/cover/{{ note.id|slug }}" alt="" loading="lazy">{% endif %}

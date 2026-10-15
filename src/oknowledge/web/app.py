@@ -821,6 +821,10 @@ def create_app(cfg: Config) -> FastAPI:
     # include: `engine:` is frontmatter and frontmatter is typed by hand.
     templates.env.globals["engines"] = ENGINE_ICONS
     templates.env.globals["KEYS_HELP"] = KEYS_HELP
+    # The bulk bar's choices (spec §5), on whatever page includes it.
+    templates.env.globals["KIND_ONE"] = KIND_ONE
+    templates.env.globals["IDEA_WORDS"] = IDEA_WORDS
+    templates.env.globals["IDEA_DOTS"] = IDEA_DOTS
     app.mount("/static", StaticFiles(directory=str(WEB.joinpath("static"))), name="static")
 
     def page(request: Request, name: str, status_code: int = 200, **context) -> HTMLResponse:

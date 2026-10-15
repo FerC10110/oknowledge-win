@@ -608,6 +608,12 @@ STRINGS = {
         "Close / deselect": "Cerrar / deseleccionar",
         # Enter on a list (delivery 3, spec §4).
         "Opening %1…": "Abriendo %1…",
+        # Multi-selection (delivery 3, spec §5).
+        "Select %1": "Seleccionar %1",
+        "1 selected": "1 seleccionado",
+        "%1 selected": "%1 seleccionados",
+        "Move to": "Mover a",
+        "Clear the selection": "Limpiar la selección",
         # The Settings modal (delivery 3, spec §3.1).
         "The settings could not be loaded. Check that oknowledge is still running.":
             "No se pudieron cargar los ajustes. Fijate que oknowledge siga andando.",

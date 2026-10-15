@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}{% if view.searching %}{{ view.q }} - {% endif %}oknowledge{% endblock %}
 {% block app_class %}home{% endblock %}
-{% block scripts %}<script src="/static/shell.js" defer></script>{% endblock %}
+{% block scripts %}<script src="/static/shell.js" defer></script><script src="/static/select.js" defer></script>{% endblock %}
 {% block layout %}
 <section class="center" aria-label="{{ t('Library') }}">
   {# GET by default, so Enter searches without JavaScript; the hidden first
@@ -26,6 +26,7 @@
     <p class="quiet" title="{{ links_dir }}">{% if unreadable == 1 %}{{ t('1 note could not be read and is not shown') }}{% else %}{{ t('%1 notes could not be read and are not shown', unreadable) }}{% endif %}</p>
   {% endif %}
   <div class="list" id="list">{% include "list.html" %}</div>
+  {% with bulk_section = 'links' %}{% include "bulk-bar.html" %}{% endwith %}
 </section>
 <section class="detail" id="panel" aria-label="{{ t('Detail') }}"
          data-empty="{{ t('Choose a link to read it here.') }}">

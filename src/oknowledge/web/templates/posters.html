@@ -5,6 +5,7 @@
 {% set words = words_for(note.type) %}
 <li class="item poster{% if note.id == current %} on{% endif %}" id="card-{{ note.id }}"
     {%- if note.id in busy %} data-working="{{ note.id }}"{% endif %}>
+  <label class="check js-only"><input type="checkbox" name="ids" value="{{ note.id }}" form="bulk" aria-label="{{ t('Select %1', note.title) }}"></label>
   <a class="hit" href="{{ view.url(sel=note.id) }}" data-sel="{{ note.id }}">
     <span class="art" style="background: {{ note.type|poster_fill }}">
       {% if note.cover %}<img src="/cover/{{ note.id|slug }}" alt="" loading="lazy">
