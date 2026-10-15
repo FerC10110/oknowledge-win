@@ -271,9 +271,27 @@ def test_a_screen_error_after_the_undo_is_not_toasted(failed_undo):
 
 def test_the_keys_help_opens_on_its_grid_and_not_on_the_close_button(client):
     # Handoff 09: opened with "?", no focus ring sits on the ✕ (Task 12).
+    # Read as tags, not as text (batch G): any order of the attributes and
+    # any spacing will do, and what counts is which one element has autofocus.
+    from html.parser import HTMLParser
     body = client.get("/").text
     found = re.search(r'<dialog id="keys-help".*?</dialog>', body, re.S).group(0)
-    assert '<dl class="keys-grid" tabindex="-1" autofocus>' in found
+
+    class Tags(HTMLParser):
+        def __init__(self):
+            super().__init__()
+            self.tags = []
+
+        def handle_starttag(self, tag, attrs):
+            self.tags.append((tag, dict(attrs)))
+
+    tags = Tags()
+    tags.feed(found)
+    focused = [(tag, attrs) for tag, attrs in tags.tags if "autofocus" in attrs]
+    assert len(focused) == 1
+    tag, attrs = focused[0]
+    assert tag == "dl" and "keys-grid" in attrs.get("class", "").split()
+    assert attrs.get("tabindex") == "-1"            # focusable, and not in the tab order
 
 
 # --- final fix pass: the toast above a modal, in node ------------------------------------
@@ -671,3 +689,118 @@ def test_settings_loads_nothing_when_ajustes_is_refused():
     gate = "if (!ok.openModal(modal)) return;"
     assert "if (!modal.open) {" in opening and gate in opening
     assert opening.index("modal.replaceChildren()") < opening.index(gate) < opening.index("fetch(")
+
+
+# --- batch G: the keys the first harness left out, in node ---------------------------------
+
+MORE_KEYS = r"""
+const source = require("fs").readFileSync(process.argv[2], "utf8");
+const handlers = {};
+const out = { ran: [], blurred: [], focused: [], selected: 0, opened: 0 };
+let slash = null;
+const byId = {};
+global.window = global;
+global.addEventListener = () => {};
+global.location = { href: "/", pathname: "/", reload() {} };
+global.history = { state: null, replaceState() {}, pushState() {} };
+global.document = {
+  body: { dataset: {}, tagName: "BODY" },
+  addEventListener: (type, fn) => { (handlers[type] = handlers[type] || []).push(fn); },
+  getElementById: (id) => byId[id] || null,
+  querySelector: (sel) => (sel === "dialog[open]" ? (byId["keys-help"] && byId["keys-help"].open ? byId["keys-help"] : null)
+                           : sel === "[data-slash]" ? slash : null),
+  querySelectorAll: () => [],
+};
+document.activeElement = document.body;
+eval(source);
+const ok = window.oknowledge;
+["j", "Enter", "Escape"].forEach((k) => { ok.keys[k] = () => { out.ran.push(k); }; });
+function press(key) {
+  const event = { key, defaultPrevented: false, isComposing: false, metaKey: false, ctrlKey: false,
+    altKey: false, shiftKey: false, preventDefault() { this.defaultPrevented = true; } };
+  (handlers.keydown || []).forEach((fn) => fn(event));
+  return event.defaultPrevented;
+}
+const at = (el) => { document.activeElement = el; };
+const box = (name, extra) => Object.assign({ tagName: name, isContentEditable: false, closest: () => null,
+  blur() { out.blurred.push(name); } }, extra || {});
+"""
+
+MORE_SCENARIOS = {
+    # A textarea, a select and a contenteditable are text: no key runs, no
+    # section is left, and Esc only lets go of them.
+    "fields": """
+for (const el of [box("TEXTAREA"), box("SELECT"), box("DIV", { isContentEditable: true })]) {
+  at(el); press("j"); press("1"); press("Escape");
+}
+out.href = location.href;
+""",
+    # Enter on a link or a button is theirs; anywhere else it is the screen's.
+    "enter": """
+const self = (tag) => { const el = box(tag); el.closest = (sel) => (sel === "a, button, summary" ? el : null); return el; };
+at(self("A")); out.onLink = press("Enter");
+at(self("BUTTON")); out.onButton = press("Enter");
+at(self("SUMMARY")); out.onSummary = press("Enter");
+at(document.body); out.onPage = press("Enter");
+""",
+    # ? with no help on the page does nothing (and breaks nothing); with it,
+    # opens it.
+    "help": """
+out.without = press("?");
+byId["keys-help"] = { id: "keys-help", open: false, showModal() { this.open = true; out.opened += 1; }, close() { this.open = false; } };
+out.with = press("?");
+out.open = byId["keys-help"].open;
+press("?");
+out.closedAgain = !byId["keys-help"].open;
+""",
+    # / goes to the page's search box, and selects what is in it; on a page
+    # with none it is an ordinary key.
+    "slash": """
+out.none = press("/");
+slash = { focus() { out.focused.push("q"); }, select() { out.selected += 1; } };
+out.some = press("/");
+""",
+}
+
+
+@pytest.fixture(scope="module")
+def more_keys(tmp_path_factory):
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not installed")
+    folder = tmp_path_factory.mktemp("more-keys")
+    found = {}
+    for name, scenario in MORE_SCENARIOS.items():
+        harness = folder / f"{name}.js"
+        harness.write_text(MORE_KEYS + scenario + "\nconsole.log(JSON.stringify(out));\n",
+                           encoding="utf-8")
+        done = subprocess.run([node, str(harness), str(APP)], capture_output=True, text=True,
+                              timeout=30, check=False)
+        assert done.returncode == 0, done.stderr
+        found[name] = json.loads(done.stdout.strip().splitlines()[-1])
+    return found
+
+
+def test_a_textarea_a_select_and_a_contenteditable_are_text(more_keys):
+    fields = more_keys["fields"]
+    assert fields["ran"] == [] and fields["href"] == "/"
+    assert fields["blurred"] == ["TEXTAREA", "SELECT", "DIV"]
+
+
+def test_enter_on_a_link_or_a_button_is_theirs(more_keys):
+    enter = more_keys["enter"]
+    assert [enter["onLink"], enter["onButton"], enter["onSummary"]] == [False, False, False]
+    assert enter["onPage"] is True and enter["ran"] == ["Enter"]
+
+
+def test_the_question_mark_without_a_help_dialog_does_nothing(more_keys):
+    help = more_keys["help"]
+    # Opened once: by the second ?, when there was a dialog to open; the third closes it.
+    assert help["with"] is True and help["opened"] == 1 and help["closedAgain"] is True
+    assert help["ran"] == []
+
+
+def test_the_slash_goes_to_the_search_box_only_where_there_is_one(more_keys):
+    slash = more_keys["slash"]
+    assert slash["none"] is False
+    assert slash["some"] is True and slash["focused"] == ["q"] and slash["selected"] == 1

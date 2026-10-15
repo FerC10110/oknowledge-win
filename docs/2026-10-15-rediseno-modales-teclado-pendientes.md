@@ -16,6 +16,3 @@ entrega 3. Ninguno pierde datos: en el peor caso una nota queda en
 - Los tests de `settings.js`, `shell.js` (teclas) y `select.js` buscan texto
   en el código; el comportamiento lo probaron scripts de Playwright que no
   están en el repo.
-- El harness de `app.js` no cubre textarea/select/contenteditable, Enter sobre
-  un link o botón, `?` sin diálogo ni `/`.
-- El test del foco de Atajos compara el HTML literal.
