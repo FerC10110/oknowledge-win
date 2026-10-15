@@ -115,7 +115,7 @@ def test_a_card_without_a_cover_has_the_gradient(cfg, client):
 def test_open_in_its_site(cfg, client):
     put(cfg)
     assert re.search(r'<a class="btn primary" href="https://www.imdb.com/title/tt0088247" '
-                     r'target="_blank" rel="noreferrer">Open in imdb.com ↗</a>', panel(client))
+                     r'target="_blank" rel="noreferrer" data-open>Open in imdb.com ↗</a>', panel(client))
 
 
 def test_a_url_that_is_not_the_web_is_never_a_link(cfg, client):

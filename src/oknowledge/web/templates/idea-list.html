@@ -10,7 +10,7 @@
 </div>
 <div class="list-body" id="list-body">
   {% if notes %}
-    <ul class="items {{ 'rows' if view.vista == 'lista' else 'tiles' }}" id="items">
+    <ul class="items {{ 'rows' if view.vista == 'lista' else 'tiles' }}" id="items" data-current="">
       {% for note in notes %}{{ shelf.item(note, view) }}{% endfor %}
     </ul>
     {% if more %}<a class="more" href="{{ view.url(hasta=view.hasta + chunk) }}" data-more="{{ view.url('/ideas/lista', desde=view.hasta) }}">{{ t('Show more') }}</a>{% endif %}

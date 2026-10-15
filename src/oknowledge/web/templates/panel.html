@@ -81,14 +81,14 @@
     {% endfor %}
     <form method="post" action="/item/{{ note.id|slug }}/tags" data-inline class="tag-new">
       <input type="hidden" name="tags" value="{{ note.tags|join(' ') }}">
-      <input name="add" autocomplete="off" aria-label="{{ t('+ tag') }}" placeholder="{{ t('+ tag') }}">
+      <input name="add" id="tag-add" required autocomplete="off" aria-label="{{ t('+ tag') }}" placeholder="{{ t('+ tag') }}">
     </form>
   </div>
 {% endif %}
 </div>
 {% if note is not none %}
 <div class="detail-bar">
-  {% if note.url is web_url %}<a class="btn primary" href="{{ note.url }}" target="_blank" rel="noreferrer">{{ t('Open original') }} ↵</a>{% endif %}
+  {% if note.url is web_url %}<a class="btn primary" href="{{ note.url }}" target="_blank" rel="noreferrer" data-open>{{ t('Open original') }} ↵</a>{% endif %}
   {% if idea_choices %}
     <details class="menu up">
       <summary class="btn">{{ t('To an idea') }} ▾</summary>
@@ -118,7 +118,7 @@
             data-ask="{{ t('Re-run the analysis? The title, summary, points, category, tags and mentions are replaced by the new answer.') }}">
         <button onclick="return confirm(this.form.dataset.ask)">{{ t('Reprocess with AI') }}</button>
       </form>
-      <form method="post" action="/item/{{ note.id|slug }}/delete">
+      <form method="post" action="/item/{{ note.id|slug }}/delete" data-inline>
         <button class="danger">{{ t('Delete') }}</button>
       </form>
     </div>

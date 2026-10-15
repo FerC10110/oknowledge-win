@@ -606,6 +606,8 @@ STRINGS = {
         "Delete the selected": "Borrar seleccionados",
         "List / cards": "Lista / tarjetas",
         "Close / deselect": "Cerrar / deseleccionar",
+        # Enter on a list (delivery 3, spec §4).
+        "Opening %1…": "Abriendo %1…",
         # The Settings modal (delivery 3, spec §3.1).
         "The settings could not be loaded. Check that oknowledge is still running.":
             "No se pudieron cargar los ajustes. Fijate que oknowledge siga andando.",

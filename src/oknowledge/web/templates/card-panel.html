@@ -42,7 +42,7 @@
         {%- if note.length %}<span class="chip">{{ note.length }}</span>{% endif -%}
         {%- if note.rating %}<span class="chip mono">{{ note.source|catalog_name }} ★ {{ note.rating }}</span>{% endif -%}
       </p>
-      {% if note.url is web_url %}<a class="btn primary" href="{{ note.url }}" target="_blank" rel="noreferrer">{{ t('Open in %1', note.source) }} ↗</a>{% endif %}
+      {% if note.url is web_url %}<a class="btn primary" href="{{ note.url }}" target="_blank" rel="noreferrer" data-open>{{ t('Open in %1', note.source) }} ↗</a>{% endif %}
     </div>
   </div>
   {% if not note.engine %}
@@ -85,7 +85,7 @@
     {% endfor %}
     <form method="post" action="/item/{{ note.id|slug }}/tags" data-inline class="tag-new">
       <input type="hidden" name="tags" value="{{ note.tags|join(' ') }}">
-      <input name="add" required autocomplete="off" aria-label="{{ t('+ tag') }}" placeholder="{{ t('+ tag') }}">
+      <input name="add" id="tag-add" required autocomplete="off" aria-label="{{ t('+ tag') }}" placeholder="{{ t('+ tag') }}">
     </form>
   </div>
 </div>

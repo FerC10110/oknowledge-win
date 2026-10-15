@@ -11,6 +11,8 @@
   var field = document.getElementById("field-q");
   if (!list || !form || !field) return;
   var texts = document.body.dataset;
+  var ok = window.oknowledge || (window.oknowledge = {});
+  ok.keys = ok.keys || {};
   var mode = form.dataset.mode || "library";
   var source = list.dataset.source || "/lista";
   var STORE = "oknowledge.vista" + (mode === "library" ? "" : "." + mode);
@@ -46,9 +48,51 @@
            text.slice(colon + 1).trim() !== "";
   }
 
+  // --- the list on screen (spec §4, §5) --------------------------------------
+  function shown() {
+    return Array.prototype.slice.call(list.querySelectorAll("#items > li.item"));
+  }
+
+  function idOf(li) { return li.id.replace(/^(card|idea)-/, ""); }
+
+  function itemOf(id) {
+    return id ? document.getElementById("card-" + id) || document.getElementById("idea-" + id)
+              : null;
+  }
+
+  function current() {
+    var items = document.getElementById("items");
+    return items ? items.dataset.current || "" : "";
+  }
+
+  // The one after `id` on screen, else the one before, else "" (Ruling 25).
+  function neighbour(id) {
+    var items = shown();
+    for (var at = 0; at < items.length; at++) {
+      if (idOf(items[at]) !== id) continue;
+      var near = items[at + 1] || items[at - 1];
+      return near ? idOf(near) : "";
+    }
+    return "";
+  }
+
+  // The list changed under the selection (select.js listens).
+  function told(reason) {
+    list.dispatchEvent(new CustomEvent("oknowledge:list", { bubbles: true,
+                                                           detail: { reason: reason } }));
+  }
+
+  // Picked by a key: the panel opens it, or on /ideas the cursor moves.
+  function pick(id) {
+    if (!id) return;
+    if (panel) loadPanel(id); else markCurrent(id);
+    var li = itemOf(id);
+    if (li) li.scrollIntoView({ block: "nearest" });
+  }
+
   // --- the list column ---------------------------------------------------
   var asked = 0;
-  function loadList(url, keepScroll) {
+  function loadList(url, keepScroll, reason) {
     var mine = ++asked;
     // The pick this list was asked under. If the user picks another link
     // before it lands, its sel (and the server's data-current) is the old
@@ -57,6 +101,7 @@
     var target = new URL(url, location.href);
     var body = document.getElementById("list-body");
     var top = body ? body.scrollTop : 0;
+    var cursor = panel ? "" : current();   // the ideas list's
     return fetch(source + target.search)
       .then(function (r) { if (!r.ok) throw new Error(r.status); return r.text(); })
       .then(function (html) {
@@ -84,6 +129,9 @@
         }
         observe();
         watch();
+        // The ideas list has no panel to follow: its cursor is put back.
+        if (!panel && cursor && itemOf(cursor)) markCurrent(cursor);
+        told(reason || "filter");
       })
       .catch(function () { location.href = target.href; });
   }
@@ -104,7 +152,7 @@
 
   function markCurrent(id) {
     list.querySelectorAll("li.item.on").forEach(function (li) { li.classList.remove("on"); });
-    var li = document.getElementById("card-" + id);
+    var li = itemOf(id);
     if (li) li.classList.add("on");
     var items = document.getElementById("items");
     if (items) items.dataset.current = id;
@@ -281,7 +329,7 @@
       // selection from when the list head was drawn.
       var shape = here();
       shape.searchParams.set("vista", link.dataset.view);
-      loadList(shape.href, true);
+      loadList(shape.href, true, "refresh");
     } else if (link.hasAttribute("data-more")) {
       more(link);
     } else {
@@ -304,7 +352,7 @@
       var now = here();
       if (saved === "lista" && !now.searchParams.get("vista")) {
         now.searchParams.set("vista", "lista");
-        loadList(now.href);
+        loadList(now.href, false, "refresh");
       }
     } catch (e) { /* no storage: the URL decides */ }
   }
@@ -387,6 +435,7 @@
         history.replaceState(null, "", url.pathname + url.search);
         observe();
         watch();
+        told("more");
       })
       .catch(function () { delete link.dataset.loading; });
   }
@@ -406,6 +455,12 @@
     event.preventDefault();
     var data = new FormData(target, event.submitter || undefined);
     closeMenus();
+    // The panel's Delete (not a mention's): the one after it is picked
+    // before the list changes (Ruling 25), and the toast offers Deshacer.
+    var deleting = /^\/item\/[^/]+\/delete$/.test(new URL(target.action, location.href).pathname);
+    var shownNow = panel && panel.querySelector("[data-panel]");
+    var gone = shownNow ? shownNow.dataset.panel : "";
+    var next = deleting ? neighbour(gone) : "";
     fetch(target.action, { method: "POST", body: data,
                            headers: { Accept: "application/json" } })
       .then(function (r) {
@@ -413,6 +468,17 @@
       })
       .then(function (answer) {
         if (!answer.ok) { toast(answer.error || texts.saveFailed); return; }
+        if (deleting) {
+          ok.offerUndo(answer.notice, answer.undo);
+          if (next) {
+            loadList(here().href, true, "refresh");
+            loadPanel(next);
+          } else {
+            emptyPanel();
+            loadList(here().href, true, "refresh");
+          }
+          return;
+        }
         // A write that starts a run (a rewrite) is told by its watcher when
         // it ends; its own notice says "reload in a moment", which is wrong
         // here. The server marks those (`runs`); every other notice is said.
@@ -421,7 +487,7 @@
         if (shown && shown.dataset.panel && stillPicked(shown.dataset.panel)) {
           loadPanel(shown.dataset.panel, true);    // deleted: gone
         }
-        loadList(here().href, true);
+        loadList(here().href, true, "refresh");
       })
       .catch(function () { toast(texts.saveFailed); });
   });
@@ -452,12 +518,97 @@
             // old panel while a newer pick is on its way.
             var shown = panel && panel.querySelector("[data-panel]");
             if (shown && shown.dataset.panel === id && stillPicked(id)) loadPanel(id, true);
-            loadList(here().href, true);
+            loadList(here().href, true, "refresh");
           })
           .catch(function () { /* try again in three seconds */ });
       }, 3000);
     });
   }
+
+  // --- keys (spec §4) -----------------------------------------------------------------
+  // A row is the items level with the first one: one in a list, the
+  // columns that fit in a grid.
+  function rowWidth() {
+    var items = shown();
+    if (!items.length) return 1;
+    var top = items[0].offsetTop;
+    var n = 0;
+    while (n < items.length && items[n].offsetTop === top) n++;
+    return n || 1;
+  }
+
+  // With nothing picked, any move picks the first one.
+  function step(by) {
+    var items = shown();
+    if (!items.length) return;
+    var at = -1;
+    var id = current();
+    for (var i = 0; i < items.length; i++) if (idOf(items[i]) === id) at = i;
+    if (at < 0) { pick(idOf(items[0])); return; }
+    var to = Math.max(0, Math.min(items.length - 1, at + by));
+    if (to !== at) pick(idOf(items[to]));
+  }
+
+  ok.keys.j = ok.keys.ArrowRight = function () { step(1); };
+  ok.keys.k = ok.keys.ArrowLeft = function () { step(-1); };
+  ok.keys.ArrowDown = function () { step(rowWidth()); };
+  ok.keys.ArrowUp = function () { step(-rowWidth()); };
+
+  // Enter: the original in another tab (library, Ocio), or the idea's screen.
+  // On an item's own checkbox (select.js) it is that item's Enter: one not
+  // picked yet is picked first, as a click on it would.
+  ok.keys.Enter = function () {
+    var active = document.activeElement;
+    var box = active && active.type === "checkbox" && active.closest("#items > li.item");
+    if (box && idOf(box) !== current()) { pick(idOf(box)); return; }
+    if (!panel) {
+      var li = itemOf(current());
+      var hit = li && li.querySelector("a.hit");
+      if (!hit) return false;
+      location.href = hit.href;
+      return;
+    }
+    var open = panel.querySelector("a[data-open]");
+    if (!open) return false;
+    window.open(open.href, "_blank", "noopener");
+    toast((texts.opening || "").replace("%1", new URL(open.href).hostname.replace(/^www\./, "")));
+  };
+
+  // f: the panel's ★, as a click (the library only: Ocio has no favourites).
+  ok.keys.f = function () {
+    var star = mode === "library" && panel && panel.querySelector("form.push button.star");
+    if (!star) return false;
+    star.click();
+  };
+
+  // e: the panel's "+ tag" (the keydown's default is prevented, so no "e").
+  ok.keys.e = function () {
+    var box = panel && document.getElementById("tag-add");
+    if (!box || !panel.contains(box)) return false;
+    box.focus();
+  };
+
+  // v: the layout that is not on. Ocio has none: nothing happens.
+  ok.keys.v = function () {
+    var other = list.querySelector("a[data-view]:not(.on)");
+    if (!other) return false;
+    other.click();
+  };
+
+  ok.list = {
+    current: current,
+    pick: pick,
+    next: neighbour,
+    shown: shown,
+    // After an undo or a bulk action: the same list again, and `id` opened
+    // (the first one restored, or the one after those deleted).
+    reload: function (id) {
+      var done = loadList(here().href, true, "refresh");
+      if (id && panel) loadPanel(id, true);
+      else if (id && done) done.then(function () { if (itemOf(id)) markCurrent(id); });
+      return done;
+    },
+  };
 
   // --- the pick in the URL -------------------------------------------------
   // With no sel, a reload of the list would open whatever is first by then
