@@ -575,3 +575,72 @@ def test_the_tab_lit_is_read_from_the_list_s_path_and_mark(tmp_path, url, source
     out = run(tmp_path, "const LIT = 1;" + TABS, entries=[{"url": url, "state": None}],
               source=source)
     assert out["lit"] == lit
+
+
+# --- the list's keys (batch G: tests/test_web_list_keys.py read these in the source) --------
+
+LIST_KEYS = """
+// Four items in two rows of two: a1 b2 / c3 d4.
+const lis = ["a1", "b2", "c3", "d4"].map((id, i) => {
+  const li = el("card-" + id, { offsetTop: i < 2 ? 0 : 40 });
+  byId["card-" + id] = li;
+  return li;
+});
+let listed = lis;
+list.querySelectorAll = (sel) => (sel === "#items > li.item" ? listed : []);
+const moves = [];
+const press = async (name) => { const r = ok.keys[name](); await settle(); moves.push([name, items.dataset.current, r === false ? "left" : ""]); };
+"""
+
+
+def test_the_list_keys_move_the_pick_by_one_and_by_a_row(tmp_path):
+    out = run(tmp_path, LIST_KEYS + """
+for (const name of ["j", "ArrowDown", "k", "ArrowUp", "k", "ArrowLeft", "ArrowRight"]) await press(name);
+out.moves = moves;
+out.panel = panelHtml;
+""", entries=[{"url": "/?sel=a1", "state": None}], wide=True, panel="PANEL:a1", current="a1")
+    assert [m[:2] for m in out["moves"]] == [["j", "b2"], ["ArrowDown", "d4"], ["k", "c3"],
+                                             ["ArrowUp", "a1"], ["k", "a1"], ["ArrowLeft", "a1"],
+                                             ["ArrowRight", "b2"]]
+    assert out["panel"] == "PANEL:b2"
+
+
+def test_with_nothing_picked_a_key_picks_the_first_and_an_empty_list_is_left_alone(tmp_path):
+    out = run(tmp_path, LIST_KEYS + """
+await press("ArrowDown");
+listed = [];
+await press("j"); await press("ArrowUp");
+out.moves = moves;
+""", wide=True, current="")
+    assert out["moves"] == [["ArrowDown", "a1", ""], ["j", "a1", "left"], ["ArrowUp", "a1", "left"]]
+
+
+def test_the_panel_keys_wait_for_the_pick_to_land(tmp_path):
+    """A fast j then f, e or Enter must not act on the item just left: until
+    the new panel is on screen they are left to the page."""
+    out = run(tmp_path, LIST_KEYS + """
+const real = global.fetch;
+let held = null;
+global.fetch = (url) => (url.indexOf("/panel/") === 0 && !held
+  ? new Promise((r) => { held = () => r(real(url)); }) : real(url));
+// What the panel offers each key: its star, its "+ tag", its original.
+const did = [];
+const star = { click() { did.push("star " + panelHtml); } };
+const tag = { focus() { did.push("tag " + panelHtml); } };
+const original = { href: "https://www.e.com/x" };
+byId["tag-add"] = tag;
+global.open = () => { did.push("open " + panelHtml); };
+const inPanel = panel.querySelector, holds = panel.contains;
+panel.querySelector = (sel) => (sel === "form.push button.star" ? star : sel === "a[data-open]" ? original : inPanel(sel));
+panel.contains = (x) => x === tag || holds(x);
+ok.keys.j(); await settle();
+out.before = ["f", "e", "Enter"].map((name) => ok.keys[name]());
+out.didBefore = did.slice();
+held(); await settle();
+["f", "e", "Enter"].forEach((name) => ok.keys[name]());
+out.did = did;
+out.panel = panelHtml;
+""", entries=[{"url": "/?sel=a1", "state": None}], wide=True, panel="PANEL:a1", current="a1")
+    assert out["before"] == [False, False, False] and out["didBefore"] == []
+    assert out["panel"] == "PANEL:b2"
+    assert out["did"] == ["star PANEL:b2", "tag PANEL:b2", "open PANEL:b2"]

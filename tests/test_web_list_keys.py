@@ -75,18 +75,6 @@ def test_the_body_carries_the_opening_words(client):
 
 # --- shell.js -------------------------------------------------------------------------
 
-def test_shell_registers_the_list_keys():
-    text = SHELL.read_text(encoding="utf-8")
-    for key in ('keys.j', 'keys.k', 'keys.ArrowRight', 'keys.ArrowLeft', 'keys.ArrowDown',
-                'keys.ArrowUp', 'keys.Enter', 'keys.f', 'keys.e', 'keys.v'):
-        assert key in text, key
-
-
-def test_a_row_is_the_items_level_with_the_first():
-    rows = between(SHELL.read_text(encoding="utf-8"), "function rowWidth", "function step")
-    assert "offsetTop" in rows
-
-
 def test_moving_keeps_the_pick_in_view():
     assert 'scrollIntoView({ block: "nearest" })' in SHELL.read_text(encoding="utf-8")
 
@@ -112,18 +100,5 @@ def test_the_list_is_offered_to_the_other_scripts():
         assert name in between(text, "ok.list = {", "};"), name
 
 
-def test_the_panel_keys_wait_for_the_pick_to_land():
-    # A fast j then f must not star the item just left (review, fix round 1).
-    text = SHELL.read_text(encoding="utf-8")
-    rule = between(text, "function pickedPanel", "ok.keys.Enter")
-    assert "current()" in rule and "dataset.panel === id" in rule
-    for key, end in (("ok.keys.Enter", "ok.keys.f"), ("ok.keys.f", "ok.keys.e"),
-                     ("ok.keys.e", "ok.keys.v")):
-        assert "pickedPanel()" in between(text, key, end), key
-
-
-def test_an_empty_list_leaves_the_arrows_alone():
-    body = between(SHELL.read_text(encoding="utf-8"), "function step", "ok.keys.j")
-    assert "if (!items.length) return false;" in body
-    keys = between(SHELL.read_text(encoding="utf-8"), "ok.keys.j", "function pickedPanel")
-    assert keys.count("return step(") == 4
+# j, k, the arrows by a row, and f, e and Enter waiting for the panel are run in
+# node: tests/test_web_layer_history.py (batch G).
