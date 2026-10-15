@@ -375,3 +375,28 @@ def test_a_filter_with_no_twin_unlights_the_other_drawing_and_lights_its_tab():
     body = js[head:js.index("\n  }\n", head)]
     assert '".tabbar a"' in body
     assert 'classList.toggle("on"' in body
+
+
+# --- Task 5, fix round 1 -------------------------------------------------------------------
+
+def test_the_tab_lit_is_read_from_the_url_s_path_and_mark_not_its_whole_href():
+    """★ from /?vista=lista carries vista: Favoritos still lights. A typed
+    search drops the mark: Biblioteca lights (tabbar.html: a search is not
+    Favoritos)."""
+    js = static("shell.js")
+    head = js.index("function litTab")
+    body = js[head:js.index("\n  }\n", head)]
+    assert 'searchParams.get("mark")' in body and "pathname" in body
+    assert 'getAttribute("href") === href' not in body
+    head = js.index("function loadList")
+    body = js[head:js.index("\n  }\n", head)]
+    assert "litTab(target.href);" in body
+
+
+def test_a_phone_card_keeps_a_long_domain_on_one_line_and_clamps_a_long_word():
+    phone = block(static("app.css"), PHONE)
+    domain = re.search(r"\.tiles \.domain \{([^}]*)\}", phone).group(1)
+    for rule in ("white-space: nowrap", "overflow: hidden", "text-overflow: ellipsis",
+                 "max-width: calc(100% - 16px)"):
+        assert rule in domain, rule
+    assert re.search(r"\.tiles \.title \{[^}]*overflow-wrap: anywhere", phone)

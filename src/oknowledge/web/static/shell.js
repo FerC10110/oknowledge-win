@@ -114,6 +114,7 @@
           if (sel) target.searchParams.set("sel", sel); else target.searchParams.delete("sel");
         }
         history.replaceState(null, "", target.pathname + target.search);
+        litTab(target.href);
         if (keepScroll) document.getElementById("list-body").scrollTop = top;
         var items = document.getElementById("items");
         if (panel && moved) {
@@ -328,14 +329,19 @@
     litChipInView();
   }
 
-  // The phone's tab bar follows a filter clicked: ★ Favoritos lights its
-  // tab, any other library filter lights Biblioteca (a tab of the same
-  // page with no query). A page with no such tab keeps its own.
+  // The phone's tab bar follows the list shown (tabbar.html's rule): the
+  // library under ★ with nothing searched is Favoritos; any other list
+  // lights the tab of its page. Read from the path and the mark, never the
+  // whole href (★ carries vista and hasta). A page with no tab keeps its own.
   function litTab(href) {
     var tabs = Array.prototype.slice.call(document.querySelectorAll(".tabbar a"));
-    var path = new URL(href, location.href).pathname;
-    var tab = tabs.find(function (a) { return a.getAttribute("href") === href; }) ||
-      tabs.find(function (a) { var u = new URL(a.href); return u.pathname === path && !u.search; });
+    var url = new URL(href, location.href);
+    var fav = url.searchParams.get("mark") === "\u2b50" &&
+      !/[\p{L}\p{N}]/u.test(url.searchParams.get("q") || "");
+    var tab = tabs.find(function (a) {
+      var u = new URL(a.href);
+      return u.pathname === url.pathname && (u.searchParams.get("mark") === "\u2b50") === fav;
+    });
     if (!tab) return;
     tabs.forEach(function (a) { a.classList.toggle("on", a === tab); });
   }

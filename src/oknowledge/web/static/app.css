@@ -633,7 +633,11 @@ html:not(.js) .js-only { display: none !important; }
   .list-body:has(> .posters) { padding: 0 0 calc(12px + var(--tabbar-h)); }
   .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
   .tiles .thumb { height: 84px; }
-  .tiles .domain { font-size: 10px; }
+  /* A long domain stays on one line over the thumb; a word longer than the
+     card breaks, so the two-line clamp can end it with an ellipsis. */
+  .tiles .domain { font-size: 10px; max-width: calc(100% - 16px); box-sizing: border-box;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tiles .title { overflow-wrap: anywhere; }
   .tiles .text { padding: 9px 10px 11px; }
   .rows .item { border-radius: 0; border-bottom: 1px solid #1d1e23; }
   .rows .hit { min-height: 44px; }
