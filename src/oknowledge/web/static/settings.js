@@ -11,6 +11,11 @@
   var renamesOut = [];        // every rename sent since the modal opened: each true if it moved notes
   var opening = 0;            // the modal's last load: an older one landing late is dropped
   var SAVE_MS = 15000;        // a save with no answer by then has failed
+  // A rename moves every note of the category and may take long: the ✕ and
+  // the count links wait for it up to this long, then go on, saying its
+  // result is unknown (final review M-2).
+  var RENAME_MS = 60000;
+  var renamesHeld = [];       // the same renames, as the links wait for them: bounded
   // This page's id and its revs, sent with every pane's save: the server
   // writes a pane only if no newer save of that pane from this page landed
   // first, so a save that timed out and runs late cannot put older values
@@ -50,13 +55,13 @@
 
   // A save that never answers fails, so the redraws waiting for it go on.
   // The error says it timed out: the answer may still come (see autosave).
-  function within(promise) {
+  function within(promise, ms) {
     return new Promise(function (resolve, reject) {
       var timer = setTimeout(function () {
         var error = new Error(texts.saveFailed || "");
         error.late = true;
         reject(error);
-      }, SAVE_MS);
+      }, ms || SAVE_MS);
       promise.then(function (body) { clearTimeout(timer); resolve(body); },
                    function (error) { clearTimeout(timer); reject(error); });
     });
@@ -232,6 +237,12 @@
             return false;
           });
         renamesOut.push(sent);
+        renamesHeld.push(within(sent, RENAME_MS).catch(function () {
+          var unknown = (pane.dataset.renameUnknown || "").replace("%1", old);
+          failed(form, unknown);
+          toast(unknown);
+          return false;
+        }));
       }
       box.addEventListener("change", rename);
       form.addEventListener("submit", function (event) { event.preventDefault(); rename(); });
@@ -289,7 +300,7 @@
   function leave(link) {
     var active = document.activeElement;
     if (active && active.blur) active.blur();
-    Promise.all([whenIdle()].concat(renamesOut))
+    Promise.all([whenIdle()].concat(renamesHeld))
       .then(function () {
         if (unsaved.length) {
           toast(unsaved[unsaved.length - 1].message);
@@ -355,6 +366,7 @@
       if (!ok.openModal(modal)) return;
     }
     renamesOut = [];
+    renamesHeld = [];
     var mine = ++opening;
     modal.replaceChildren();
     modal.classList.add("loading");

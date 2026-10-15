@@ -172,7 +172,8 @@
   </section>
 
   <section class="settings-pane" data-settings-pane="categorias"{% if tab != 'categorias' %} hidden{% endif %}
-           data-merge="{{ t('Merge «%1» into «%2»?') }}">
+           data-merge="{{ t('Merge «%1» into «%2»?') }}"
+           data-rename-unknown="{{ t('No answer about renaming «%1» yet: reload to see if it was done') }}">
     {% if categories %}
       <ul class="cat-rows">
         {% for name, count in categories.items() %}

@@ -99,6 +99,7 @@ function makeRoot(tab) {
   });
   const pane = own(el("SECTION"));
   pane.dataset.merge = "Merge %1 into %2?";
+  pane.dataset.renameUnknown = "UNKNOWN %1";
   pane.querySelectorAll = (sel) => (sel.indexOf('input[name="old"]') >= 0
     ? renames.map((f) => f.elements.old) : sel === "form[data-settings-rename]" ? renames : []);
   const close = own(el("A", { closest: (sel) => (sel === "a[data-close]" ? close : null) }));
@@ -566,3 +567,33 @@ sends[0].answer({ stale: true }); await settle();
 clickClose(root); await settle();
 """, page=True)
     assert out["toasts"][0] == "SAVE FAILED" and out["navigated"] is None
+
+
+# --- final review M-2: a rename that never answers stops holding the links after 60 s -------
+
+@pytest.mark.parametrize("page", [True, False])
+def test_a_rename_that_never_answers_lets_the_links_go_and_says_so(tmp_path, page):
+    start = "const root = pageRoot;" if page else OPEN
+    out = run(tmp_path, start + """
+rename(root, "Redes", "Otra");                         // never answered
+const first = clickCount(root); await settle();
+out.waiting = [first.defaultPrevented, out.navigated];
+tick(); await settle();
+out.told = out.toasts.slice();
+clickCount(root); await settle();
+""", page=page, tab="categorias", categories=["Redes"])
+    assert 60000 in out["timers"]
+    assert out["waiting"] == [True, None]
+    assert out["told"][0] == "UNKNOWN Redes"
+    assert out["navigated"] == "/?category=Redes"
+
+
+def test_a_rename_that_lands_after_its_timeout_still_reloads_the_closed_modal(tmp_path):
+    out = run(tmp_path, OPEN + """
+rename(root, "Redes", "Otra");
+modal.close(); await settle();
+tick(); await settle();
+out.before = out.reloads;
+sends[0].answer({ moved: 2 }); await settle();
+""", categories=["Redes"])
+    assert out["before"] == 0 and out["reloads"] == 1

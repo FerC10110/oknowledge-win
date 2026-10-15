@@ -164,3 +164,13 @@ def test_what_needs_javascript_is_hidden_without_it():
 def test_every_page_loads_the_settings_script(client):
     for path in ("/", "/ocio", "/ideas", "/settings", "/retry"):
         assert '<script src="/static/settings.js" defer></script>' in client.get(path).text, path
+
+
+def test_the_categories_pane_says_a_rename_that_never_answered_is_unknown(client):
+    """Final review M-2: the words settings.js says when a rename gave no
+    answer in time, in both languages."""
+    from oknowledge.i18n import translator
+    body = client.get("/settings/panel?tab=categorias").text
+    words = "No answer about renaming «%1» yet: reload to see if it was done"
+    assert f'data-rename-unknown="{words}"' in body
+    assert translator("es")(words) == "Todavía no hay respuesta del cambio de nombre de «%1»: recargá para ver si se hizo"
