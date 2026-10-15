@@ -626,6 +626,16 @@ STRINGS = {
         "once the folder is writable again.":
             "Restaurado, pero no se pudieron rehacer los índices. Corré "
             "`oknowledge reindex` cuando la carpeta vuelva a ser escribible.",
+        "Restored · %2 not: there is already another note with that link. The indexes "
+        "could not be rebuilt: run `oknowledge reindex` once the folder is writable again.":
+            "Restaurado · %2 no: ya hay otra nota con ese link. No se pudieron rehacer "
+            "los índices: corré `oknowledge reindex` cuando la carpeta vuelva a ser "
+            "escribible.",
+        "%1 restored · %2 not: there is already another note with that link. The indexes "
+        "could not be rebuilt: run `oknowledge reindex` once the folder is writable again.":
+            "%1 restaurados · %2 no: ya hay otra nota con ese link. No se pudieron rehacer "
+            "los índices: corré `oknowledge reindex` cuando la carpeta vuelva a ser "
+            "escribible.",
         "Improvements…": "Mejoras…",
         "Expansion…": "Ampliación…",
         "Regenerating…": "Regenerando…",

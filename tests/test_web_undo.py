@@ -230,3 +230,97 @@ def test_a_lot_with_one_blocked_says_both(s):
 
     assert body == {"ok": True, "restored": ["b2"], "skipped": ["a1"],
                     "notice": "Restored · 1 not: there is already another note with that link"}
+
+
+# --- undo with the indexes behind --------------------------------------------------
+
+def stale_rebuild(monkeypatch):
+    def boom(cfg, language, shelf=None):
+        raise OSError(28, "No space left on device")
+    monkeypatch.setattr("oknowledge.undo.rebuild_indexes", boom)
+
+
+def test_an_undo_whose_rebuild_fails_says_so_and_the_note_is_back(s, monkeypatch):
+    token = deleted(s)
+    stale_rebuild(monkeypatch)
+
+    body = s.client.post(f"/undo/{token}", headers=JSON).json()
+
+    assert body == {"ok": True, "restored": ["a1"], "skipped": [],
+                    "notice": "Restored, but the indexes could not be rebuilt. Run "
+                              "`oknowledge reindex` once the folder is writable again."}
+    assert find_note(s.cfg, "a1") is not None
+
+
+def test_an_undo_with_stale_indexes_and_one_blocked_says_both(s, monkeypatch):
+    one = delete_note(s.cfg, "a1", "es")
+    two = delete_note(s.cfg, "b2", "es")
+    token = undo.remember(s.cfg, [("a1", "links", one), ("b2", "links", two)])
+    write_note(s.cfg, link("a1", "WireGuard otra vez", "Redes"), "es")
+    stale_rebuild(monkeypatch)
+
+    body = s.client.post(f"/undo/{token}", headers=JSON).json()
+
+    assert body["restored"] == ["b2"] and body["skipped"] == ["a1"]
+    assert body["notice"] == ("Restored · 1 not: there is already another note with that "
+                              "link. The indexes could not be rebuilt: run `oknowledge "
+                              "reindex` once the folder is writable again.")
+
+
+def test_without_a_script_the_stale_partial_undo_keeps_its_counts(s, monkeypatch):
+    one = delete_note(s.cfg, "a1", "es")
+    two = delete_note(s.cfg, "b2", "es")
+    token = undo.remember(s.cfg, [("a1", "links", one), ("b2", "links", two)])
+    write_note(s.cfg, link("a1", "WireGuard otra vez", "Redes"), "es")
+    stale_rebuild(monkeypatch)
+
+    answer = s.client.post(f"/undo/{token}", data={"back": "/"}, follow_redirects=False)
+    location = answer.headers["location"]
+    assert location == "/?notice=restored-one-partial-indexes-stale&n=1&m=1"
+    page = s.client.get(location).text
+    assert "Restored · 1 not: there is already another note" in page
+    assert "oknowledge reindex" in page
+
+
+def test_a_stale_undo_of_several_with_some_blocked_counts_both(s, monkeypatch):
+    one, two = delete_note(s.cfg, "a1", "es"), delete_note(s.cfg, "b2", "es")
+    three = delete_note(s.cfg, CARD, "es", shelf=s.cfg.ocio)
+    token = undo.remember(s.cfg, [("a1", "links", one), ("b2", "links", two),
+                                  (CARD, "ocio", three)])
+    write_note(s.cfg, link("a1", "WireGuard otra vez", "Redes"), "es")
+    stale_rebuild(monkeypatch)
+
+    body = s.client.post(f"/undo/{token}", headers=JSON).json()
+
+    assert body["notice"] == ("2 restored · 1 not: there is already another note with that "
+                              "link. The indexes could not be rebuilt: run `oknowledge "
+                              "reindex` once the folder is writable again.")
+
+
+def test_two_undos_at_once_through_the_web_restore_once(s, monkeypatch):
+    import threading
+
+    token = deleted(s)
+    both_read = threading.Barrier(2, timeout=5)
+    real = undo._read
+
+    def read(path):
+        lot = real(path)
+        both_read.wait()
+        return lot
+    monkeypatch.setattr(undo, "_read", read)
+    answers = []
+
+    def run():
+        answers.append(s.client.post(f"/undo/{token}", headers=JSON))
+    threads = [threading.Thread(target=run) for _ in range(2)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(10)
+
+    assert sorted(a.status_code for a in answers) == [200, 404]
+    gone = next(a for a in answers if a.status_code == 404)
+    assert gone.json() == {"ok": False, "error": "It can no longer be undone"}
+    assert len([n for n in all_notes(s.cfg) if n.id == "a1"]) == 1
+    assert list(trash_dir(s.cfg).glob("*.md")) == []

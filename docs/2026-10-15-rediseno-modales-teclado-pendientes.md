@@ -7,14 +7,6 @@ Detalles menores que las revisiones encontraron y que no entraron en la
 entrega 3. Ninguno pierde datos: en el peor caso una nota queda en
 `oknowledge/trash/` sin Deshacer desde la app, y se recupera desde Obsidian.
 
-## Deshacer y papelera
-
-- Con los índices sin reconstruir, el aviso de Deshacer dice "índices
-  desactualizados" y no menciona las notas que no volvieron (el JSON sí las
-  lista).
-- Falta testear: el fallback sin hard links cuando otro gana el nombre, dos
-  Deshacer exactamente al mismo tiempo, y el Deshacer con índices viejos.
-
 ## Acciones en lote
 
 - Cambiar el estado en lote mira el estado válido nota por nota: en un lote

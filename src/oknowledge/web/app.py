@@ -140,6 +140,16 @@ NOTICES = {
     "restored-indexes-stale": "Restored, but the indexes could not be rebuilt. "
                               "Run `oknowledge reindex` once the folder is "
                               "writable again.",
+    # Both at once: the notes that did not come back are not to be lost
+    # behind the stale indexes (the JSON lists them, the toast must too).
+    "restored-one-partial-indexes-stale":
+        "Restored · %2 not: there is already another note with that link. The "
+        "indexes could not be rebuilt: run `oknowledge reindex` once the folder "
+        "is writable again.",
+    "restored-partial-indexes-stale":
+        "%1 restored · %2 not: there is already another note with that link. The "
+        "indexes could not be rebuilt: run `oknowledge reindex` once the folder "
+        "is writable again.",
     "settings-failed": "The settings could not be saved. Check that the config "
                        "folder exists and that you can write to it.",
     # Pasting a link in the header. There is no card to watch yet -- a card
@@ -1441,10 +1451,12 @@ def create_app(cfg: Config) -> FastAPI:
         if not result.restored:
             return answer(request, home, "undo-blocked")
         n, m = len(result.restored), len(result.skipped)
-        if result.stale:
-            code = "restored-indexes-stale"
-        elif m:
+        if m:
             code = "restored-one-partial" if n == 1 else "restored-partial"
+            if result.stale:
+                code += "-indexes-stale"
+        elif result.stale:
+            code = "restored-indexes-stale"
         else:
             code = "restored-one" if n == 1 else "restored"
         return answer(request, home, code, n=n, m=m or None,
