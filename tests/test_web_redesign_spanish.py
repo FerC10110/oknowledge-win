@@ -80,3 +80,53 @@ def test_the_idea_screen_has_no_english_left(client):
     for english in ("Saving…", "ASK THE AI", "YOUR IDEA", "Linked links", "Delete idea",
                     "+ Add", "LINKED", "MAY HELP"):
         assert english not in body
+
+
+# --- delivery 3 (docs/2026-10-14-rediseno-modales-teclado-design.md §10) ----------
+
+SETTINGS = ["Ajustes", "Los cambios se guardan solos", "Motores", "Idioma y guardado", "Importar",
+            "Categorías", "Buscar modelos",
+            "Se usan en orden, de arriba hacia abajo. Podés poner varios modelos separados por coma.",
+            "¿Dónde se guarda esto?", "Idioma de los resúmenes", "Idioma de la interfaz",
+            "Compartido con tus otros plugins de Omarchy", "Cambiarlo recarga la página",
+            "Guardar por defecto", "Lo que se marca al pegar un link", "Menciones de un video",
+            "Qué nombres se extraen",
+            "Links a analizar por vez", "Cuántos procesa cada tanda",
+            "Soltá acá el export de WhatsApp", "Elegir archivo", "Links esperando análisis: 0",
+            "Ver actividad", "Si renombrás a una que ya existe, se unen.",
+            "¿Unir «%1» con «%2»?"]
+
+EVERY_PAGE = ["Atajos", "Atajos de teclado", "Buscar o pegar un link", "Biblioteca · Ocio · Ideas",
+              "Anterior / siguiente", "Fila arriba / abajo", "Abrir original", "Favorito",
+              "Agregar etiqueta", "Seleccionar", "Borrar seleccionados", "Lista / tarjetas",
+              "Cerrar / deseleccionar", 'data-undo="Deshacer"', 'data-opening="Abriendo %1…"',
+              "No se pudieron cargar los ajustes. Fijate que oknowledge siga andando."]
+
+BULK = ['data-one="1 seleccionado"', 'data-many="%1 seleccionados"', "Mover a",
+        "Nueva categoría", "★ Favorito", "Borrar", "Limpiar la selección",
+        "Seleccionar WireGuard"]
+
+
+@pytest.mark.parametrize("text", SETTINGS)
+def test_settings_says_it_as_the_handoff_does(client, text):
+    assert text in client.get("/settings/panel").text
+
+
+@pytest.mark.parametrize("text", EVERY_PAGE)
+def test_every_page_says_the_shortcuts_as_the_handoff_does(client, text):
+    assert text in client.get("/").text
+
+
+@pytest.mark.parametrize("text", BULK)
+def test_the_selection_says_it_as_the_handoff_does(client, text):
+    assert text in client.get("/").text
+
+
+def test_deleting_and_undoing_say_it_as_the_spec_does(client):
+    json = {"Accept": "application/json"}
+    deleted = client.post("/item/l00000000001/delete", headers=json).json()
+    assert deleted["notice"] == "Borrado"
+    back = client.post(f"/undo/{deleted['undo']}", headers=json).json()
+    assert back["notice"] == "Restaurado"
+    again = client.post(f"/undo/{deleted['undo']}", headers=json)
+    assert again.json()["error"] == "Ya no se puede deshacer"

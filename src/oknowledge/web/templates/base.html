@@ -38,7 +38,7 @@
   <dialog id="keys-help" class="modal keys" aria-labelledby="keys-title">
     <div class="modal-head"><h2 id="keys-title">{{ t('Keyboard shortcuts') }}</h2>
       <button type="button" class="btn icon" data-close aria-label="{{ t('Close') }}" title="{{ t('Close') }}">✕</button></div>
-    <dl class="keys-grid">
+    <dl class="keys-grid" tabindex="-1" autofocus>
       {%- for combo, text in KEYS_HELP %}
       <dt>{% for key in combo %}<kbd class="mono">{{ key }}</kbd>{% endfor %}</dt><dd>{{ t(text) }}</dd>
       {%- endfor %}

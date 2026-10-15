@@ -265,3 +265,10 @@ def test_no_network_is_the_pages_own_words_not_the_browsers(failed_undo):
 def test_a_screen_error_after_the_undo_is_not_toasted(failed_undo):
     assert failed_undo["screenBug"] == ["Restaurado"]
     assert failed_undo["uncaught"] == ["a screen bug"]
+
+
+def test_the_keys_help_opens_on_its_grid_and_not_on_the_close_button(client):
+    # Handoff 09: opened with "?", no focus ring sits on the ✕ (Task 12).
+    body = client.get("/").text
+    found = re.search(r'<dialog id="keys-help".*?</dialog>', body, re.S).group(0)
+    assert '<dl class="keys-grid" tabindex="-1" autofocus>' in found

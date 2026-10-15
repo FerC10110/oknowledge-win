@@ -546,6 +546,7 @@ STRINGS = {
         "Changing it reloads the page": "Cambiarlo recarga la página",
         "What is marked when you paste a link": "Lo que se marca al pegar un link",
         "Tools": "Herramientas",
+        "Which names are pulled out": "Qué nombres se extraen",
         "How many each batch takes": "Cuántos procesa cada tanda",
         "Drop the WhatsApp export here": "Soltá acá el export de WhatsApp",
         "Choose file": "Elegir archivo",

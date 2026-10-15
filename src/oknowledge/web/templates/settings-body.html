@@ -131,7 +131,8 @@
         <span class="seg">{% for value, label in (('full', t('Full')), ('summary', t('Summary'))) %}<label><input type="radio" name="default_content" value="{{ value }}"{% if cfg.default_content == value %} checked{% endif %}><span>{{ label }}</span></label>{% endfor %}</span>
       </div>
       <div class="setting">
-        <div><p class="setting-name">{{ t('Mentions of a video') }}</p></div>
+        <div><p class="setting-name">{{ t('Mentions of a video') }}</p>
+          <p class="setting-hint">{{ t('Which names are pulled out') }}</p></div>
         <span class="seg">{% for value, label in (('tools', t('Tools')), ('all', t('All')), ('discussed', t('Only what it discusses'))) %}<label><input type="radio" name="mentions" value="{{ value }}"{% if cfg.mentions == value %} checked{% endif %}><span>{{ label }}</span></label>{% endfor %}</span>
       </div>
       <div class="setting">

@@ -446,10 +446,11 @@ html:not(.js) .js-only { display: none !important; }
 /* --- Settings (spec §3.1; handoff §4) ----------------------------------- */
 .settings-body { display: flex; flex-direction: column; min-height: 0;
   line-height: normal; font-size: 13.5px; color: var(--t2); }
-.settings-head { display: flex; align-items: flex-start; justify-content: space-between;
-  padding: 18px 24px 0; }
+/* Handoff 07/08: the title on the left, the note and the ✕ on the right. */
+.settings-head { display: flex; align-items: center; gap: 14px; padding: 18px 24px 0; }
+.settings-head > div { display: contents; }
 .settings-title { font-size: 17px; font-weight: 600; margin: 0; color: var(--t1); }
-.settings-note { font-size: 12px; color: #6d6f78; margin: 4px 0 0; }
+.settings-note { font-size: 12px; color: #6d6f78; margin: 0 0 0 auto; }
 .settings-tabs { display: flex; gap: 20px; padding: 14px 24px 0; border-bottom: 1px solid var(--b-input); }
 .settings-tabs a { padding: 0 0 10px; margin-bottom: -1px; color: var(--t5); text-decoration: none;
   border-bottom: 2px solid transparent; }
@@ -465,7 +466,10 @@ html:not(.js) .js-only { display: none !important; }
   color: var(--t1); padding: 7px 10px; font: inherit; font-size: 13px; min-width: 0; }
 .settings-pane .engine-row { display: grid; grid-template-columns: 20px 90px minmax(0, 1fr) auto;
   align-items: center; gap: 10px; padding: 0; }
-.settings-pane .engine-tools { display: flex; align-items: center; gap: 8px; }
+/* One line per engine (handoff §4): style.css's settings page put the box
+   on a second line. */
+.settings-pane .engine-row .model-box { grid-column: auto; }
+.settings-pane .engine-tools { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
 .link-button { background: none; border: 0; padding: 0; color: var(--acc); font: inherit;
   font-size: 12.5px; cursor: pointer; }
 .link-button:hover { color: var(--acc-hi); }
@@ -491,6 +495,8 @@ html:not(.js) .js-only { display: none !important; }
 .modal.keys { width: 420px; max-width: calc(100vw - 32px); }
 .keys-grid { display: grid; grid-template-columns: auto 1fr; gap: 10px 18px; margin: 0;
   padding: 16px 22px 22px; font-size: 13px; align-items: center; }
+/* showModal() lands here (autofocus), not on the ✕: no ring on open (handoff 09). */
+.keys-grid:focus { outline: none; }
 .keys-grid dt { display: flex; gap: 4px; }
 .keys-grid dd { margin: 0; color: var(--t3); }
 .keys-grid kbd { display: inline-block; min-width: 18px; padding: 1px 5px; border: 1px solid #2a2b32;
@@ -531,13 +537,11 @@ html:not(.js) .js-only { display: none !important; }
 .bulk[hidden] { display: none; }
 /* Room under the last items, so the bar never covers them. */
 #list.picking .list-body { padding-bottom: 96px; }
-.bulk-count { padding: 6px 10px; color: var(--t1); font-weight: 600; }
-.bulk-sep { width: 1px; align-self: stretch; margin: 4px 4px; background: var(--b-menu); }
+.bulk-count { padding: 6px 10px; color: var(--t1); }
 .bulk > button, .bulk summary { padding: 6px 10px; border: 0; border-radius: 7px; background: none;
   color: var(--t2); font: inherit; cursor: pointer; list-style: none; }
 .bulk summary::-webkit-details-marker { display: none; }
 .bulk > button:hover, .bulk summary:hover, .bulk details[open] summary { background: var(--s7); color: var(--t1); }
-.bulk .bulk-star { color: var(--fav); }
 .bulk .bulk-delete { color: var(--danger); }
 .bulk .bulk-clear { color: var(--t5); }
 .bulk .menu-list { bottom: calc(100% + 8px); left: 0; min-width: 200px; }
