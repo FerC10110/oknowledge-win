@@ -61,7 +61,10 @@
     button.setAttribute("aria-pressed", on ? "true" : "false");
   }
 
+  var shrunk = false;        // the mode on came from a shrink, not a hand
+
   function mode(on) {
+    shrunk = false;
     list.classList.toggle("selecting", on);
     drawMode();
   }
@@ -160,9 +163,15 @@
   // The other way, a selection made on the desktop is the mode on the
   // phone: its boxes stay in sight, and a tap ticks rather than opens.
   var narrow = window.matchMedia ? window.matchMedia("(max-width: 60rem)") : null;
+  // A mode a shrink turned on only goes off on the way back: the ticks are
+  // the desktop's, kept as they were before the shrink.
   function widened(event) {
-    if (!event.matches && selecting()) clear();
-    else if (event.matches && picked.length && !selecting()) mode(true);
+    if (!event.matches && selecting()) {
+      if (shrunk) mode(false); else clear();
+    } else if (event.matches && picked.length && !selecting()) {
+      mode(true);
+      shrunk = true;
+    }
   }
   if (narrow && narrow.addEventListener) narrow.addEventListener("change", widened);
   else if (narrow && narrow.addListener) narrow.addListener(widened);

@@ -715,3 +715,48 @@ def test_moving_the_open_note_out_of_the_list_asks_for_the_panel_once(leftovers)
     # The list is told to leave the panel to select.js, which picks the next one.
     assert leftovers["reloads"] == [["", True]]
     assert leftovers["picks"] == ["b2"]
+
+
+# --- review I1: a shrink's mode leaves without the ticks it did not make -------------------
+
+ROUND_TRIP_SUFFIX = r"""
+const trip = {};
+media.matches = false;
+listeners["list:change"].forEach((fn) => fn({ target: Object.assign(a.box, { checked: true }) }));
+media.matches = true; media.fns.forEach((fn) => fn({ matches: true }));
+trip.narrow = [classes.has("selecting"), a.box.checked];
+media.matches = false; media.fns.forEach((fn) => fn({ matches: false }));
+trip.wideAgain = [classes.has("selecting"), a.box.checked, bar.hidden, button.textContent];
+ok.keys.Escape();
+// A mode turned on by hand on the phone still clears when the screen grows.
+media.matches = true; media.fns.forEach((fn) => fn({ matches: true }));
+tap(button); tap(a.hit);
+media.matches = false; media.fns.forEach((fn) => fn({ matches: false }));
+trip.handMode = [classes.has("selecting"), a.box.checked];
+console.log(JSON.stringify(trip));
+"""
+
+
+@pytest.fixture(scope="module")
+def round_trip(tmp_path_factory):
+    import json
+    import shutil
+    import subprocess
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not installed")
+    harness = tmp_path_factory.mktemp("trip") / "harness.js"
+    harness.write_text(MEDIA_PREFIX + MODE_HARNESS + ROUND_TRIP_SUFFIX, encoding="utf-8")
+    done = subprocess.run([node, str(harness), str(SELECT)], capture_output=True, text=True,
+                          timeout=30, check=False)
+    assert done.returncode == 0, done.stderr
+    return json.loads(done.stdout.strip().splitlines()[-1])
+
+
+def test_a_desktop_selection_survives_a_narrow_and_back_resize(round_trip):
+    assert round_trip["narrow"] == [True, True]
+    assert round_trip["wideAgain"] == [False, True, False, "Seleccionar"]
+
+
+def test_a_mode_entered_on_the_phone_still_clears_when_the_screen_grows(round_trip):
+    assert round_trip["handMode"] == [False, False]
