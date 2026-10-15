@@ -148,10 +148,17 @@ def test_tapping_the_mark_you_have_takes_it_off(client):
     assert re.search(r'name="mark" value=""[^>]*aria-pressed="true"[^>]*><svg class="icon star-glyph"', body)
 
 
-def test_the_picker_is_not_inside_the_popup_link(client):
-    body = client.get("/ocio").text
-    for block in re.findall(r'<a class="body".*?</a>', body, re.S):
-        assert "/mark" not in block
+def test_the_picker_is_not_inside_a_link(client):
+    """A form inside an <a> is a click that both marks and opens. The old
+    check looked for a link class the redesign no longer draws, so it held
+    over nothing (batch G): now every link of the pages that show the
+    picker is looked in, and the picker has to be there."""
+    for path in (f"/?sel={LINK}", f"/?vista=lista&sel={LINK}", f"/panel/{LINK}", "/ocio"):
+        body = client.get(path).text
+        links = re.findall(r"<a\b[^>]*>.*?</a>", body, re.S)
+        assert links, path
+        assert [link for link in links if "/mark" in link] == [], path
+    assert f'action="/item/{LINK}/mark"' in client.get(f"/?sel={LINK}").text
 
 
 # The favourite star is drawn, not typed. No font the page names has U+2605,

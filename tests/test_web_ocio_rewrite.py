@@ -76,6 +76,10 @@ def test_a_failed_rewrite_shows_its_reason_on_the_card_page(client, model):
 def test_a_rewrite_that_works_clears_the_failure(client, model):
     model[0][T2] = "boom"
     client.post(f"/item/{T2}/describe")
+    # Shown first, in the panel and on the page around it, so its absence
+    # below means it was cleared (batch G: this test proved nothing before).
+    assert "Last time it failed: boom" in client.get(f"/panel/{T2}").text
+    assert "Last time it failed: boom" in client.get(f"/ocio?sel={T2}").text
     model[0][T2] = None
     client.post(f"/item/{T2}/describe")
     assert "Last time it failed" not in client.get(f"/panel/{T2}").text

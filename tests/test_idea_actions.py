@@ -423,9 +423,15 @@ def test_the_whole_library_includes_the_linked_ones(vault_cfg, asked):
 def test_already_out_there_ignores_the_scope(cfg, engine):
     from oknowledge.vault import write_note as put_link
     put_link(cfg, link(1, "Rutina de gimnasio", summary="Rutina para el gimnasio.")[1], "es")
+    # The same library, the same scope: expand reads the link, so a prompt
+    # without it below is the scope ignored and not a link nobody would
+    # have read anyway (batch G: this test proved nothing before).
+    acts.compose(cfg, idea(), "expand", "", "2026-10-12", scope="todos")
+    assert "Rutina para el gimnasio." in engine.calls[-1][1]
     engine.reply = json.dumps({"verdict": "new", "matches": []})
     acts.compose(cfg, idea(), "exists", "", "2026-10-12", scope="todos")
-    assert "Rutina para el gimnasio." not in engine.calls[0][1]
+    assert engine.calls[-1][0] == "search"
+    assert "Rutina para el gimnasio." not in engine.calls[-1][1]
 
 
 # --- what may help, without a model ------------------------------------------
