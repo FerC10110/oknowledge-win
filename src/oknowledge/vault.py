@@ -962,14 +962,17 @@ def restore_note(cfg: Config, link_id: str, source: Path, target: Path, language
             back.unlink(missing_ok=True)
             raise
     else:
-        # The note is back; a copy left in trash/ is harmless (trash/ is
-        # emptied by hand, like any other deleted note), and the id check
-        # above -- the note is on the shelf again -- keeps it from ever
-        # coming back a second time or over the live one.
+        # The note is back. If the trash/ name cannot be removed it stays as
+        # a second hard link to the live note -- the same file, not a copy:
+        # an edit through either name shows in both, and deleting it from
+        # trash/ later only drops that name. Harmless, and the id check above
+        # (the note is on the shelf again) keeps it from being restored a
+        # second time or over the live one.
         try:
             trashed.unlink()
         except OSError as error:
-            log.warning("restored %s, but its copy in trash/ stays: %s", link_id, error)
+            log.warning("restored %s, but its trash/ name stays as a hard link to it: %s",
+                        link_id, error)
     if rebuild:
         _finish(cfg, language, True, shelf)
     return True

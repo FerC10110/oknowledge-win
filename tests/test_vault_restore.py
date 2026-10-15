@@ -236,7 +236,7 @@ def test_a_trash_copy_that_cannot_be_deleted_still_counts_as_restored(tmp_path, 
     assert restore_note(cfg, "a1", moved.source, moved.target, "es") is True
 
     assert path.read_bytes() == before
-    assert moved.target.exists()                    # the leftover, purged with trash/
+    assert moved.target.samefile(path)              # the trash/ name: a hard link, not a copy
     assert [shelf.name for shelf in calls] == ["links"]
 
 
