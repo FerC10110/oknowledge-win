@@ -32,7 +32,7 @@ from fastapi.templating import Jinja2Templates
 from starlette.datastructures import Headers
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from .. import cards, env, places
+from .. import cards, env, places, undo
 from ..catalog import Candidate, cinemeta, openlibrary
 from ..ai import build_engine, can_search
 from ..ai.base import normalize_collections
@@ -680,6 +680,13 @@ def fetch(cfg: Config, url: str, content: str | None,
 def create_app(cfg: Config) -> FastAPI:
     app = FastAPI(title="oknowledge", docs_url=None, redoc_url=None)
     app.add_middleware(SameOriginOnly)
+
+    # The undo lots of earlier runs: the server can run for weeks
+    # (idle_timeout 0), so a lot is also purged whenever a new one is made.
+    try:
+        undo.purge()
+    except OSError as error:
+        log.warning("old undo lots could not be cleared: %s", error)
     library = Library(cfg)
     # The cards. A second index over a second folder, so a page of films
     # costs nothing to the 1184 links and the two can never mix.
