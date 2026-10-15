@@ -47,6 +47,8 @@
 
   // A write, as JSON: the body of {"ok": true}, or an Error with the
   // server's words (or the page's "could not be saved") and the status.
+  // No answer at all (offline, server down) is the page's words too, with
+  // no status, never the browser's own English.
   function send(url, data) {
     return fetch(url, { method: "POST", body: data || new FormData(),
                         headers: { Accept: "application/json" } })
@@ -57,20 +59,23 @@
           error.status = r.status;
           throw error;
         });
-      });
+      }, function () { throw new Error(texts.saveFailed || ""); });
   }
 
   // Deshacer (spec §6.3). `then(body)` is the screen's own follow-up;
   // without one the list reloads on the first note back, or the page does.
+  // Only a failed send is toasted: an error in what follows is a bug of the
+  // page and stays one (the console), not a toast.
   function undo(token, then) {
     return send("/undo/" + encodeURIComponent(token))
+      .then(function (body) { toast(body.notice); return body; },
+            function (error) { toast(error.message); return null; })
       .then(function (body) {
-        toast(body.notice);
+        if (!body) return;
         if (then) then(body);
         else if (ok.list) ok.list.reload(body.restored && body.restored[0]);
         else location.reload();
-      })
-      .catch(function (error) { toast(error.message); });
+      });
   }
 
   function offerUndo(text, token, then) {

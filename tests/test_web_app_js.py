@@ -202,3 +202,66 @@ def test_esc_with_nothing_else_to_do_clears_the_selection(keys):
 
 def test_the_number_keys_go_to_the_sections(keys):
     assert keys["section"] == "/ideas"
+
+
+# --- a failed Deshacer, in node -----------------------------------------------------------
+
+UNDO_HARNESS = r"""
+const source = require("fs").readFileSync(process.argv[2], "utf8");
+const out = { toasts: [], uncaught: [] };
+process.on("unhandledRejection", (e) => { out.uncaught.push(String(e && e.message)); });
+const toastEl = {
+  hidden: true, classList: { add() {}, remove() {} },
+  replaceChildren(...kids) { if (kids.length) out.toasts.push(kids[0].textContent); },
+  appendChild() {}, querySelector: () => null,
+};
+global.window = global;
+global.location = { href: "/", pathname: "/", reload() { out.reloaded = true; } };
+global.FormData = function () {};
+global.document = {
+  body: { dataset: { saveFailed: "No se pudo guardar" }, tagName: "BODY" },
+  addEventListener() {},
+  getElementById: (id) => (id === "toast" ? toastEl : null),
+  createElement: () => ({ textContent: "", className: "", addEventListener() {} }),
+  querySelector: () => null,
+  querySelectorAll: () => [],
+};
+eval(source);
+const ok = window.oknowledge;
+(async () => {
+  global.fetch = () => Promise.reject(new TypeError("Failed to fetch"));
+  await ok.send("/x").catch((e) => { out.sendError = [e.message, e.status === undefined]; });
+  await ok.undo("t1");
+  out.offline = out.toasts.slice();
+  global.fetch = () => Promise.resolve({ ok: true, status: 200,
+    json: () => Promise.resolve({ ok: true, notice: "Restaurado", restored: ["a1"] }) });
+  ok.undo("t2", () => { throw new Error("a screen bug"); });   // not awaited: its error is the page's
+  await new Promise((r) => setTimeout(r, 20));
+  out.screenBug = out.toasts.slice(out.offline.length);
+  console.log(JSON.stringify(out));
+  process.exit(0);
+})();
+"""
+
+
+@pytest.fixture(scope="module")
+def failed_undo(tmp_path_factory):
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not installed")
+    harness = tmp_path_factory.mktemp("undo") / "harness.js"
+    harness.write_text(UNDO_HARNESS, encoding="utf-8")
+    done = subprocess.run([node, str(harness), str(APP)], capture_output=True, text=True,
+                          timeout=30, check=False)
+    assert done.returncode == 0, done.stderr
+    return json.loads(done.stdout.strip().splitlines()[-1])
+
+
+def test_no_network_is_the_pages_own_words_not_the_browsers(failed_undo):
+    assert failed_undo["sendError"] == ["No se pudo guardar", True]
+    assert failed_undo["offline"] == ["No se pudo guardar"]
+
+
+def test_a_screen_error_after_the_undo_is_not_toasted(failed_undo):
+    assert failed_undo["screenBug"] == ["Restaurado"]
+    assert failed_undo["uncaught"] == ["a screen bug"]
