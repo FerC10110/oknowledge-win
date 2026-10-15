@@ -80,6 +80,17 @@ def test_a_delete_still_lands_when_the_lot_cannot_be_written(s, monkeypatch):
     assert find_note(s.cfg, "a1") is None
 
 
+def test_a_delete_still_lands_when_the_lot_folder_resolves_outside_the_vault(s, monkeypatch):
+    def boom(*args, **kwargs):
+        raise ValueError("not in the subpath")
+    monkeypatch.setattr("oknowledge.undo.remember", boom)
+    answer = s.client.post("/item/a1/delete", headers=JSON)
+    assert answer.status_code == 200
+    assert answer.json()["ok"] is True and "undo" not in answer.json()
+    assert find_note(s.cfg, "a1") is None
+    assert len(list(trash_dir(s.cfg).glob("*.md"))) == 1
+
+
 def test_the_delete_buttons_ask_nothing_and_reprocess_still_asks(s):
     for page in ("/?sel=a1", f"/ocio?sel={CARD}", f"/ideas/{s.idea}"):
         body = s.client.get(page).text

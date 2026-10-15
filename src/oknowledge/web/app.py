@@ -450,7 +450,8 @@ def see_other(path: str, **params) -> RedirectResponse:
 GONE = "That is not there any more."
 """What a script is told when the note it was editing has gone."""
 
-FAILURES = {"undo-gone": 404, "undo-blocked": 409, "bad-category": 400, "bad-mark": 400, "bad-kind": 400, "bad-collection": 400,
+FAILURES = {"undo-gone": 404, "undo-blocked": 409, "bad-category": 400, "bad-mark": 400,
+            "bad-kind": 400, "bad-collection": 400,
             "title-empty": 400, "busy": 409, "idea-full": 409,
             "cannot-search": 409, "no-such-idea": 404, "write-failed": 500}
 """The notices that mean nothing was written, and the status each is
@@ -546,7 +547,8 @@ def local_path(back: str) -> str | None:
     parts = urlsplit(text)
     if parts.scheme or parts.netloc:
         return None
-    query = urlencode([(k, v) for k, v in parse_qsl(parts.query) if k not in ("notice", "n", "m", "undo")])
+    query = urlencode([(k, v) for k, v in parse_qsl(parts.query)
+                       if k not in ("notice", "n", "m", "undo")])
     return parts.path + ("?" + query if query else "")
 
 
@@ -1302,7 +1304,8 @@ def create_app(cfg: Config) -> FastAPI:
         be written: the notes are in trash/ either way and the delete stands."""
         try:
             return undo.remember(current["cfg"], items)
-        except OSError as error:
+        except (OSError, ValueError) as error:
+            # ValueError: a shelf or trash/ that is a symlink resolving outside the vault.
             log.warning("the undo lot could not be written: %s", error)
             return None
 
