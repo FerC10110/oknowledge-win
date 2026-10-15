@@ -153,6 +153,12 @@
         if (panel && moved) {
           var still = here().searchParams.get("sel");
           if (still) markCurrent(still);
+        } else if (panel && phone() && isOpen()) {
+          // The phone's open layer keeps its note: the list under it is
+          // refreshed, and the server's pick (an edit may have filtered the
+          // note out) is not followed (Task 9 review).
+          var open = panel.querySelector("[data-panel]");
+          if (open && open.dataset.panel) markCurrent(open.dataset.panel);
         } else if (panel) {
           var serverPick = items ? items.dataset.current : "";
           var onScreen = panel.querySelector("[data-panel]");

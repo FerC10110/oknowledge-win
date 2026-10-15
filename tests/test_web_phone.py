@@ -547,3 +547,13 @@ def test_keys_draw_the_pick_until_a_finger_touches():
     js = static("shell.js")
     assert 'list.classList.add("keyed")' in between(js, "function step", "\n  }\n")
     assert 'document.addEventListener("pointerdown", function () { list.classList.remove("keyed"); }, true);' in js
+
+
+def test_a_list_reload_under_the_open_layer_keeps_its_note():
+    # Task 9 review, fix round 1: an edit in the layer (an Ocio state change
+    # under an estado filter) reloads the list; a server pick that differs
+    # must not swap the open layer to a note nobody tapped.
+    body = between(static("shell.js"), "function loadList", "function sideFilters")
+    guard = body.index("} else if (panel && phone() && isOpen()) {")
+    assert guard < body.index("loadPanel(serverPick, true)")
+    assert "markCurrent(open.dataset.panel)" in body[guard:body.index("loadPanel(serverPick, true)")]
