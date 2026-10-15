@@ -112,25 +112,7 @@ def test_select_js_comes_after_shell_js(client, path):
             < body.index('<script src="/static/select.js" defer></script>'))
 
 
-# --- select.js -------------------------------------------------------------------------------
-
-def test_select_follows_the_list():
-    text = SELECT.read_text(encoding="utf-8")
-    listening = between(text, '"oknowledge:list"', "});")
-    assert '"filter"' in listening
-
-
-def test_select_registers_its_keys():
-    text = SELECT.read_text(encoding="utf-8")
-    for key in ("keys.x", "keys.Backspace", "keys.Delete", "keys.Escape"):
-        assert key in text, key
-
-
-def test_select_sends_the_ticked_ids_and_offers_undo():
-    text = SELECT.read_text(encoding="utf-8")
-    sending = between(text, "function submit", "function pickAfter")
-    assert 'data.delete("ids")' in sending and 'data.append("ids"' in sending
-    assert "ok.offerUndo(body.notice, body.undo" in sending and "ok.list.reload(" in sending
+# --- select.js: its behaviour is in node, below (batch G) ---------------------------------
 
 
 # --- fix round 1 -------------------------------------------------------------------------
@@ -144,29 +126,9 @@ def test_a_note_being_reanalysed_has_no_checkbox(name, macro):
     assert guarded, name
 
 
-def test_a_bulk_change_reloads_the_pick_when_it_was_ticked():
-    text = SELECT.read_text(encoding="utf-8")
-    sending = between(text, "function submit", "function pickAfter")
-    assert "var mine = picked.indexOf(cur) >= 0;" in sending
-    # Once the list is back: the same pick redrawn, or the next one if it left.
-    assert "var next = listed(cur) ? cur : after;" in sending
-
-
 def test_the_list_leaves_room_for_the_bar_while_picking():
     css = (WEB / "static" / "app.css").read_text(encoding="utf-8")
     assert re.search(r"#list\.picking \.list-body \{ padding-bottom: \d+px; \}", css)
-
-
-# --- fix round 2 -------------------------------------------------------------------------
-
-def test_the_panel_empties_when_no_pick_is_left():
-    shell = (WEB / "static" / "shell.js").read_text(encoding="utf-8")
-    assert "empty: emptyPanel" in between(shell, "ok.list = {", "};")
-    text = SELECT.read_text(encoding="utf-8")
-    sending = between(text, "function submit", "function pickAfter")
-    # Moved out, or deleted, with nothing left to pick: the panel empties.
-    assert "if (next) ok.list.pick(next); else ok.list.empty();" in sending
-    assert "if (mine && !after) ok.list.empty();" in sending
 
 
 # --- final fix pass: one bulk send at a time, in node --------------------------------------
@@ -760,3 +722,218 @@ def test_a_desktop_selection_survives_a_narrow_and_back_resize(round_trip):
 
 def test_a_mode_entered_on_the_phone_still_clears_when_the_screen_grows(round_trip):
     assert round_trip["handMode"] == [False, False]
+
+
+# --- batch G: select.js over app.js, in node ----------------------------------------------
+# One harness for what the bar does: app.js is the real one (its toast, its
+# send, its Deshacer), the server and shell.js's list are fakes that write
+# down what they were asked. Each scenario is a fresh page.
+
+APP = WEB / "static" / "app.js"
+
+BULK_HARNESS = r"""
+const fs = require("fs");
+const APP = fs.readFileSync(process.argv[2], "utf8");
+const SELECT = fs.readFileSync(process.argv[3], "utf8");
+const out = { fetched: [], toasts: [], reloads: [], picks: [], empties: 0, cleared: 0 };
+const settle = (ms) => new Promise((r) => setTimeout(r, ms || 15));
+const listeners = {};
+const on = (name) => (type, fn) => { (listeners[name + ":" + type] = listeners[name + ":" + type] || []).push(fn); };
+
+// --- the toast: what it says, and its button --------------------------------
+let undoButton = null;
+const toastEl = {
+  hidden: true, classList: { add() {}, remove() {} },
+  replaceChildren(...kids) { undoButton = null; if (kids.length) out.toasts.push(kids[0].textContent); },
+  appendChild(kid) { undoButton = kid; }, querySelector: () => null,
+};
+const element = () => { const fns = {}; return { textContent: "", className: "",
+  addEventListener(type, fn) { fns[type] = fn; }, click() { fns.click(); } }; };
+
+// --- the bar and the list ------------------------------------------------------
+const button = (formaction) => ({ disabled: false, getAttribute: (a) => (a === "formaction" ? formaction : null) });
+const buttons = { move: button("/bulk/category"), star: button("/bulk/mark"), del: button("/bulk/delete") };
+let count = "";
+const bar = {
+  hidden: true, dataset: { one: "1", many: "%1" },
+  elements: { back: { value: "" }, new_category: { value: "typed" } },
+  addEventListener: on("bar"), getAttribute: () => "/bulk/category",
+  querySelector: (sel) => (sel === "[data-count]" ? { set textContent(v) { count = v; } }
+                           : sel === 'button[formaction="/bulk/delete"]' ? buttons.del : null),
+  querySelectorAll: () => Object.values(buttons),
+  classList: { toggle() {} },
+};
+let ids = ["a1", "b2", "c3"];
+const box = (value) => ({ value, checked: false, matches: () => true, closest: () => null });
+let boxes = ids.map(box);
+const classes = new Set();
+const list = { addEventListener: on("list"), querySelectorAll: () => boxes, querySelector: () => null,
+               classList: { toggle(c, f) { if (f) classes.add(c); else classes.delete(c); }, contains: (c) => classes.has(c) } };
+global.window = global;
+global.addEventListener = () => {};
+global.location = { href: "http://t/", pathname: "/", search: "", reload() { out.pageReloaded = true; } };
+global.FormData = function () { this.ids = []; this.delete = () => {}; this.append = (k, v) => { if (k === "ids") this.ids.push(v); }; };
+global.document = {
+  body: { dataset: { undo: "Deshacer", saveFailed: "No se pudo guardar" }, tagName: "BODY", appendChild() {} },
+  addEventListener() {},
+  getElementById: (id) => ({ toast: toastEl, bulk: bar, list }[id] || null),
+  createElement: element,
+  querySelector: () => null,
+  querySelectorAll: () => [],
+};
+document.activeElement = document.body;
+
+// --- the server --------------------------------------------------------------------
+let answers = {};          // path -> body; a bulk not listed answers {ok, notice: "hecho"}
+global.fetch = (url, opts) => {
+  out.fetched.push([url, (opts && opts.body && opts.body.ids) || []]);
+  const body = answers[url] || { ok: true, notice: "hecho" };
+  return Promise.resolve({ ok: body.ok !== false, status: body.ok === false ? 404 : 200, json: () => Promise.resolve(body) });
+};
+
+// --- shell.js's list -------------------------------------------------------------------
+let current = "", shownIds = ids.slice(), afterReload = null;
+const fakeList = {
+  current: () => current,
+  shown: () => shownIds.map((id) => ({ id: "card-" + id })),
+  reload: (...args) => { out.reloads.push(args); if (afterReload) shownIds = afterReload; return Promise.resolve(); },
+  pick: (id) => out.picks.push(id),
+  empty: () => { out.empties += 1; },
+};
+
+eval(APP);
+const ok = window.oknowledge;
+ok.list = fakeList;
+eval(SELECT);
+const tick = (id) => listeners["list:change"].forEach((fn) => fn({ target: Object.assign(boxes.find((b) => b.value === id), { checked: true }) }));
+const send = (which) => listeners["bar:submit"].forEach((fn) => fn({ preventDefault() {}, submitter: buttons[which] }));
+const told = (reason) => listeners["list:oknowledge:list"].forEach((fn) => fn({ detail: { reason } }));
+const ticked = () => boxes.filter((b) => b.checked).map((b) => b.value);
+"""
+
+BULK_SCENARIOS = {
+    # The ticked ids go out, and the bar says what came back and clears.
+    "move": """
+current = "c3";
+tick("a1"); tick("b2");
+out.count = count; out.shown = !bar.hidden;
+send("move"); await settle();
+out.ticked = ticked(); out.hidden = bar.hidden; out.typed = bar.elements.new_category.value;
+""",
+    # A delete offers app.js's Deshacer; taken, the list reloads onto the
+    # first note back.
+    "undo": """
+current = "a1";
+answers["/bulk/delete"] = { ok: true, notice: "1 borrada", undo: "tok" };
+answers["/undo/tok"] = { ok: true, notice: "Restaurada", restored: ["b2"] };
+tick("b2");
+send("del"); await settle();
+out.offered = !!undoButton;
+undoButton.click(); await settle();
+""",
+    # A refresh keeps what is still on screen; a new filter clears.
+    "follows": """
+tick("a1"); tick("c3");
+boxes = ["a1", "b2"].map(box);
+told("refresh");
+out.kept = ticked();
+told("filter");
+out.afterFilter = ticked(); out.hidden = bar.hidden;
+""",
+    # The keys: x ticks the pick and again unticks it; Backspace and Delete
+    # send the delete; Esc clears and is not taken when there is nothing.
+    "keys": """
+current = "b2";
+ok.keys.x(); out.x = ticked();
+ok.keys.x(); out.xAgain = ticked();
+current = "zz"; out.noBox = ok.keys.x();
+out.escIdle = ok.keys.Escape();
+current = "a1"; ok.keys.x();
+out.esc = String(ok.keys.Escape()); out.afterEsc = ticked();
+out.backIdle = ok.keys.Backspace({});
+ok.keys.x(); ok.keys.Delete({}); await settle();
+""",
+    # The open note ticked and changed but still listed: the list leaves the
+    # panel alone and the same note is picked again.
+    "repick": """
+current = "a1";
+tick("a1");
+send("star"); await settle();
+""",
+    # Every listed note deleted with the open one among them: the panel empties.
+    "emptied": """
+current = "b2";
+afterReload = [];
+tick("a1"); tick("b2"); tick("c3");
+send("del"); await settle();
+""",
+}
+
+
+@pytest.fixture(scope="module")
+def bulk(tmp_path_factory):
+    import json
+    import shutil
+    import subprocess
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not installed")
+    folder = tmp_path_factory.mktemp("bulk")
+    found = {}
+    for name, scenario in BULK_SCENARIOS.items():
+        harness = folder / f"{name}.js"
+        harness.write_text(BULK_HARNESS + "(async () => {\n" + scenario +
+                           "\nconsole.log(JSON.stringify(out));\nprocess.exit(0);\n})()"
+                           ".catch((e) => { console.error(e.stack); process.exit(1); });\n",
+                           encoding="utf-8")
+        done = subprocess.run([node, str(harness), str(APP), str(SELECT)], capture_output=True,
+                              text=True, timeout=30, check=False)
+        assert done.returncode == 0, done.stderr
+        found[name] = json.loads(done.stdout.strip().splitlines()[-1])
+    return found
+
+
+def test_the_bar_sends_the_ticked_ids_and_clears(bulk):
+    move = bulk["move"]
+    assert move["count"] == "2" and move["shown"] is True
+    assert move["fetched"] == [["/bulk/category", ["a1", "b2"]]]
+    assert move["toasts"] == ["hecho"]
+    assert move["ticked"] == [] and move["hidden"] is True and move["typed"] == ""
+    # The open one was not ticked: the list reloads and keeps it.
+    assert move["reloads"] == [[""]] and move["picks"] == []
+
+
+def test_a_bulk_delete_s_undo_reloads_the_list_onto_the_first_one_back(bulk):
+    undo = bulk["undo"]
+    assert undo["offered"] is True
+    assert undo["fetched"] == [["/bulk/delete", ["b2"]], ["/undo/tok", []]]
+    assert undo["toasts"] == ["1 borrada", "Restaurada"]
+    assert undo["reloads"] == [["a1"], ["b2"]]
+    assert "pageReloaded" not in undo
+
+
+def test_a_refresh_keeps_the_ticks_still_listed_and_a_filter_clears_them(bulk):
+    assert bulk["follows"]["kept"] == ["a1"]
+    assert bulk["follows"]["afterFilter"] == [] and bulk["follows"]["hidden"] is True
+
+
+def test_the_selection_keys(bulk):
+    keys = bulk["keys"]
+    assert keys["x"] == ["b2"] and keys["xAgain"] == []
+    assert keys["noBox"] is False and keys["escIdle"] is False
+    assert keys["esc"] == "undefined" and keys["afterEsc"] == []
+    assert keys["backIdle"] is False
+    assert keys["fetched"] == [["/bulk/delete", ["a1"]]]
+
+
+def test_a_change_to_the_open_note_picks_it_again_once_the_list_is_back(bulk):
+    repick = bulk["repick"]
+    assert repick["fetched"] == [["/bulk/mark", ["a1"]]]
+    assert repick["reloads"] == [["", True]]
+    assert repick["picks"] == ["a1"] and repick["empties"] == 0
+
+
+def test_deleting_every_listed_note_empties_the_panel(bulk):
+    emptied = bulk["emptied"]
+    assert emptied["reloads"] == [[""]]
+    assert emptied["empties"] == 1

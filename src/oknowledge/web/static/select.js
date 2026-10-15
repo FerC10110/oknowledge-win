@@ -230,10 +230,9 @@
       .then(function (body) {
         busy(false);
         sentDone(sent);
+        // Deshacer's own follow-up (app.js) reloads the list onto the first one back.
         if (deleting) {
-          ok.offerUndo(body.notice, body.undo, function (back) {
-            ok.list.reload(back.restored && back.restored[0]);
-          });
+          ok.offerUndo(body.notice, body.undo);
         } else {
           ok.toast(body.notice);
         }
