@@ -75,7 +75,12 @@
     picked.forEach(function (id) { data.append("ids", id); });
     ok.closeMenus();
     var deleting = /\/bulk\/delete$/.test(url);
-    var after = deleting ? pickAfter() : "";
+    // A delete picks the one after those deleted. A change to the pick
+    // itself (its ★, its category...) redraws its panel once the list is
+    // back, or, if the change took it out of this list, picks the one after.
+    var cur = ok.list.current();
+    var mine = picked.indexOf(cur) >= 0;
+    var after = deleting || mine ? pickAfter() : "";
     ok.send(url, data)
       .then(function (body) {
         clear();
@@ -87,13 +92,19 @@
           ok.toast(body.notice);
         }
         if (bar.elements.new_category) bar.elements.new_category.value = "";
-        ok.list.reload(after);
+        if (deleting || !mine) { ok.list.reload(after); return; }
+        var back = ok.list.reload();
+        if (back) back.then(function () { ok.list.pick(listed(cur) ? cur : after); });
       })
       .catch(function (error) {
         ok.toast(error.message);
         // All of them gone meanwhile: the list says so.
         if (error.status === 404) { clear(); ok.list.reload(); }
       });
+  }
+
+  function listed(id) {
+    return ok.list.shown().some(function (li) { return li.id.replace(/^(card|idea)-/, "") === id; });
   }
 
   // After a delete: the pick stays if it was not ticked; else the first

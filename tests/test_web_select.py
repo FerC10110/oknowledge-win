@@ -131,3 +131,27 @@ def test_select_sends_the_ticked_ids_and_offers_undo():
     sending = between(text, "function submit", "function pickAfter")
     assert 'data.delete("ids")' in sending and 'data.append("ids"' in sending
     assert "ok.offerUndo(body.notice, body.undo" in sending and "ok.list.reload(" in sending
+
+
+# --- fix round 1 -------------------------------------------------------------------------
+
+@pytest.mark.parametrize("name, macro", [("shelf-items.html", "{% macro item"),
+                                         ("posters.html", "{% macro poster")])
+def test_a_note_being_reanalysed_has_no_checkbox(name, macro):
+    text = between((WEB / "templates" / name).read_text(encoding="utf-8"), macro, "{%- endmacro %}")
+    guarded = re.search(r"\{%- if note\.id not in busy %\}\s*<label class=\"check js-only\">.*?</label>"
+                        r"\s*\{%- endif %\}", text, re.S)
+    assert guarded, name
+
+
+def test_a_bulk_change_reloads_the_pick_when_it_was_ticked():
+    text = SELECT.read_text(encoding="utf-8")
+    sending = between(text, "function submit", "function pickAfter")
+    assert "var mine = picked.indexOf(cur) >= 0;" in sending
+    # Once the list is back: the same pick redrawn, or the next one if it left.
+    assert "ok.list.pick(listed(cur) ? cur : after)" in sending
+
+
+def test_the_list_leaves_room_for_the_bar_while_picking():
+    css = (WEB / "static" / "app.css").read_text(encoding="utf-8")
+    assert re.search(r"#list\.picking \.list-body \{ padding-bottom: \d+px; \}", css)

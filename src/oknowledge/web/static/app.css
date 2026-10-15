@@ -529,6 +529,8 @@ html:not(.js) .js-only { display: none !important; }
   border: 1px solid var(--b-menu); border-radius: 12px; box-shadow: var(--shadow);
   font-size: 13px; white-space: nowrap; }
 .bulk[hidden] { display: none; }
+/* Room under the last items, so the bar never covers them. */
+#list.picking .list-body { padding-bottom: 96px; }
 .bulk-count { padding: 6px 10px; color: var(--t1); font-weight: 600; }
 .bulk-sep { width: 1px; align-self: stretch; margin: 4px 4px; background: var(--b-menu); }
 .bulk > button, .bulk summary { padding: 6px 10px; border: 0; border-radius: 7px; background: none;
