@@ -187,6 +187,18 @@
   var narrow = window.matchMedia ? window.matchMedia("(max-width: 60rem)") : null;
   function phone() { return !!(narrow && narrow.matches); }
 
+  // A field whose hint is clipped at 390px has a shorter one for the phone
+  // (Ocio's, §15); aria-label keeps the whole.
+  function hints() {
+    Array.prototype.forEach.call(document.querySelectorAll("[data-short-placeholder]"), function (field) {
+      if (field.dataset.longPlaceholder === undefined) field.dataset.longPlaceholder = field.placeholder;
+      field.placeholder = phone() ? field.dataset.shortPlaceholder : field.dataset.longPlaceholder;
+    });
+  }
+  hints();
+  if (narrow && narrow.addEventListener) narrow.addEventListener("change", hints);
+  else if (narrow && narrow.addListener) narrow.addListener(hints);
+
   // A layer is a screen drawn over the page (the detail, Ajustes) that the
   // browser's back closes. One at a time. `open` gives it a history entry;
   // `adopt` takes one the page started with, which has an entry of its own

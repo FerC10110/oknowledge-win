@@ -147,6 +147,7 @@ STRINGS = {
         "Rewriting…": "Reescribiendo…",
         "Search Leisure or paste a link from IMDb or Open Library":
             "Buscá en Ocio o pegá un link de IMDb u Open Library",
+        "Search or paste an IMDb link": "Buscá o pegá un link de IMDb",
         "Choose a card to see it here.": "Elegí una ficha para verla acá.",
         "Nothing in Leisure yet": "Todavía no hay nada en Ocio",
         "Type a title in the box above and search the catalogs.":

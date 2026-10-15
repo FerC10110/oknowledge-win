@@ -666,3 +666,15 @@ def test_a_long_pressed_item_has_no_callout_on_the_phone():
     for part in ("-webkit-touch-callout: none;", "-webkit-user-select: none;", "user-select: none;"):
         assert part in rule, part
 
+
+def test_ocio_s_field_has_a_short_hint_for_the_phone(client):
+    field = re.search(r'<input[^>]*id="field-q"[^>]*>', client.get("/ocio").text).group(0)
+    assert 'placeholder="Search Leisure or paste a link from IMDb or Open Library"' in field
+    assert 'aria-label="Search Leisure or paste a link from IMDb or Open Library"' in field
+    assert 'data-short-placeholder="Search or paste an IMDb link"' in field
+
+
+def test_app_js_swaps_the_hint_with_the_breakpoint():
+    app = static("app.js")
+    assert "[data-short-placeholder]" in app
+    assert "shortPlaceholder" in app

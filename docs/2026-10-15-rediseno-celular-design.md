@@ -342,6 +342,20 @@ regla de "uno cierra al otro" y Esc de `app.js` siguen igual.
     de `click` en `#list` en fase de captura hace `preventDefault()` y
     `stopPropagation()` antes que el de `shell.js`;
   - en Ocio el chip de tipo se corre como con `.picking`.
+- **Mantener apretado** (respuesta 4 del usuario, 2026-10-15) es la otra
+  entrada, sólo debajo de 60rem (`window.oknowledge.phone()`): en `select.js`,
+  con pointer events, un `pointerdown` sobre un ítem con casilla
+  (`a.hit` → `li.item` → `input[name=ids]`) arma un timer de 500 ms; si el dedo
+  no se mueve más de 10px, prende el modo (el mismo camino que "Seleccionar") y
+  marca ese ítem. El `click` que trae el soltar se traga (ni abre el detalle ni
+  desmarca), sólo ese; el siguiente `pointerdown` olvida la espera si el click
+  no llegó. `contextmenu` del apretón que entró se cancela, y en el bloque del
+  celular `#list .item` lleva `-webkit-touch-callout: none` y
+  `user-select: none`. No hacen nada: moverse más de 10px (un scroll),
+  `pointercancel`, soltar antes, el botón derecho del mouse, un ítem que se está
+  analizando (no tiene casilla: su click es un toque y lo abre), estar ya en
+  modo selección (el click es un toque más y marca o desmarca) y el escritorio
+  (≥60rem).
 - Se sale con "Cancelar", ✕ de la barra, Esc, un cambio de filtro, búsqueda u
   orden (`oknowledge:list` con `reason: "filter"`, igual que la selección) y
   después de una acción en lote que salió bien. Salir limpia lo marcado.
@@ -436,9 +450,17 @@ Claves en inglés y castellano en `i18n.py`. Se reusan "Library", "Leisure",
 fila), "Back to %1" → "Volver a %1" (`aria-label` de "←"). "Pinned" ya existe
 ("Fijados").
 
-El placeholder del campo **no** cambia: el mockup dice "Buscá o pegá un link",
-pero un CSS no puede cambiar un placeholder y no vale un JS sólo para eso. El
-largo ("Buscá o pegá un link para guardarlo") entra a 390px con 16px de letra.
+El placeholder del campo de la Biblioteca **no** cambia: el mockup dice "Buscá
+o pegá un link", pero un CSS no puede cambiar un placeholder. El largo ("Buscá
+o pegá un link para guardarlo") entra a 390px con 16px de letra.
+
+El de **Ocio** sí (pedido del usuario, 2026-10-15): "Buscá en Ocio o pegá un
+link de IMDb u Open Library" se cortaba a 390px. Clave nueva "Search or paste
+an IMDb link" → "Buscá o pegá un link de IMDb", en
+`data-short-placeholder` del `#field-q` de `ocio-shelf.html`. `app.js` (dueño
+de la media query de 60rem) pone el corto mientras el celular coincide y
+devuelve el largo cuando deja de coincidir. El escritorio y sin JS muestran el
+largo; `aria-label` es el largo siempre.
 
 ## 16. Pruebas
 
@@ -537,13 +559,13 @@ fila de chips desborde), 30 links, 6 fichas, 4 ideas, un link analizándose:
 
 ## Preguntas para el usuario
 
-1. **Favoritos:** ¿alcanza con la Biblioteca filtrada por ★, o querés una vista
-   que junte ★ de links con algo de Ocio (por ejemplo, 5 estrellas)?
-2. **Detalle:** ¿pantalla completa (lo elegido) o una hoja que deja ver la
-   lista arriba?
-3. **Corte:** ¿60rem está bien, o preferís que el celular empiece antes (por
-   ejemplo 48rem) y que entre 48 y 60 haya algo intermedio?
-4. **Seleccionar:** ¿botón "Seleccionar" (lo elegido) o mantener apretado una
-   tarjeta?
-5. **Fila de chips:** con muchas marcas y colecciones la fila se hace larga;
-   ¿preferís un chip "Más ▾" que abra el resto en una hoja?
+Respondidas el 2026-10-15:
+
+1. **Favoritos:** alcanza con la Biblioteca filtrada por ★ (como está).
+2. **Detalle:** pantalla completa (como está).
+3. **Corte:** 60rem (como está).
+4. **Seleccionar:** el botón queda, y además mantener apretado un ítem entra al
+   modo y lo marca (§9).
+5. **Fila de chips:** sin chip "Más ▾"; la fila sigue con scroll horizontal.
+
+Además: el placeholder de Ocio se acorta en el celular (§15).

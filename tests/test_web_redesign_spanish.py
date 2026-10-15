@@ -46,7 +46,7 @@ IDEA_SCREEN = ["← Ideas", "creada 13 oct", "Guardando…", "Guardado", "PEDILE
 
 IDEAS_LIST = ["Nueva idea", "Buscá en tus ideas", "ESTADO", "descartada"]
 
-OCIO = ["Buscá en Ocio o pegá un link de IMDb u Open Library",
+OCIO = ["Buscá en Ocio o pegá un link de IMDb u Open Library", "Buscá o pegá un link de IMDb",
         "2 fichas sin reescribir", "Reescribir", "Recientes", "Por ver", "Viendo", "Vista",
         "Reescribir la ficha", "Cambiar tipo", "Abrir en imdb.com",
         "La ficha está como vino de la fuente (en inglés).", "Reescribir en español",
