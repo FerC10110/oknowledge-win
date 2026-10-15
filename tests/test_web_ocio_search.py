@@ -92,7 +92,7 @@ def test_a_prefix_in_the_paste_box_goes_to_the_candidates(client):
     answer = client.post("/add", data={"url": "película:Terminator"},
                          follow_redirects=False)
     assert answer.status_code == 303
-    assert answer.headers["location"] == "/ocio?buscar=Terminator&tipo=movie"
+    assert answer.headers["location"] == "/ocio?buscar=Terminator&catalogo=movie"
 
 
 def test_a_prefix_in_the_unified_field_goes_to_the_candidates(client):
@@ -100,7 +100,7 @@ def test_a_prefix_in_the_unified_field_goes_to_the_candidates(client):
     answer = client.post("/add", data={"q": "película:Terminator"},
                          follow_redirects=False)
     assert answer.status_code == 303
-    assert answer.headers["location"] == "/ocio?buscar=Terminator&tipo=movie"
+    assert answer.headers["location"] == "/ocio?buscar=Terminator&catalogo=movie"
 
 
 def test_a_link_still_goes_where_it_always_went(client, taken):

@@ -1856,8 +1856,8 @@ def create_app(cfg: Config) -> FastAPI:
         # The catalogs' answers take the panel's place (spec §3); without
         # JavaScript this is how the field's button shows them.
         found = candidates_context(params.get("buscar", ""),
-                                   view.tipo or params.get("tipo", ""),
-                                   params.get("year", ""))
+                                   params.get("catalogo", "") or view.tipo,
+                                   params.get("year", ""), grid=view.tipo)
         card = None
         if found is None and shown["current"]:
             card = card_context(shown["current"], view)
@@ -1932,7 +1932,8 @@ def create_app(cfg: Config) -> FastAPI:
         found, _ = ask_catalogs(tipo, query, year)
         return found[0] if len(found) == 1 and found[0].year == year else None
 
-    def candidates_context(q: str, tipo: str, year: str = "") -> dict | None:
+    def candidates_context(q: str, tipo: str, year: str = "",
+                           grid: str = "") -> dict | None:
         """What the catalogs answer, for the panel (spec §3). All kinds is
         films; no words is no search."""
         query = " ".join(q.split())[:cards.LONGEST]
@@ -1950,20 +1951,21 @@ def create_app(cfg: Config) -> FastAPI:
                                     rating=full.rating, poster=full.poster,
                                     people=full.people)]
             return {"query_text": query, "kind": kind, "candidates": named, "failed": "",
-                    "KIND_ONE": KIND_ONE}
+                    "KIND_ONE": KIND_ONE, "grid": grid}
         found, failed = ask_catalogs(kind, query, year)
         # The reason travels even when there are rows; the panel shows it
         # only when there are none, because one of the two catalogs being
         # down while the other answers is not a failure anybody reads about.
         return {"query_text": query, "kind": kind, "candidates": found[:cards.MOST],
-                "failed": failed, "KIND_ONE": KIND_ONE}
+                "failed": failed, "KIND_ONE": KIND_ONE, "grid": grid}
 
     @app.get("/ocio/candidatos", response_class=HTMLResponse)
-    def catalog_candidates(request: Request, q: str = "", tipo: str = "", year: str = ""):
+    def catalog_candidates(request: Request, q: str = "", tipo: str = "", year: str = "",
+                           grid: str = ""):
         """The catalogs' answers as the panel draws them. Writes nothing:
         saving is the POST of each row (a GET that wrote a card could be
         made by any <img>)."""
-        found = candidates_context(q, tipo, year)
+        found = candidates_context(q, tipo, year, grid if grid in cards.KINDS else "")
         if found is None:
             raise HTTPException(status_code=404, detail="no such search")
         return page(request, "catalog-panel.html", **found)
@@ -1973,10 +1975,12 @@ def create_app(cfg: Config) -> FastAPI:
         """The old search page, and the field's button without JavaScript:
         the candidates live in Ocio's panel now."""
         query = " ".join(q.split())
+        grid = tipo if tipo in cards.KINDS else ""
         if not query:
-            return see_other("/ocio", tipo=tipo if tipo in cards.KINDS else "")
-        return see_other("/ocio", buscar=query, tipo=tipo if tipo in cards.KINDS else "movie",
-                         year=year)
+            return see_other("/ocio", tipo=grid)
+        # `tipo` is the poster grid's filter and stays what it was;
+        # `catalogo` is the kind the candidates are searched as.
+        return see_other("/ocio", buscar=query, catalogo=grid or "movie", tipo=grid, year=year)
 
     @app.post("/ocio/guardar")
     def save_the_card(background: BackgroundTasks, tipo: str = Form(""),
@@ -2140,7 +2144,8 @@ def create_app(cfg: Config) -> FastAPI:
         # back as "that is not a link".
         asked = cards.wanted(url)
         if asked is None and en == "ocio":
-            asked = cards.from_link(url, tipo)
+            # "www.imdb.com/…" is a link too: read it as /add reads any link.
+            asked = cards.from_link(pasted_link(url) or url, tipo)
         if asked is not None:
             # An id, or a year that leaves one answer, is not a question:
             # it is saved here, where the origin of the request was
@@ -2153,7 +2158,8 @@ def create_app(cfg: Config) -> FastAPI:
             # The year travels as its own parameter and not as part of the
             # query: the catalog searches by title, and the year is what
             # picks among the answers.
-            return see_other("/ocio", buscar=asked.query, tipo=asked.kind, year=asked.year)
+            return see_other("/ocio", buscar=asked.query, catalogo=asked.kind,
+                             tipo=tipo if tipo in cards.KINDS else "", year=asked.year)
         if en == "ocio":
             # Ocio's field: a page that is no catalog's is not a card, and
             # plain words are a search of the catalogs (spec §3).
@@ -2162,8 +2168,8 @@ def create_app(cfg: Config) -> FastAPI:
             words = " ".join(url.split())
             if not words:
                 return see_other("/ocio")
-            return see_other("/ocio", buscar=words,
-                             tipo=tipo if tipo in cards.KINDS else "movie")
+            grid = tipo if tipo in cards.KINDS else ""
+            return see_other("/ocio", buscar=words, catalogo=grid or "movie", tipo=grid)
         if cards.prefixed(url):
             return see_other("/", notice="no-title")
         clean = pasted_link(url)

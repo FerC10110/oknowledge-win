@@ -3,7 +3,7 @@
    nothing is saved yet, so there is no local file to show. #}
 <div class="card-top">
   <nav class="seg" aria-label="{{ t('Type') }}">
-    {% for one in ('movie', 'series', 'anime', 'book') %}<a href="/ocio?buscar={{ query_text|urlencode }}&amp;tipo={{ one }}" data-kind="{{ one }}" class="{% if one == kind %}on{% endif %}">{{ t(KIND_ONE[one]) }}</a>{% endfor %}
+    {% for one in ('movie', 'series', 'anime', 'book') %}<a href="/ocio?buscar={{ query_text|urlencode }}&amp;catalogo={{ one }}{% if grid %}&amp;tipo={{ grid }}{% endif %}" data-kind="{{ one }}" class="{% if one == kind %}on{% endif %}">{{ t(KIND_ONE[one]) }}</a>{% endfor %}
   </nav>
 </div>
 <div class="detail-scroll candidates" data-panel="" data-search="{{ query_text }}">

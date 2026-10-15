@@ -95,7 +95,7 @@ def test_a_switch_of_kind_on_top(client, asked):
     body = client.get("/ocio/candidatos?q=dune&tipo=book").text
     kinds = re.findall(r'data-kind="(\w+)"', body)
     assert kinds == ["movie", "series", "anime", "book"]
-    assert re.search(r'href="/ocio\?buscar=dune&amp;tipo=book" data-kind="book" class="on"', body)
+    assert re.search(r'href="/ocio\?buscar=dune&amp;catalogo=book" data-kind="book" class="on"', body)
 
 
 def test_nothing_found_says_so(client, monkeypatch):
@@ -126,7 +126,7 @@ def test_the_old_search_page_sends_you_to_the_panel(client):
     answer = client.get("/ocio/buscar?tipo=movie&q=Terminator&year=1984",
                         follow_redirects=False)
     assert answer.status_code == 303
-    assert answer.headers["location"] == "/ocio?buscar=Terminator&tipo=movie&year=1984"
+    assert answer.headers["location"] == "/ocio?buscar=Terminator&catalogo=movie&tipo=movie&year=1984"
 
 
 def test_the_button_without_words_is_just_ocio(client):
@@ -146,12 +146,12 @@ def test_a_saved_card_opens_in_ocio(client, monkeypatch):
 def test_plain_text_from_ocio_lists_candidates(client):
     answer = client.post("/add", data={"q": "terminator", "en": "ocio", "tipo": "series"},
                          follow_redirects=False)
-    assert answer.headers["location"] == "/ocio?buscar=terminator&tipo=series"
+    assert answer.headers["location"] == "/ocio?buscar=terminator&catalogo=series&tipo=series"
 
 
 def test_a_prefix_lists_candidates_in_ocio(client):
     answer = client.post("/add", data={"q": "película:Terminator"}, follow_redirects=False)
-    assert answer.headers["location"] == "/ocio?buscar=Terminator&tipo=movie"
+    assert answer.headers["location"] == "/ocio?buscar=Terminator&catalogo=movie"
 
 
 def test_an_imdb_link_from_ocio_is_saved_as_a_card(client, monkeypatch):
@@ -166,7 +166,7 @@ def test_an_imdb_link_the_catalog_does_not_know_lists_it(client, monkeypatch):
     monkeypatch.setattr("oknowledge.catalog.cinemeta.search", lambda *a, **k: ([], ""))
     answer = client.post("/add", data={"q": "https://www.imdb.com/title/tt0088247/",
                                        "en": "ocio"}, follow_redirects=False)
-    assert answer.headers["location"] == "/ocio?buscar=tt0088247&tipo=movie"
+    assert answer.headers["location"] == "/ocio?buscar=tt0088247&catalogo=movie"
 
 
 def test_another_link_from_ocio_is_not_a_card(client):
@@ -181,3 +181,46 @@ def test_a_link_from_the_library_is_still_a_link(client, monkeypatch):
                         lambda cfg, url, content, **rest: taken.append(url))
     client.post("/add", data={"q": "https://www.imdb.com/title/tt0088247/"})
     assert taken == ["https://imdb.com/title/tt0088247"]      # as normalize() writes it
+
+
+# --- one kind for the grid, another for the candidates ------------------------------
+
+def test_from_all_a_catalog_search_does_not_filter_the_grid(client, asked):
+    body = client.get("/ocio?buscar=x").text
+    assert asked == [("movie", "x")]
+    assert not re.search(r'href="[^"]*tipo=movie[^"]*"[^>]*class="[^"]*\bon\b', body)
+    field = body[body.index('id="unified"'):body.index("</form>")]
+    assert 'name="tipo"' not in field             # the field form carries no grid filter
+
+
+def test_the_grid_keeps_its_kind_and_the_candidates_follow_it(client, asked):
+    body = client.get("/ocio?buscar=dune&tipo=book").text
+    assert asked == [("book", "dune")]
+    assert 'name="tipo" value="book"' in body
+
+
+def test_a_catalog_kind_is_not_a_grid_filter(client, asked):
+    body = client.get("/ocio?buscar=dune&catalogo=book").text
+    assert asked == [("book", "dune")]
+    assert 'name="tipo"' not in body[body.index('id="unified"'):body.index("</form>")]
+
+
+def test_the_switch_changes_the_catalog_and_keeps_the_grid(client, asked):
+    body = client.get("/ocio?buscar=dune&tipo=series&catalogo=book").text
+    panel = body[body.index('id="panel"'):]
+    links = re.findall(r'href="([^"]*)" data-kind="(\w+)"', panel)
+    assert [k for _, k in links] == ["movie", "series", "anime", "book"]
+    for href, kind in links:
+        assert f"catalogo={kind}" in href and "tipo=series" in href
+
+
+def test_the_field_keeps_the_grid_filter_in_what_it_redirects_to(client):
+    answer = client.get("/ocio/buscar?q=dune&tipo=book", follow_redirects=False)
+    assert answer.headers["location"] == "/ocio?buscar=dune&catalogo=book&tipo=book"
+
+
+def test_a_scheme_less_imdb_link_is_saved(client, monkeypatch):
+    stub_the_card(monkeypatch)
+    answer = client.post("/add", data={"q": "www.imdb.com/title/tt0088247/", "en": "ocio"},
+                         follow_redirects=False)
+    assert answer.headers["location"].startswith("/ocio?sel=")
