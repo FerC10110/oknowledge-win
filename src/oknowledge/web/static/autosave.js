@@ -67,9 +67,11 @@
     function flush(keep) {
       clearTimeout(timer);
       timer = null;
+      // In flight first: the text may go back to what was last saved while
+      // a newer one is out, and must still follow it once that one lands.
+      if (inflight) { again = true; return; }
       if (field.value === saved) return;
       if (field.hasAttribute("data-skip-empty") && !field.value.trim()) return;
-      if (inflight) { again = true; return; }
       inflight = true;
       var sending = field.value;
       outgoing = sending;
