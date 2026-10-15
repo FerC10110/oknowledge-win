@@ -197,7 +197,8 @@
 
   function openLayer(name, onClose, url) {
     if (layer) return false;
-    history.pushState({ layer: name }, "", url || location.href);
+    // `base`: the entry it was pushed from (a reload checks it, below).
+    history.pushState({ layer: name, base: location.href }, "", url || location.href);
     layer = { name: name, onClose: onClose, pushed: true };
     return true;
   }
@@ -229,12 +230,26 @@
   // A reload (pull to refresh) on a layer's entry draws the page without
   // that layer unless a script adopts it while the page loads (the detail
   // with ?sel= does). One nobody adopted is a dead step: back from it would
-  // change nothing. It goes, by a back() to the entry it was pushed from --
-  // the same page, so nothing is drawn again.
+  // change nothing. When it was pushed from this same URL (Ajustes) it goes,
+  // by a back() that changes nothing on screen or in the address bar; else
+  // (another URL before it) it stays, as a plain entry of this page.
   var stale = (window.history && history.state && history.state.layer) || null;
   document.addEventListener("DOMContentLoaded", function () {
-    if (stale && !layer && history.state && history.state.layer === stale) history.back();
+    var state = history.state;
+    if (stale && !layer && state && state.layer === stale) {
+      if (history.length > 1 && state.base === location.href) history.back();
+      else history.replaceState(null, "", location.href);
+    }
     stale = null;
+  });
+
+  // Back from the bfcache: a back() under way never landed here, and the
+  // layer on top may no longer be on its own entry. Start over from what is.
+  window.addEventListener("pageshow", function (event) {
+    if (!event.persisted) return;
+    if (layer) layer.pushed = !!(history.state && history.state.layer === layer.name);
+    if (landed) { var done = landed; landed = null; leaving = null; done(); }
+    leaving = null;
   });
 
   window.addEventListener("popstate", function () {

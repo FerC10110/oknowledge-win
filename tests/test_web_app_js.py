@@ -555,23 +555,25 @@ def test_closing_twice_goes_back_only_once(layers):
     assert layers["closeTwice"] == [True, False, "", ["twice:back"]]
 
 
-# A reload on a layer's entry (pull to refresh): one nobody adopts goes, by one back().
+# A reload on a layer's entry (pull to refresh), and a page back from the bfcache.
 RELOAD_HARNESS = r"""
 const source = require("fs").readFileSync(process.argv[2], "utf8");
-const adopt = process.argv[3];                     // "" or a layer a script adopts
+const c = JSON.parse(process.argv[3]);   // {adopt, state, url, mode}
 const out = {};
 const win = {}, handlers = {};
 global.window = global;
 global.addEventListener = (type, fn) => { (win[type] = win[type] || []).push(fn); };
 const entries = [{ state: null, url: "/ocio" }, { state: null, url: "/" },
-                 { state: { layer: process.argv[4] }, url: "/" }];
+                 { state: c.state, url: c.url }];
 let at = 2;
+let popOnBack = true;
 global.location = { get href() { return "http://x" + entries[at].url; }, pathname: "/", reload() {} };
 global.history = {
+  get length() { return entries.length; },
   get state() { return entries[at].state; },
-  pushState() { throw new Error("no push"); },
-  replaceState(state) { entries[at].state = state; },
-  back() { at--; setTimeout(() => (win.popstate || []).forEach((fn) => fn({})), 0); },
+  pushState(state, _, url) { entries.splice(at + 1); entries.push({ state, url: url.replace("http://x", "") }); at++; },
+  replaceState(state, _, url) { entries[at] = { state, url: url.replace("http://x", "") }; },
+  back() { at--; if (popOnBack) setTimeout(() => (win.popstate || []).forEach((fn) => fn({})), 0); },
 };
 global.matchMedia = () => ({ matches: true });
 global.document = {
@@ -581,27 +583,56 @@ global.document = {
 };
 document.activeElement = document.body;
 eval(source);
-if (adopt) window.oknowledge.layers.adopt(adopt, () => {});   // a deferred script, before DOMContentLoaded
+const ok = window.oknowledge;
+if (c.adopt) ok.layers.adopt(c.adopt, () => {});   // a deferred script, before DOMContentLoaded
 (handlers.DOMContentLoaded || []).forEach((fn) => fn());
-setTimeout(() => {
+const tick = () => new Promise((r) => setTimeout(r, 10));
+(async () => {
+  await tick();
   out.at = at;
-  out.top = window.oknowledge.layers.top();
+  out.state = entries[at].state;
+  out.url = entries[at].url;
+  out.top = ok.layers.top();
+  if (c.mode === "bfcache") {
+    // A layer is open; its back() becomes a navigation away (no popstate),
+    // and the page comes back from the bfcache on the entry before.
+    const how = [];
+    ok.layers.open("panel", (h) => how.push(h), "/?sel=q9");
+    popOnBack = false;
+    let firstDone = false;
+    ok.layers.close().then(() => { firstDone = true; });
+    (win.pageshow || []).forEach((fn) => fn({ persisted: true }));
+    await tick();
+    const where = at;
+    await Promise.race([ok.layers.close(), tick()]); // in place: the entry is not its own any more
+    out.bfcache = [firstDone, how, at === where, ok.layers.top()];
+  }
   console.log(JSON.stringify(out));
-}, 10);
+})();
 """
+
+RELOAD_CASES = {
+    # Ajustes reloaded: drawn without it, the entry before is the same URL -> one back.
+    "settings": {"adopt": "", "url": "/", "state": {"layer": "settings", "base": "http://x/"}},
+    # A detail at another ?sel= than the entry before, nobody adopts: no back, state cleared.
+    "other": {"adopt": "", "url": "/?sel=l11", "state": {"layer": "panel", "base": "http://x/?sel=p1"}},
+    # The detail adopted while the page loads keeps its entry.
+    "adopted": {"adopt": "panel", "url": "/?sel=a1", "state": {"layer": "panel", "base": "http://x/"}},
+    "bfcache": {"adopt": "", "url": "/", "state": None, "mode": "bfcache"},
+}
 
 
 @pytest.fixture(scope="module")
 def reloads(tmp_path_factory):
-    """Both cases, run before the per-test guard against programs (as `layers`)."""
+    """Every case, run before the per-test guard against programs (as `layers`)."""
     node = shutil.which("node")
     if node is None:
         pytest.skip("node is not installed")
     harness = tmp_path_factory.mktemp("reload") / "harness.js"
     harness.write_text(RELOAD_HARNESS, encoding="utf-8")
     found = {}
-    for case, adopt, state in (("dead", "", "settings"), ("adopted", "panel", "panel")):
-        done = subprocess.run([node, str(harness), str(APP), adopt, state], capture_output=True,
+    for case, spec in RELOAD_CASES.items():
+        done = subprocess.run([node, str(harness), str(APP), json.dumps(spec)], capture_output=True,
                               text=True, timeout=30, check=False)
         assert done.returncode == 0, done.stderr
         found[case] = json.loads(done.stdout.strip().splitlines()[-1])
@@ -610,11 +641,26 @@ def reloads(tmp_path_factory):
 
 def test_a_reload_on_an_entry_nobody_adopts_drops_it(reloads):
     """Fix round 1: Ajustes reloaded is not drawn again, so its entry goes."""
-    assert reloads["dead"] == {"at": 1, "top": ""}
+    assert reloads["settings"]["at"] == 1 and reloads["settings"]["top"] == ""
+
+
+def test_a_reload_on_a_detail_elsewhere_keeps_its_place_and_forgets_the_layer(reloads):
+    """Fix round 2: going back would put another URL over the same screen."""
+    other = reloads["other"]
+    assert [other["at"], other["state"], other["url"], other["top"]] == [2, None, "/?sel=l11", ""]
 
 
 def test_a_reload_on_an_adopted_layer_keeps_its_entry(reloads):
-    assert reloads["adopted"] == {"at": 2, "top": "panel"}
+    adopted = reloads["adopted"]
+    assert [adopted["at"], adopted["top"], adopted["state"]["layer"]] == [2, "panel", "panel"]
+
+
+def test_a_layer_entry_names_the_one_it_was_pushed_from():
+    assert "{ layer: name, base: location.href }" in APP.read_text(encoding="utf-8")
+
+
+def test_a_page_back_from_the_bfcache_forgets_a_back_under_way(reloads):
+    assert reloads["bfcache"]["bfcache"] == [True, ["close"], True, ""]
 
 
 def test_settings_loads_nothing_when_ajustes_is_refused():
