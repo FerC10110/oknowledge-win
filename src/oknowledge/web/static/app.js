@@ -188,17 +188,21 @@
     var closer = event.target.closest("dialog [data-close]");
     if (closer) { event.preventDefault(); closer.closest("dialog").close(); return; }
     // A click on the backdrop lands on the <dialog> itself -- and so does a
-    // text drag that started in a box and was let go out there: only a press
-    // that began on the backdrop too closes it.
+    // drag between the backdrop and a box, either way: only a press that
+    // began and ended on the backdrop closes it.
     var down = pressed;
-    pressed = null;
-    if (event.target.matches && event.target.matches("dialog.modal[open]") && down === event.target) {
+    var up = released;
+    pressed = released = null;
+    if (event.target.matches && event.target.matches("dialog.modal[open]") &&
+        down === event.target && up === event.target) {
       event.target.close();
     }
   });
 
   var pressed = null;        // where the last press began
+  var released = null;       // ...and where it ended
   document.addEventListener("pointerdown", function (event) { pressed = event.target; }, true);
+  document.addEventListener("pointerup", function (event) { released = event.target; }, true);
 
   // --- the phone (docs/2026-10-15-rediseno-celular-design.md §1, §6.3, §8) -----------
   // One breakpoint for the CSS and every script.

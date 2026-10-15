@@ -409,10 +409,26 @@ def test_a_drag_released_on_the_backdrop_leaves_the_modal_open(tmp_path):
 dialog.matches = (sel) => sel === "dialog.modal[open]" && dialog.open;
 ok.openSettings(); await settle();
 fireDoc("pointerdown", { target: field });          // a text drag starts in a box...
+fireDoc("pointerup", { target: dialog });
 click(dialog);                                       // ...and ends on the backdrop
 out.dragged = dialog.open;
 fireDoc("pointerdown", { target: dialog });          // a click on the backdrop itself
+fireDoc("pointerup", { target: dialog });
 click(dialog);
 out.clicked = dialog.open;
 """, wide=True)
     assert out["dragged"] is True and out["clicked"] is False
+
+
+
+def test_a_drag_from_the_backdrop_into_the_dialog_leaves_it_open(tmp_path):
+    """Review M5: both the press and the release must be on the backdrop."""
+    out = run(tmp_path, """
+dialog.matches = (sel) => sel === "dialog.modal[open]" && dialog.open;
+ok.openSettings(); await settle();
+fireDoc("pointerdown", { target: dialog });
+fireDoc("pointerup", { target: field });
+click(dialog);
+out.open = dialog.open;
+""", wide=True)
+    assert out["open"] is True
