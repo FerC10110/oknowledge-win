@@ -12,12 +12,11 @@ from oknowledge.web.app import create_app
 
 
 @pytest.fixture
-def client(tmp_path, isolated_ui_language, monkeypatch):
-    isolated_ui_language.write_text('{"language": "es"}', encoding="utf-8")
+def client(tmp_path, monkeypatch):
     monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
     vault = tmp_path / "vault"
     (vault / "oknowledge" / "links").mkdir(parents=True)
-    cfg = Config(vault=vault)
+    cfg = Config(vault=vault, ui_language="es")    # the fork reads the language from the config
     write_note(cfg, Note(id="l00000000001", url="https://wireguard.com", title="WireGuard",
                          category="Redes", tags=["vpn"], type="article", source="wireguard.com",
                          saved="2026-10-10", summary="Una vpn."), "es")

@@ -253,12 +253,11 @@ def test_the_old_pages_and_scripts_are_gone(client):
 
 # --- one series, several series ------------------------------------------------------
 
-def test_one_series_is_a_serie_in_spanish(cfg, client, isolated_ui_language):
+def test_one_series_is_a_serie_in_spanish(cfg):
     """In English the word is the same for one and for several, so the key
     cannot be: the chip and the panel name one card, the sidebar row the
     many."""
-    import json
-    isolated_ui_language.write_text(json.dumps({"language": "es"}), encoding="utf-8")
+    client = TestClient(create_app(Config(vault=cfg.vault, ui_language="es")))    # the fork's language
     put(cfg, type="series", category="Series")
     assert "Serie · imdb.com" in panel(client)
     shelf = client.get("/ocio").text
