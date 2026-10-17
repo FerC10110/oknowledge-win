@@ -162,6 +162,6 @@ def test_a_period_this_library_does_not_have_shows_nothing_found(years):
     assert "There is nothing in 1999" in body and ">a</" not in body
 
 
-def test_the_phone_gets_the_years_as_chips(years):
-    row = re.search(r'<nav class="chip-row".*?</nav>', years.get("/").text, re.S).group(0)
-    assert "?when=2026" in row and "?when=2021" in row
+def test_the_phone_gets_the_years_as_a_chip_row_of_their_own(years):
+    row = re.search(r'<nav class="chip-row chip-dates".*?</nav>', years.get("/").text, re.S).group(0)
+    assert "?when=2026" in row and "?when=2021" in row and "?when=undated" in row

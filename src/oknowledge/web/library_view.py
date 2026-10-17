@@ -122,9 +122,16 @@ class View:
         return self.q if words and not saves(self.q) else ""
 
     @property
+    def by_what(self) -> bool:
+        """Whether anything of the "what" axis is on: a search, a category, a
+        tag, a mark or a collection. The period is the other axis, and "All"
+        on this one stays lit while a year is open."""
+        return bool(self.searching or self.cat or self.tag or self.mark or self.col)
+
+    @property
     def filtered(self) -> bool:
-        return bool(self.searching or self.cat or self.tag or self.mark or self.col
-                    or self.when)
+        """Whether this view shows less than the whole library."""
+        return bool(self.by_what or self.when)
 
     def url(self, path: str = "/", **changes) -> str:
         own = {k: v for k, v in changes.items() if k in _FIELDS}

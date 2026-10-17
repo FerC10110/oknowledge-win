@@ -225,8 +225,13 @@
     var chips = list.querySelector("template#chip-filters");
     if (chips) {
       chips.remove();
-      var row = document.querySelector(".chip-row");
-      if (row) row.replaceWith(chips.content);
+      // Two rows on the library (the filters and the years): replacing only
+      // the first would leave the old years drawn under the new ones.
+      var rows = document.querySelectorAll(".chip-row");
+      if (rows.length) {
+        rows[0].replaceWith(chips.content);
+        for (var i = 1; i < rows.length; i++) rows[i].remove();
+      }
       litChipInView();
     }
     var fresh = list.querySelector("template#side-filters");
@@ -474,8 +479,10 @@
   // "nearest" on both axes never moves the page. On a desktop the row is
   // not drawn and this does nothing.
   function litChipInView() {
-    var lit = document.querySelector(".chip-row .fchip.on");
-    if (lit && lit.scrollIntoView) lit.scrollIntoView({ inline: "nearest", block: "nearest" });
+    document.querySelectorAll(".chip-row").forEach(function (row) {
+      var lit = row.querySelector(".fchip.on");
+      if (lit && lit.scrollIntoView) lit.scrollIntoView({ inline: "nearest", block: "nearest" });
+    });
   }
 
   document.addEventListener("click", function (event) {

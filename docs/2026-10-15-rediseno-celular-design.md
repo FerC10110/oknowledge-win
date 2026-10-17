@@ -131,6 +131,14 @@ barra lateral (`groups` y `view` en la Biblioteca; `filters` en Ocio e Ideas):
   ★ Favoritos no está: es una pestaña. Un grupo vacío no se dibuja.
 - **Ocio:** TIPO y ESTADO, cada uno `data-apart` (se eligen por separado, como
   en la barra lateral). **Ideas:** ESTADO.
+- **Las fechas, en una fila propia debajo** (2026-10-17, con el grupo FECHAS de
+  la barra lateral): un segundo `<nav class="chip-row chip-dates">` con Todo +
+  los años, y los meses del año abierto a continuación. Son el otro eje, así
+  que cada fila tiene su propio Todo: el de arriba borra el "qué" y deja el
+  período; el de abajo borra el período y deja el "qué". `sideFilters()`
+  reemplaza **todas** las filas, no la primera, o la de años vieja quedaría
+  dibujada debajo de las nuevas; y el chip encendido se trae a la vista en
+  cada fila.
 - Estilo del handoff: 13px, `padding: 7px 12px`, radius 999, borde `1px
   #2a2b32`; activo bg `#22232a` y texto `#e7e7ea`. Entre grupos, una raya de
   `1px × 20px` `#2a2b32`. La fila: `display: flex; gap: 6px; overflow-x: auto;

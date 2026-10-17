@@ -245,3 +245,13 @@ def test_a_search_leaves_the_period_behind():
     # A search is ordered by how well it matches, not by time: a date filter
     # beside it would claim an order the list does not have.
     assert View(when="2021").url(q="redes") == "/?q=redes"
+
+
+def test_a_period_filters_the_view_but_is_not_one_of_the_what_filters():
+    year = View(when="2021")
+    assert year.filtered and not year.by_what
+    assert View(cat="Redes").by_what and View(q="redes").by_what
+
+
+def test_the_whole_library_is_neither():
+    assert not View().filtered and not View().by_what

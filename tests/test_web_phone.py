@@ -157,7 +157,7 @@ def groups(row):
 def test_the_library_row_has_all_categories_marks_and_collections_but_no_star(client):
     row = chips(client.get("/").text)
     found = groups(row)
-    assert len(found) == 4            # and the years last, which has its own tests
+    assert len(found) == 3            # the years are a row of their own, below
     names = [re.sub(r"<[^>]+>", "", a).strip() for a in re.findall(r"<a [^>]*>(.*?)</a>", found[0][1], re.S)]
     assert names == ["All", "Cocina", "Redes"]
     assert "📌" in found[1][1] and "Pinned" in found[1][1] and "⭐" not in found[1][1]
@@ -187,7 +187,7 @@ def test_an_empty_group_is_not_drawn(tmp_path):
                             type="article", source="e.com", saved="2026-10-03", summary="s"), "es")
     rebuild_indexes(config, "es")
     row = chips(TestClient(create_app(config)).get("/").text)
-    assert len(groups(row)) == 3      # categories, marks (📌 always) and years; no collections
+    assert len(groups(row)) == 2      # categories and marks (📌 always); no collections
 
 
 def test_ocio_and_ideas_rows_are_their_sidebar_groups_each_apart(client):
@@ -669,3 +669,59 @@ def test_a_settings_segment_grows_with_its_words_instead_of_breaking_one():
     assert re.search(r"\.setting \.seg label \{ flex: 1 1 auto; \}", phone)
     span = re.search(r"\.setting \.seg label span \{[^}]*\}", phone).group(0)
     assert "overflow-wrap: normal;" in span and "word-break: normal;" in span
+
+
+# --- the years, in a row of their own under the filters ------------------------------------
+
+def dates(body):
+    found = re.search(r'<nav class="chip-row chip-dates".*?</nav>', body, re.S)
+    return found.group(0) if found else ""
+
+
+def test_the_years_are_a_row_of_their_own_under_the_filters(client):
+    body = client.get("/").text
+    row = dates(body)
+    assert 'aria-label="Dates"' in row
+    assert ">2026</a>" in row and ">2026" not in chips(body)
+    # Under the filters and still above the list.
+    assert body.index('aria-label="Filters"') < body.index("chip-dates") < body.index('id="list"')
+
+
+def test_the_years_row_carries_the_months_of_the_open_year(client):
+    row = dates(client.get("/?when=2026").text)
+    # Every note of this library is from October: the one month it has.
+    assert re.search(r'href="/\?when=2026-10"[^>]*class="fchip month">Oct</a>', row)
+    assert row.count('class="fchip month') == 1
+
+
+def test_the_years_row_has_its_own_all_that_only_clears_the_period(client):
+    # The filters row's All clears the category and keeps the period: time is
+    # the other axis, so each row clears its own.
+    row = dates(client.get("/?cat=Redes&when=2026").text)
+    assert re.search(r'href="/\?cat=Redes" data-nav[^>]*>All</a>', row)
+
+
+def test_the_filters_all_stays_lit_while_a_year_is_open(client):
+    # Nothing of the "what" is filtered: a year must not make it look as if
+    # something were.
+    row = chips(client.get("/?when=2026").text)
+    assert re.search(r'class="fchip on">All</a>', row)
+
+
+def test_a_search_has_no_years_row(client):
+    assert dates(client.get("/?q=masa").text) == ""
+
+
+def test_every_chip_row_is_swapped_when_the_column_answers():
+    js = static("shell.js")
+    head = js.index("function sideFilters")
+    body = js[head:js.index("\n  }\n", head)]
+    # Two rows now: replacing only the first would leave the old years below.
+    assert 'querySelectorAll(".chip-row")' in body
+
+
+def test_each_row_brings_its_own_lit_chip_into_view():
+    js = static("shell.js")
+    head = js.index("function litChipInView")
+    body = js[head:js.index("\n  }\n", head)]
+    assert 'querySelectorAll(".chip-row")' in body

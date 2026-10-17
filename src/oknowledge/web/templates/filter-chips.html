@@ -2,11 +2,15 @@
    sidebar's groups as one row of chips that scrolls sideways. The library's
    from `groups` and `view`, any other section's from `filters`. ★ Favoritos
    is a tab, not a chip. The count is in the title. A group with nothing in
-   it is not drawn. #}
+   it is not drawn.
+
+   The dates are a row of their own underneath, because they are the other
+   axis: this row's All clears the "what" and keeps the period, and that
+   row's All clears the period and keeps the "what". #}
 <nav class="chip-row" aria-label="{{ t('Filters') }}">
 {%- if groups is defined and groups %}
   <div class="chip-group" role="group" aria-label="{{ t('Categories') }}">
-    <a href="{{ view.url(cat='', tag='', mark='', col='', q='', sel='') }}" data-nav title="{{ groups.total }}" class="fchip{% if not view.filtered %} on{% endif %}">{{ t('All') }}</a>
+    <a href="{{ view.url(cat='', tag='', mark='', col='', q='', sel='') }}" data-nav title="{{ groups.total }}" class="fchip{% if not view.by_what %} on{% endif %}">{{ t('All') }}</a>
     {%- for name, count in groups.categories.items() %}
     <a href="{{ view.url(cat=name, tag='', mark='', col='', q='', sel='') }}" data-nav title="{{ count }}" class="fchip{% if view.cat == name and not view.searching and not view.tag and not view.mark and not view.col %} on{% endif %}"><i class="dot" style="background: {{ name|dot }}"></i>{{ name }}</a>
     {%- endfor %}
@@ -25,16 +29,6 @@
     {%- endfor %}
   </div>
   {%- endif %}
-  {%- if groups.years %}
-  <div class="chip-group" role="group" aria-label="{{ t('Dates') }}">
-    {%- for name, count in groups.years if count %}
-    <a href="{{ view.url(when=name) }}" data-nav title="{{ count }}" class="fchip{% if view.when == name %} on{% endif %}">{{ t('Undated') if name == 'undated' else name }}</a>
-    {%- if view.when[:4] == name %}{% for month, key, found in groups.months if found %}
-    <a href="{{ view.url(when=month) }}" data-nav title="{{ found }}" class="fchip{% if view.when == month %} on{% endif %}">{{ t(key) }}</a>
-    {%- endfor %}{% endif %}
-    {%- endfor %}
-  </div>
-  {%- endif %}
 {%- else %}
   {%- for group in filters|default([]) if group.rows %}
   <div class="chip-group" data-apart{% if group.param %} data-param="{{ group.param }}"{% endif %} role="group" aria-label="{{ t(group.title) }}">
@@ -45,3 +39,16 @@
   {%- endfor %}
 {%- endif %}
 </nav>
+{%- if groups is defined and groups and groups.years %}
+<nav class="chip-row chip-dates" aria-label="{{ t('Dates') }}">
+  <div class="chip-group" role="group">
+    <a href="{{ view.url(when='') }}" data-nav title="{{ groups.when_total }}" class="fchip{% if not view.when %} on{% endif %}">{{ t('All') }}</a>
+    {%- for name, count in groups.years if count %}
+    <a href="{{ view.url(when=name) }}" data-nav title="{{ count }}" class="fchip{% if view.when == name %} on{% endif %}">{{ t('Undated') if name == 'undated' else name }}</a>
+    {%- if view.when[:4] == name %}{% for month, key, found in groups.months if found %}
+    <a href="{{ view.url(when=month) }}" data-nav title="{{ found }}" class="fchip month{% if view.when == month %} on{% endif %}">{{ t(key) }}</a>
+    {%- endfor %}{% endif %}
+    {%- endfor %}
+  </div>
+</nav>
+{%- endif %}

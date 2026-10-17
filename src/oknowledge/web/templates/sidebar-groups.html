@@ -5,7 +5,7 @@
     <nav class="group" aria-label="{{ t('Categories') }}">
       <p class="group-title">{{ t('CATEGORIES') }}</p>
       <a href="{{ view.url(cat='', tag='', mark='', col='', q='', sel='') }}" data-nav
-         class="filter{% if not view.filtered %} on{% endif %}"><i class="dot" style="background: #6d6f78"></i><span>{{ t('All') }}</span><b class="count mono">{{ groups.total }}</b></a>
+         class="filter{% if not view.by_what %} on{% endif %}"><i class="dot" style="background: #6d6f78"></i><span>{{ t('All') }}</span><b class="count mono">{{ groups.total }}</b></a>
       {% for name, count in groups.categories.items() %}
         <a href="{{ view.url(cat=name, tag='', mark='', col='', q='', sel='') }}" data-nav
            class="filter{% if view.cat == name and not view.searching and not view.tag and not view.mark and not view.col %} on{% endif %}"><i class="dot" style="background: {{ name|dot }}"></i><span>{{ name }}</span><b class="count mono">{{ count }}</b></a>
