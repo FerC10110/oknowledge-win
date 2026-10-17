@@ -67,8 +67,8 @@ from .batch import Batch
 from .batch import run as run_batch
 from .import_file import BadUpload, drop, stage, staged, text_of
 from .library_view import (
-    CHUNK, View, choose, dot, is_url, paragraphs, reading_minutes, saves, short_date,
-    side_groups, tint,
+    CHUNK, View, choose, date_groups, dot, is_url, paragraphs, reading_minutes, saves,
+    short_date, side_groups, tint,
 )
 from .index import Library, read_full, terms
 from .markup import section_cards
@@ -1030,10 +1030,15 @@ def create_app(cfg: Config) -> FastAPI:
                 "list_url": view.url(sel=""),
                 "KIND_ONE": KIND_ONE, "KIND_NAMES": KIND_NAMES, "CARD_DOTS": CARD_DOTS}
 
-    def library_groups() -> dict:
-        """The library's sidebar groups, over the index as it is now."""
-        return side_groups(library.notes, library.categories(), library.collections(),
-                           current["cfg"].marks)
+    def library_groups(view: View) -> dict:
+        """The library's sidebar groups, over the index as it is now.
+
+        The dates group is the only one that depends on the view: its
+        counters are what the other filters left.
+        """
+        return {**side_groups(library.notes, library.categories(), library.collections(),
+                              current["cfg"].marks),
+                **date_groups(library, view)}
 
     @app.get("/", response_class=HTMLResponse)
     def home(request: Request):
@@ -1043,7 +1048,7 @@ def create_app(cfg: Config) -> FastAPI:
         shown = listing(view, working)
         panel = panel_context(shown["current"], view, working) if shown["current"] else None
         return page(request, "home.html", section="links", toast=True,
-                    groups=library_groups(),
+                    groups=library_groups(view),
                     default_content=current["cfg"].default_content,
                     save_prefixes=" ".join(sorted(cards.PREFIXES)),
                     panel=panel is not None, **shown, **(panel or {}))
@@ -1068,7 +1073,7 @@ def create_app(cfg: Config) -> FastAPI:
         shown = listing(view, analyzing())
         if not desde:
             # The sidebar comes with the list, for a bulk action's counts.
-            return page(request, "list.html", side_groups=library_groups(), **shown)
+            return page(request, "list.html", side_groups=library_groups(view), **shown)
         try:
             start = max(0, int(desde))
         except ValueError:

@@ -65,8 +65,9 @@ def test_the_favorite_star_on_a_card_is_said(cfg):
 
 
 def test_the_dead_helpers_are_gone():
-    for name in ("tally", "tag_home", "years", "months"):
-        assert not hasattr(index.Library, name) and not hasattr(index, name)
+    # tally(), years() and months() came back with the dates group in the
+    # sidebar; tag_home() stayed dead, nothing asks a tag for its category.
+    assert not hasattr(index.Library, "tag_home") and not hasattr(index, "tag_home")
 
 
 def test_no_page_ranks_marks_any_more():

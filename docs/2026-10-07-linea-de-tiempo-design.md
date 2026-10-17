@@ -213,3 +213,19 @@ idiomas.
 * **Filtrar por rango** (`de 2020 a 2022`). Un período por vez.
 
 Nada de eso le cambia la forma a lo de arriba el día que haga falta.
+
+## Dónde vive hoy (2026-10-17)
+
+El rediseño se la llevó: la entrega 1 borró `library.html`, donde estaba la
+tira, y con ella el índice de años y el parámetro `when`
+(`docs/2026-10-14-rediseno-biblioteca-design.md`, tabla de decisiones: *"¿Tira
+de etiquetas y filtro año/mes? Se van"*). El motivo era que las tres columnas
+del handoff no tienen un costado libre a la derecha: ahí va el panel del link.
+
+Vuelve en la barra lateral izquierda, como un grupo **FECHAS** debajo de
+CATEGORÍAS, MARCAS y COLECCIONES, que es donde viven todos los filtros desde
+el rediseño. Lo de arriba sigue valiendo entero —`when`, los períodos, los
+contadores sobre lo que dejaron los otros filtros, `undated`, los meses del
+año abierto, que el tiempo cruce a los demás filtros en vez de competir con
+ellos— y sólo cambia la forma: renglones de la barra en vez de una tira
+pegada al borde, y los mismos años como chips en el celular.

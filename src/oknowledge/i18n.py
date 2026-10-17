@@ -27,6 +27,8 @@ STRINGS = {
         "CATEGORIES": "CATEGORÍAS",
         "MARKS": "MARCAS",
         "COLLECTIONS": "COLECCIONES",
+        "DATES": "FECHAS",
+        "Dates": "Fechas",
         "Marks": "Marcas",
         "Collections": "Colecciones",
         "Favorites": "Favoritos",
@@ -308,6 +310,9 @@ STRINGS = {
         "Jan": "ene", "Feb": "feb", "Mar": "mar", "Apr": "abr",
         "May": "may", "Jun": "jun", "Jul": "jul", "Aug": "ago",
         "Sep": "sep", "Oct": "oct", "Nov": "nov", "Dec": "dic",
+        # A note whose `saved` nobody can read. It is a period of its own so
+        # that the link is still somewhere you can get to.
+        "Undated": "Sin fecha",
 
         # Las colecciones: lo \u00fanico de una nota que escribe el usuario.
         "Add to a collection": "Agregar a una colecci\u00f3n",

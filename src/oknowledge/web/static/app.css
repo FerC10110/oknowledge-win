@@ -42,6 +42,10 @@ body { background: #141519; }
 .sidebar a:hover { background: var(--s5); }
 .sidebar .count { color: var(--t6); font-size: 12px; font-weight: 400; }
 .sidebar .dot, .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; flex: none; }
+/* A period with nothing of what you are looking at: still there, so the
+   years do not jump around, but nothing to click. */
+.sidebar .filter.off { color: var(--t6); }
+.sidebar .filter.month { padding-left: 24px; }
 .sidebar .group-title { font-size: 11px; letter-spacing: .08em; color: var(--t6);
   padding: 0 10px 6px; margin: 0; }
 

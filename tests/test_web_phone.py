@@ -157,7 +157,7 @@ def groups(row):
 def test_the_library_row_has_all_categories_marks_and_collections_but_no_star(client):
     row = chips(client.get("/").text)
     found = groups(row)
-    assert len(found) == 3
+    assert len(found) == 4            # and the years last, which has its own tests
     names = [re.sub(r"<[^>]+>", "", a).strip() for a in re.findall(r"<a [^>]*>(.*?)</a>", found[0][1], re.S)]
     assert names == ["All", "Cocina", "Redes"]
     assert "📌" in found[1][1] and "Pinned" in found[1][1] and "⭐" not in found[1][1]
@@ -187,7 +187,7 @@ def test_an_empty_group_is_not_drawn(tmp_path):
                             type="article", source="e.com", saved="2026-10-03", summary="s"), "es")
     rebuild_indexes(config, "es")
     row = chips(TestClient(create_app(config)).get("/").text)
-    assert len(groups(row)) == 2      # categories and marks (📌 always); no collections
+    assert len(groups(row)) == 3      # categories, marks (📌 always) and years; no collections
 
 
 def test_ocio_and_ideas_rows_are_their_sidebar_groups_each_apart(client):

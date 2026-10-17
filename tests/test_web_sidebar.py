@@ -82,3 +82,86 @@ def test_the_counts_follow_the_vault_on_every_page(tmp_path):
     side = sidebar(client.get("/settings").text)
     assert re.search(r'href="/ocio"[^>]*>.*?<b class="count[^"]*">1</b>', side, re.S)
     assert re.search(r'href="/ideas"[^>]*>.*?<b class="count[^"]*">1</b>', side, re.S)
+
+
+# --- the DATES group (docs/2026-10-07-linea-de-tiempo-design.md, in the
+#     sidebar now that the right-hand strip is gone) -------------------------
+
+def dated(id, saved, category="Redes"):
+    return Note(id=id, url=f"https://e.com/{id}", title=id, category=category, tags=[],
+                type="article", source="e.com", saved=saved, summary="s")
+
+
+@pytest.fixture
+def years(tmp_path):
+    vault = tmp_path / "vault"
+    (vault / "oknowledge" / "links").mkdir(parents=True)
+    cfg = Config(vault=vault)
+    for id, saved, category in [("a", "2026-10-04", "Redes"), ("b", "2026-09-30", "Redes"),
+                                ("c", "2021-11-02", "Salud"), ("d", "2021-03-01", "Salud"),
+                                ("e", "nada", "Redes")]:
+        write_note(cfg, dated(id, saved, category), "es")
+    rebuild_indexes(cfg, "es")
+    return TestClient(create_app(cfg))
+
+
+def test_the_library_lists_its_years_with_what_they_hold(years):
+    side = sidebar(years.get("/").text)
+    assert "DATES" in side
+    assert '/?when=2026' in side and '/?when=2021' in side
+    assert side.index("?when=2026") < side.index("?when=2021")   # newest first
+
+
+def test_a_year_that_is_open_shows_its_months_and_nothing_elses(years):
+    side = sidebar(years.get("/?when=2021").text)
+    assert "?when=2021-11" in side and "?when=2021-03" in side
+    assert "Nov" in side and "Mar" in side
+    assert "?when=2026-10" not in side
+
+
+def test_without_a_year_open_no_month_is_listed(years):
+    assert "?when=2021-11" not in sidebar(years.get("/").text)
+
+
+def test_the_month_is_marked_and_its_year_is_the_way_back_to_the_whole_year(years):
+    side = sidebar(years.get("/?when=2021-11").text)
+    assert re.search(r'href="/\?when=2021-11"[^>]*class="filter month on"', side)
+    assert re.search(r'href="/\?when=2021"[^>]*class="filter"', side)
+
+
+def test_the_notes_nobody_can_date_are_a_period_of_their_own(years):
+    side = sidebar(years.get("/").text)
+    assert "?when=undated" in side and "Undated" in side
+
+
+def test_a_year_with_nothing_of_what_you_are_looking_at_is_not_a_link(years):
+    # Shown and dimmed, not removed: the shape of time must not change from
+    # page to page.
+    side = sidebar(years.get("/?cat=Salud").text)
+    assert "?cat=Salud&amp;when=2021" in side
+    assert "when=2026" not in side and 'class="filter off"' in side
+
+
+def test_a_year_keeps_the_category_and_a_category_keeps_the_year(years):
+    assert "?cat=Redes&amp;when=2026" in sidebar(years.get("/?cat=Redes").text)
+    assert "?cat=Redes&amp;when=2021" in sidebar(years.get("/?when=2021").text)
+
+
+def test_the_groups_own_all_clears_the_period_and_leaves_the_rest(years):
+    side = sidebar(years.get("/?cat=Salud&when=2021").text)
+    assert '"/?cat=Salud"' in side
+
+
+def test_a_search_has_no_dates_beside_it(years):
+    # That list is ordered by how well it matches, not by time.
+    assert "DATES" not in sidebar(years.get("/?q=nada").text)
+
+
+def test_a_period_this_library_does_not_have_shows_nothing_found(years):
+    body = years.get("/?when=1999").text
+    assert "There is nothing in 1999" in body and ">a</" not in body
+
+
+def test_the_phone_gets_the_years_as_chips(years):
+    row = re.search(r'<nav class="chip-row".*?</nav>', years.get("/").text, re.S).group(0)
+    assert "?when=2026" in row and "?when=2021" in row

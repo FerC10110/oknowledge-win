@@ -15,6 +15,7 @@ file fresh from disk with read_full().
 from __future__ import annotations
 
 import os
+import re
 import threading
 import unicodedata
 from dataclasses import dataclass
@@ -27,6 +28,43 @@ from ..vault import read_note, scan_file
 
 SNIPPET = 160
 PER_PAGE = 100
+
+# A note whose `saved` is not a date. The field is text in a file the user can
+# edit, and a note nobody can date must still be somewhere you can get to: a
+# link that no filter can reach is a link that is lost. The vault already
+# names such a note undated-<title>.md.
+UNDATED = "undated"
+# The shape a date has to have. The month is checked against the twelve that
+# exist, because the sidebar gives each one a name and there is no name for
+# the thirteenth.
+DATED = re.compile(r"\d{4}-(?:0[1-9]|1[0-2])-\d{2}\Z")
+
+
+def period_of(saved: str, size: int = 4) -> str:
+    """The year ("2021") or the month ("2021-11") a note belongs to.
+
+    `size` is how much of the date to keep: 4 for the year, 7 for the month.
+    A date that cannot be read belongs to no period and answers UNDATED for
+    every size, so it never lands in a year it is not from.
+    """
+    return saved[:size] if DATED.match(saved or "") else UNDATED
+
+
+def tally(notes) -> dict[str, int]:
+    """How many of `notes` fall in each year and in each month.
+
+    Counted over the notes the other filters left, not over the whole
+    library: with a collection chosen, the group is meant to say which years
+    that project lives in.
+    """
+    found: dict[str, int] = {}
+    for note in notes:
+        year = period_of(note.saved)
+        found[year] = found.get(year, 0) + 1
+        if year != UNDATED:
+            month = period_of(note.saved, 7)
+            found[month] = found.get(month, 0) + 1
+    return found
 
 # Latin letters that do not decompose under NFD, so accent-stripping alone
 # would leave them unsearchable from a plain keyboard.
@@ -204,6 +242,8 @@ class Library:
         self._categories: dict[str, int] = {}
         self._tags: dict[str, int] = {}
         self._collections: dict[str, int] = {}
+        self._years: dict[str, int] = {}
+        self._months: dict[str, int] = {}
         self.refresh()
 
     @property
@@ -238,6 +278,7 @@ class Library:
             self._fingerprint, self._cache, self._ids = None, {}, {}
             self._categories, self._tags = {}, {}
             self._collections = {}
+            self._years, self._months = {}, {}
             self.error = str(exc)
             return
         entries = [row[1] for row in cache.values() if row[1] is not None]
@@ -246,6 +287,8 @@ class Library:
         categories: dict[str, int] = {}
         tags: dict[str, int] = {}
         collections: dict[str, int] = {}
+        years: dict[str, int] = {}
+        months: dict[str, int] = {}
         ids: dict[str, Entry] = {}
         for entry in entries:
             categories[entry.note.category] = categories.get(entry.note.category, 0) + 1
@@ -253,6 +296,11 @@ class Library:
                 collections[name] = collections.get(name, 0) + 1
             for tag in entry.note.tags:
                 tags[tag] = tags.get(tag, 0) + 1
+            year = period_of(entry.note.saved)
+            years[year] = years.get(year, 0) + 1
+            if year != UNDATED:
+                month = period_of(entry.note.saved, 7)
+                months[month] = months.get(month, 0) + 1
             ids.setdefault(entry.note.id, entry)
         # Publish everything together, after the work that can fail.
         self.error = None
@@ -265,6 +313,12 @@ class Library:
         # they have to look for.
         self._collections = dict(sorted(collections.items()))
         self._tags = dict(sorted(tags.items(), key=lambda kv: (-kv[1], kv[0])))
+        # Newest first, like the notes themselves. Undated is not a year and
+        # does not sort with them: it goes last, where a reader stops looking.
+        ordered = sorted((name for name in years if name != UNDATED), reverse=True)
+        self._years = {name: years[name] for name in
+                       ordered + ([UNDATED] if UNDATED in years else [])}
+        self._months = dict(sorted(months.items(), reverse=True))
 
     def entry(self, link_id: str) -> Entry | None:
         return self._ids.get(link_id)
@@ -274,7 +328,7 @@ class Library:
         return entry.note if entry else None
 
     def filter(self, category: str | None = None, tag: str | None = None,
-               collection: str | None = None) -> list[Note]:
+               collection: str | None = None, when: str | None = None) -> list[Note]:
         found = self.notes
         if category:
             found = [n for n in found if n.category == category]
@@ -282,6 +336,13 @@ class Library:
             found = [n for n in found if tag in n.tags]
         if collection:
             found = [n for n in found if collection in n.collections]
+        if when:
+            # Checked against the periods this library has, not matched as a
+            # prefix: "2021-1" is not a month, and a prefix would quietly
+            # answer with October, November and December at once.
+            if when not in self.periods():
+                return []
+            found = [n for n in found if period_of(n.saved, len(when)) == when]
         return found
 
     def categories(self) -> dict[str, int]:
@@ -293,6 +354,18 @@ class Library:
     def collections(self) -> dict[str, int]:
         """The user's own groupings, and how many notes each one holds."""
         return self._collections
+
+    def years(self) -> dict[str, int]:
+        """Every year the library holds, newest first, undated last."""
+        return self._years
+
+    def months(self) -> dict[str, int]:
+        """Every month the library holds, newest first."""
+        return self._months
+
+    def periods(self) -> set[str]:
+        """What `when` is allowed to name."""
+        return set(self._years) | set(self._months)
 
     def search(self, query: str, page: int = 1, per_page: int = PER_PAGE,
                snippets: bool = True) -> tuple[list[Hit], int]:

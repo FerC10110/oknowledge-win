@@ -244,7 +244,7 @@ def test_the_home_speaks_spanish(client, tmp_path):
     cfg = Config(vault=tmp_path / "vault", ui_language="es")    # the vault client wrote
     body = TestClient(create_app(cfg)).get("/").text
     for text in ("Buscá o pegá un link para guardarlo", "Biblioteca", "CATEGORÍAS",
-                 "MARCAS", "COLECCIONES", "Tarjetas", "Lista", "★ Favoritos",
+                 "MARCAS", "COLECCIONES", "FECHAS", "Tarjetas", "Lista", "★ Favoritos",
                  "Completo", "Resumen", "Abrir el original"):
         assert text in body
 

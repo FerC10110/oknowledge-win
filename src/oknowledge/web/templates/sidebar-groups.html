@@ -1,5 +1,5 @@
-{# The library's groups (categories, marks, collections), only where the
-   page passes `groups` and `view`: in the sidebar, and again in the
+{# The library's groups (categories, marks, collections, dates), only where
+   the page passes `groups` and `view`: in the sidebar, and again in the
    library list's answer (list-side.html). #}
   {% if groups is defined and groups %}
     <nav class="group" aria-label="{{ t('Categories') }}">
@@ -26,6 +26,39 @@
         {% for name, count in groups.collections.items() %}
           <a href="{{ view.url(cat='', tag='', mark='', col=name, q='', sel='') }}" data-nav
              class="filter{% if view.col == name and not view.searching %} on{% endif %}"><i class="dot" style="background: var(--t5)"></i><span>{{ name }}</span><b class="count mono">{{ count }}</b></a>
+        {% endfor %}
+      </nav>
+    {% endif %}
+    {% if groups.years %}
+      {# The dates axis (docs/2026-10-07-linea-de-tiempo-design.md): every year
+         the library holds, and under the one that is open, its months. These
+         links keep the category, tag or collection that is on, and those keep
+         the period: time crosses the "what" filters instead of replacing
+         them, so it comes last. A year with nothing of what you are looking
+         at is dimmed and not a link, so the shape of time does not change
+         from page to page. #}
+      <nav class="group" aria-label="{{ t('Dates') }}">
+        <p class="group-title">{{ t('DATES') }}</p>
+        <a href="{{ view.url(when='') }}" data-nav
+           class="filter{% if not view.when %} on{% endif %}"><span>{{ t('All') }}</span><b class="count mono">{{ groups.when_total }}</b></a>
+        {% for name, count in groups.years %}
+          {% set label = t('Undated') if name == 'undated' else name %}
+          {% if count %}
+            <a href="{{ view.url(when=name) }}" data-nav
+               class="filter{% if view.when == name %} on{% endif %}"><span>{{ label }}</span><b class="count mono">{{ count }}</b></a>
+          {% else %}
+            <span class="filter off"><span>{{ label }}</span><b class="count mono">{{ count }}</b></span>
+          {% endif %}
+          {% if view.when[:4] == name %}
+            {% for month, key, found in groups.months %}
+              {% if found %}
+                <a href="{{ view.url(when=month) }}" data-nav
+                   class="filter month{% if view.when == month %} on{% endif %}"><span>{{ t(key) }}</span><b class="count mono">{{ found }}</b></a>
+              {% else %}
+                <span class="filter month off"><span>{{ t(key) }}</span><b class="count mono">{{ found }}</b></span>
+              {% endif %}
+            {% endfor %}
+          {% endif %}
         {% endfor %}
       </nav>
     {% endif %}

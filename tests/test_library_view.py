@@ -3,6 +3,7 @@
 import pytest
 
 from oknowledge.model import Note
+from oknowledge.web.index import period_of
 from oknowledge.web.library_view import (
     CHUNK, View, choose, dot, hue, is_url, paragraphs, reading_minutes, saves,
     short_date, side_groups, tint,
@@ -160,7 +161,7 @@ class FakeLibrary:
     def notes(self):
         return list(self._notes)
 
-    def filter(self, category=None, tag=None, collection=None):
+    def filter(self, category=None, tag=None, collection=None, when=None):
         found = self.notes
         if category:
             found = [n for n in found if n.category == category]
@@ -168,7 +169,14 @@ class FakeLibrary:
             found = [n for n in found if tag in n.tags]
         if collection:
             found = [n for n in found if collection in n.collections]
+        if when:
+            if when not in self.periods():
+                return []
+            found = [n for n in found if period_of(n.saved, len(when)) == when]
         return found
+
+    def periods(self):
+        return {period_of(n.saved, size) for n in self.notes for size in (4, 7)}
 
     def search(self, q, page=1, per_page=20, snippets=True):
         self.snippets = snippets
@@ -189,6 +197,8 @@ LIB = FakeLibrary([note("a", tags=["vpn"], mark="⭐", collections=["Casa"]),
     (View(tag="vpn"), ["a", "c"]), (View(mark="⭐"), ["a"]),
     (View(col="Casa"), ["a"]), (View(cat="Salud", tag="vpn"), ["c"]),
     (View(q="b"), ["b"]), (View(q="https://b.com"), ["a", "b", "c"]),
+    (View(when="2026-10"), ["a", "b", "c"]), (View(when="2026"), ["a", "b", "c"]),
+    (View(when="2021"), []), (View(cat="Salud", when="2026"), ["b", "c"]),
 ])
 def test_choose_applies_the_view(view, ids):
     assert [n.id for n in choose(LIB, view)] == ids
@@ -214,3 +224,24 @@ def test_pinned_is_there_even_when_nothing_is_pinned():
     assert groups["marks"] == [("📌", 0)]
     assert groups["collections"] == {"Casa": 1}
     assert groups["categories"] == {"Redes": 1}
+
+
+# --- the dates axis, which crosses with the rest ----------------------------
+
+def test_a_period_comes_off_the_query():
+    assert View.from_query({"when": "2021-11"}).when == "2021-11"
+
+
+def test_a_category_keeps_the_period_that_was_open():
+    view = View(cat="Redes", when="2021")
+    assert view.url(cat="Salud", tag="", mark="", col="") == "/?cat=Salud&when=2021"
+
+
+def test_a_period_keeps_the_category_that_was_on():
+    assert View(cat="Redes").url(when="2021-11") == "/?cat=Redes&when=2021-11"
+
+
+def test_a_search_leaves_the_period_behind():
+    # A search is ordered by how well it matches, not by time: a date filter
+    # beside it would claim an order the list does not have.
+    assert View(when="2021").url(q="redes") == "/?q=redes"
