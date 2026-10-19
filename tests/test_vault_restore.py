@@ -4,6 +4,7 @@ file in trash/ and whatever is at the old address exactly as they were."""
 
 import errno
 import os
+from pathlib import Path
 
 import pytest
 
@@ -128,7 +129,7 @@ def test_a_name_that_appears_during_the_move_wins(tmp_path, monkeypatch):
     path, moved = trashed(cfg)
 
     def raced(src, dst):
-        open(dst, "w", encoding="utf-8").write("theirs\n")
+        Path(dst).write_text("theirs\n", encoding="utf-8")
         raise FileExistsError(errno.EEXIST, "exists", str(dst))
     monkeypatch.setattr(os, "link", raced)
 
@@ -206,7 +207,7 @@ def test_without_hard_links_a_name_taken_by_someone_else_wins(tmp_path, monkeypa
     before = moved.target.read_bytes()
 
     def unsupported_and_raced(src, dst):
-        open(dst, "w", encoding="utf-8").write("theirs\n")
+        Path(dst).write_text("theirs\n", encoding="utf-8")
         raise OSError(errno.EPERM, "Operation not permitted")
     monkeypatch.setattr(os, "link", unsupported_and_raced)
 
