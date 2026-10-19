@@ -1,3 +1,5 @@
+**English** · [Español](README.es.md)
+
 # oknowledge — the Windows edition
 
 Paste a link, get a note. oknowledge downloads the page, summarizes it with an
@@ -415,7 +417,7 @@ forces one for a single link.
 
 | Engine | How | Leaves your machine |
 |---|---|---|
-| `opencode` | `opencode run --pure` in an empty temp directory | yes, to opencode's gateway |
+| `opencode` | an isolated `opencode run` in an empty temp directory | yes, to opencode's gateway |
 | `ollama` | local `/api/chat` with JSON output | **no**: the only fully local engine |
 | `api` | any OpenAI- or Anthropic-shaped provider, with your key | yes, to the provider |
 
