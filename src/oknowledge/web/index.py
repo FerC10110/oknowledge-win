@@ -206,14 +206,15 @@ def snippet_of(text: str, term: str) -> str | None:
 def fingerprint(cfg: Config, shelf: Shelf | None = None) -> dict[str, tuple[int, int]]:
     """name -> (mtime_ns, size) for every note file: a stat each, no reads.
 
-    Raises OSError if the vault cannot be listed. A vault folder that has
-    vanished is an error (it was moved or unmounted), not an empty library;
-    only a missing shelf folder under an existing root means nothing is saved
-    -- which is every vault until the first card is written.
+    Raises OSError if the vault cannot be listed. A vault that has vanished is
+    an error (it was moved or unmounted), not an empty library. What is
+    missing *inside* it is not: an Obsidian vault has no oknowledge folder
+    until the first note is written there, and a first run must answer with
+    the page that writes it, not with an error that offers no box.
     """
     shelf = shelf or cfg.links
-    if not cfg.root.is_dir():
-        raise FileNotFoundError(f"{cfg.root} does not exist")
+    if not cfg.vault.is_dir():
+        raise FileNotFoundError(f"{cfg.vault} does not exist")
     try:
         entries = [e for e in os.scandir(shelf.dir) if e.name.endswith(".md")]
     except FileNotFoundError:

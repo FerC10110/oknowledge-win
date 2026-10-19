@@ -190,6 +190,18 @@ def test_a_missing_vault_at_startup_is_an_error(tmp_path):
     assert client.get("/").status_code == 503
 
 
+@pytest.mark.parametrize("path", ["/", "/ocio", "/ideas"])
+def test_a_vault_that_has_never_been_used_is_just_empty(tmp_path, path):
+    """The first run: an Obsidian vault has no <vault>/oknowledge folder until
+    something is written there, and the page that would write the first link
+    must be the one that comes up -- not an error with no box on it."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    response = TestClient(create_app(Config(vault=vault))).get(path)
+    assert response.status_code == 200
+    assert "The vault could not be read" not in response.text
+
+
 def test_a_missing_links_folder_under_an_existing_root_is_just_empty(tmp_path):
     cfg = make_cfg(tmp_path)
     shutil.rmtree(cfg.links_dir)
