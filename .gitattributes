@@ -1,0 +1,4 @@
+# One line ending everywhere. The tests compare text that templates, prompts
+# and notes carry verbatim, so a CRLF checkout on Windows would change bytes
+# this suite asserts on -- and a note is written with \n on both systems.
+* text=auto eol=lf

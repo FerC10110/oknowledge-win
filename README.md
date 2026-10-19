@@ -26,11 +26,16 @@ round. The differences are listed under
   a category and 3 to 8 tags, plus one index note per category.
 - **Never loses a link.** If extraction or the AI fails, the note is still
   created, marked `status: partial`, and can be finished later.
-- Runs a local web page: paste a link, library, search, categories, settings.
+- Runs a local web page with your whole library: one box that searches as you
+  type and saves what you paste, filters by category, mark, collection and
+  date, and a panel that reads the note beside the list. It works on a phone
+  on the same wifi.
 - **Leisure:** type `movie:Terminator` instead of a link and it writes a card
   for the film — year, genres, cast, rating and poster — out of a free
   catalogue, then your own state, score and note on top. Films, series, anime
   and books.
+- **Ideas:** write what occurred to you and the model files it — title, tags,
+  a summary and the points — and the links you saved can be attached to it.
 
 There is no database. The vault is the only source of truth, and every index is
 rebuilt by reading the Markdown.
@@ -38,20 +43,58 @@ rebuilt by reading the Markdown.
 ## Install
 
 You need [uv](https://docs.astral.sh/uv/) and nothing else — it installs
-Python itself. In PowerShell:
+Python itself. Four steps in PowerShell, and the third is the only one that
+asks you to think.
+
+**1. uv**
 
 ```powershell
 winget install --id=astral-sh.uv -e
 ```
 
-Then, from the folder you unpacked this into:
+If the next command says `uv` is not recognised, close that PowerShell window
+and open a new one: a freshly installed program is on the PATH of the windows
+you open from now on, not the one you installed it from.
+
+**2. This program**
+
+```powershell
+git clone https://github.com/FerC10110/oknowledge-win.git
+cd oknowledge-win
+```
+
+No git? Either `winget install --id=Git.Git -e` first, or download the ZIP
+from the green *Code* button on that page, unpack it, and `cd` into the folder
+instead.
+
+**3. Tell it where your vault is.** One line in
+`%APPDATA%\oknowledge\config.toml`, which does not exist yet:
+
+```powershell
+mkdir $env:APPDATA\oknowledge -Force
+notepad $env:APPDATA\oknowledge\config.toml
+```
+
+```toml
+vault = "C:/Users/you/Documents/obsidian"
+```
+
+Your Obsidian vault is the folder Obsidian opens, the one with the `.obsidian`
+folder in it. Notes go to `<vault>\oknowledge\`, which is made for you the
+first time you save a link. **Write the path with forward slashes** — see the
+note under [The config file](#the-config-file).
+
+**4. Run it**
 
 ```powershell
 uv run oknowledge serve
 ```
 
-That is the whole install: `uv` builds the environment the first time and
-prints the address of your library. To have it as a plain command instead:
+The first run builds the environment (a minute or so, once) and prints the
+address of your library, `http://127.0.0.1:8787/`. Leave that window open: it
+is the program. `Ctrl+C` stops it.
+
+To have it as a plain command instead of `uv run`:
 
 ```powershell
 uv tool install .
@@ -60,6 +103,11 @@ oknowledge serve
 
 **For YouTube links you also need `yt-dlp` on the PATH** (`uv tool install
 yt-dlp`, or `winget install yt-dlp`). Everything else works without it.
+
+If it does not start, it says why and leaves with a code: no config file yet
+(it prints the shortest one that works), a vault that is not there, or the
+port already taken. `oknowledge status` answers the same questions without
+starting the server.
 
 ### The config file
 
@@ -71,7 +119,7 @@ goes and what the shortest one looks like.
 vault = "C:/Users/you/Documents/obsidian"  # notes go to <vault>/oknowledge/
 folder = "oknowledge"                      # the folder inside the vault
 default_content = "full"                   # "full" keeps the original text, "summary" does not
-batch = 10                                 # links the Analyse button does per click
+batch = 10                                 # links one "Analyse" in Settings does
 
 [ai]
 chain = ["opencode"]                       # engines to try, in order
@@ -105,26 +153,74 @@ idle_timeout = 0                           # seconds without a request before it
 
 ## Use
 
-**The paste box** is in the header of every page: paste a link, then **Full**
-(keeps the original text in the note) or **Summary** (does not). The page comes
-back at once and the note shows up in the library when the engine is done —
-seconds to a minute, depending on the engine.
+**One box, two jobs.** The field at the top of the library searches while you
+type — titles, summaries, points, tags, what a video mentioned and the full
+text, with the matching fragment shown. Paste a link into that same box and a
+**Full** / **Summary** choice and a **Save** button appear beside it: Full
+keeps the original text in the note, Summary does not. The page comes back at
+once and the note shows up in the library when the engine is done — seconds to
+a minute, depending on the engine. `/` puts the cursor in the box from
+anywhere.
 
-**The rest of the page:** Library (cards, filter by category and tag), Search
-(title, summary, points, tags, what a video mentioned, and the full text, with
-the matching fragment), Item (change category, edit tags, reprocess, delete),
-Categories (rename and merge, rewriting the affected notes and indexes),
-Import (a WhatsApp export, previewed before it is written), Analyse (a batch of
-the links still waiting, with a bar) and Settings.
+**Three columns.** The sections and the filters on the left, the list in the
+middle, the link you are reading on the right. Everything you click lands in
+the address bar, so a filtered library is a URL you can reload, bookmark or
+send to your phone.
+
+- **The filters** are the sidebar's groups, and they stack: CATEGORIES (plus
+  ★ Favorites), MARKS (📌 Pinned and any other you have used), COLLECTIONS
+  (your own, made from a link's ⋯ menu) and DATES — every year your library
+  holds, and the months of the one you open. Time crosses the rest instead of
+  replacing it: a year keeps the category you had on, and a category keeps the
+  year. Each group's *All* clears its own.
+- **The list** draws cards or rows (the Cards / List switch, or `v`), sixty at
+  a time, and adds more as you reach the end. **Select** turns the checkboxes
+  on to mark, file or delete many at once.
+- **The panel** on the right is the note: summary, key points, the original
+  text if you saved it Full, the tags (click one to filter, `e` to add), the
+  category chip to move it, ★ to favourite, *Open the original*, and a ⋯ menu
+  for the rest — add to a collection, add to an idea, reprocess, delete.
+- **Deleting is undoable.** A toast offers *Undo* for a few seconds, and the
+  note moves to `<vault>\oknowledge\trash\` either way, so Obsidian can get it
+  back later. Nothing in this project unlinks a note.
+- **Settings and the keyboard help open over the page**, from the foot of the
+  sidebar. Settings saves itself as you change it, one pane at a time: the
+  engines and their models, the two languages, what Full/Summary starts at,
+  how many links a batch analyses, the WhatsApp import and the category
+  renames.
+- **Categories** are renamed and merged from Settings, which rewrites the
+  notes and the indexes it affects.
+
+**The keyboard** (press `?` for this list):
+
+| Key | What it does |
+|---|---|
+| `/` | search or paste a link |
+| `1` `2` `3` | Library · Leisure · Ideas |
+| `j` `k` `←` `→` | previous / next link |
+| `↑` `↓` | row up / down |
+| `↵` | open the original link |
+| `f` | favourite |
+| `e` | add a tag |
+| `x` | select |
+| `⌫` | delete the selected |
+| `v` | list / cards |
+| `esc` | close / deselect |
+
+**While it runs:**
 
 - It stays up until you stop it. With `idle_timeout` set to some seconds it
   shuts itself down after that long without requests (default `0`, never); the
   watchdog polls every 5 seconds, so that shutdown can be up to 5 seconds late.
 - If the port is taken it exits with code 2 and suggests setting `web.port`.
-- **Delete moves the note to `<vault>\oknowledge\trash\`**, so you can recover
-  it from Obsidian. Nothing in this project unlinks a note.
 - **Saving settings rewrites the config file.** Comments and keys it does not
   know are not preserved; the previous file is kept as `config.toml.bak`.
+
+**On a phone** the three columns become one. The sections are a bar along the
+bottom (Library, Leisure, Ideas, Favorites), the filters are two rows of chips
+above the list — categories, marks and collections on the first, the years on
+the second — and a link opens full screen, with ← to come back. A long press
+on a card turns selection on.
 
 **Reaching it from your phone.** `[web] host = "0.0.0.0"` makes the server
 listen on your whole network instead of only this machine, and it prints the
@@ -221,8 +317,10 @@ Asking again replaces that section only. Your text is never touched.
 
 On Linux every opencode run is locked in with bubblewrap and pasta: no home,
 no environment, no way back to this machine. Neither exists on Windows, so
-here opencode runs as it is, with `--pure` and from an empty temporary
-folder, and nothing more. It is an agent with a shell and the network, and
+here opencode runs as it is, from an empty temporary folder and kept to
+itself as far as its own flags allow — `--pure` on opencode 1.x, and
+`--standalone` on 2.x, which dropped `--pure` and would otherwise talk to a
+background service — and nothing more. It is an agent with a shell and the network, and
 an **Already out there?** prompt carries text from web pages: a page written
 to steer it could have it read your files or call the oknowledge server. If
 that matters more than a free engine, take `opencode` out of `[ai] chain`
@@ -498,9 +596,12 @@ src/oknowledge/
 docs/            design and plan documents, in Spanish
 ```
 
-Fixes come from upstream rather than being written twice: `origin` is the
-Linux repository, and this fork was cut from its `feat/mentions-search`
-branch, so `git pull origin feat/mentions-search` brings them here.
+Fixes come from upstream rather than being written twice. This fork was cut
+from the Linux repository and follows it: every change there that is not about
+bubblewrap, `flock`, `chmod` or the Omarchy bar is cherry-picked here, and the
+test suite is kept at the same count. What is Windows-only lives in
+`locking.py`, `places.py` and `perms.py`, each a module the other version has
+too, with the other half of the same question.
 
 ## License
 
